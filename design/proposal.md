@@ -1,6 +1,4 @@
-----------------------
-title: GNU Coreutils for Haskell Scripting
-----------------------
+# GNU Coreutils for Haskell Scripting
 
 Port useful commands from the GNU `coreutils` to Haskell functions using
 streamly.
@@ -64,5 +62,5 @@ Normal
 
 ## Mentors
 
-* Pranay Sashank
+* Adithya Kumar
 * Harendra Kumar
