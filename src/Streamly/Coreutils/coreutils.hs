@@ -38,7 +38,8 @@ baseToFilePath some = case some of
 cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
 cpFile opt src dest = (File.fromChunks (baseToFilePath dest)
                       $ File.toChunksWithBufferOf (256*1024) $ baseToFilePath src)
-                      >> cpVerbose (opt.verbose) src dest
+                      >> cpVerbose (verbose opt) src dest
+
 
 safeHead (x:_) = Just x
 safeHead _ = Nothing
