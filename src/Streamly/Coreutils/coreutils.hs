@@ -23,11 +23,11 @@ data OptsDict = OptsDict {
 defaultOptsDict :: OptsDict
 defaultOptsDict = OptsDict True         -- set to False later
 
-cpVerbose :: Bool -> SomeBase File -> SomeBase File -> IO ()
+cpVerbose :: Bool -> FilePath -> FilePath -> IO ()
 cpVerbose opt src dest = if opt == True then
-                           print src >> print " -> " >> print dest
+                           putStrLn $ src ++ " -> " ++ dest
                        else
-                           print ""
+                           putStr ""
 
 baseToFilePath :: SomeBase File -> FilePath
 baseToFilePath some = case some of
@@ -36,10 +36,16 @@ baseToFilePath some = case some of
 
 
 cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
-cpFile opt src dest = (File.fromChunks (baseToFilePath dest)
-                      $ File.toChunksWithBufferOf (256*1024) $ baseToFilePath src)
-                      >> cpVerbose (verbose opt) src dest
+cpFile opt src dest = do
+                        let srcFP = baseToFilePath src
+                        let dstFP = baseToFilePath dest
+                        File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
+                        cpVerbose (verbose opt) srcFP dstFP
 
+--cpDir :: OptsDict -> SomeBase Dir -> SomeBase Dir -> IO ()
+--cpDir opt sdir ddir = S.
+--
+--cpFileToDir :: OptsDict -> SomeBase File -> SomeBase Dir -> IO ()       -- retain the file source file name
 
 safeHead (x:_) = Just x
 safeHead _ = Nothing
