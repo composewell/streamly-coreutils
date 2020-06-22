@@ -23,8 +23,8 @@ data OptsDict = OptsDict {
 defaultOptsDict :: OptsDict
 defaultOptsDict = OptsDict True         -- set to False later
 
-myprint :: Bool -> SomeBase File -> SomeBase File -> IO ()
-myprint opt src dest = if opt == True then
+cpVerbose :: Bool -> SomeBase File -> SomeBase File -> IO ()
+cpVerbose opt src dest = if opt == True then
                            print src >> print " -> " >> print dest
                        else
                            print ""
@@ -38,7 +38,7 @@ baseToFilePath some = case some of
 cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
 cpFile opt src dest = (File.fromChunks (baseToFilePath dest)
                       $ File.toChunksWithBufferOf (256*1024) $ baseToFilePath src)
-                      >> myprint (opt.verbose) src dest
+                      >> cpVerbose (opt.verbose) src dest
 
 safeHead (x:_) = Just x
 safeHead _ = Nothing
