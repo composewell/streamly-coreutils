@@ -39,14 +39,14 @@ intMax = maxBound
 safeHead (x:_) = Just x
 safeHead _ = Nothing
 
-secd (x:y:_) = Just y
-secd _ = Nothing
+second (x:y:_) = Just y
+second _ = Nothing
 
 main :: IO ()
 main = do
          lst <- getArgs
          case safeHead lst of
-               Just hd -> case secd lst of
+               Just hd -> case second lst of
                            Just sec -> do
                                           src <- parseSomeFile hd
                                           dst <- parseSomeFile sec

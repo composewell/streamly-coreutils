@@ -55,10 +55,3 @@ cpFile opt src dest = do
                         let dstFP = someFileToFP dest
                         File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
                         cpVerbose (verbose opt) srcFP dstFP
-
-
-safeHead (x:_) = Just x
-safeHead _ = Nothing
-
-second (x:y:_) = Just y
-second _ = Nothing
