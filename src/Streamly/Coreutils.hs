@@ -30,6 +30,11 @@ import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 
 
+-------------------------------------------------------------------------------
+-- Record for options used with cp
+-------------------------------------------------------------------------------
+
+
 data OptsDict = OptsDict {
                   verbose :: Bool
                 }
@@ -37,14 +42,6 @@ data OptsDict = OptsDict {
 
 defaultOptsDict :: OptsDict
 defaultOptsDict = OptsDict True         -- set to False later
-
-
-cpVerbose :: Bool -> FilePath -> FilePath -> IO ()
-cpVerbose opt src dest = if opt == True
-                         then
-                           putStrLn $ src ++ " -> " ++ dest
-                         else
-                           putStr ""
 
 
 someFileToFP :: SomeBase File -> FilePath
@@ -59,6 +56,18 @@ dirToFilePath some =
                    case some of
                      Abs x -> fromAbsDir x
                      Rel x -> fromRelDir x
+
+
+-------------------------------------------------------------------------------
+-- cp and helper functions for options
+-------------------------------------------------------------------------------
+
+cpVerbose :: Bool -> FilePath -> FilePath -> IO ()
+cpVerbose opt src dest = if opt == True
+                         then
+                           putStrLn $ src ++ " -> " ++ dest
+                         else
+                           putStr ""
 
 
 cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
