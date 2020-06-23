@@ -8,14 +8,26 @@ import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 import Path (Path)
-import Path.Posix (Abs, Rel, File, Dir, Path, parseAbsFile, parseRelFile, SomeBase(..), parseSomeFile, fromRelFile, fromAbsFile, fromRelFile, parseAbsDir, (</>), parseRelDir, fromRelDir, fromAbsDir)
-import GHC.Word (Word8)
-import Data.Char (ord, chr, digitToInt)
+import Path.Posix
+      (Abs
+      , Rel
+      , File
+      , Dir
+      , Path
+      , parseAbsFile
+      , parseRelFile
+      , SomeBase(..)
+      , parseSomeFile
+      , fromRelFile
+      , fromAbsFile
+      , fromRelFile
+      , parseAbsDir
+      , (</>)
+      , parseRelDir
+      , fromRelDir
+      , fromAbsDir)
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
-import Streamly.Internal.Data.Stream.Serial (SerialT)
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.IO.Class (MonadIO)
 
 
 data OptsDict = OptsDict {
