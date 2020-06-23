@@ -6,7 +6,27 @@ cabal-version:       2.4
 name:                streamly-coreutils
 version:             0.1.0.0
 -- synopsis:
--- description:
+description:
+   Port useful commands from the GNU `coreutils` to Haskell functions using
+   streamly.
+
+   GNU `coreutils` are commonly used, well known interfaces to perform common
+   tasks on POSIX systems. It will be useful to have Haskell implementations of
+   these utilities in general and also to utilize the knowledge of these utilities
+   gained by programmers, admins, script writers for writing Haskell scripts.
+
+   Some of these, but not all, are available in some existing Haskell libraries in
+   some form or other. However, there is no comprehensive collection available,
+   performance may not be at par and implementations may not be streaming. The
+   goal of this project is to have a comprehensive streaming collection using
+   Streamly with performance competitive with that of the C implementations
+   where it matters.
+
+   One may ask why not just use fork the installed binaries and use those. In many
+   cases it may make sense to fork the installed  utilities to achieve the task.
+   However, in many other cases it may be better to use a streaming function
+   instead of forking a process and parsing the output.
+
 homepage:            https://github.com/composewell/streamly-coreutils
 bug-reports:         https://github.com/composewell/streamly-coreutils/issues
 license:             BSD-3-Clause
@@ -15,14 +35,11 @@ license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Shruti Umat
 maintainer:          streamly@composewell.com
--- copyright:
+copyright:           2020 Composewell Technologies
 -- category:
 extra-source-files:  CHANGELOG.md, README.md
 
 library
-  -- exposed-modules:
-  -- other-modules:
-  -- other-extensions:
   build-depends:       base ^>=4.13.0.0
   hs-source-dirs:      src
   default-language:    Haskell2010
@@ -44,3 +61,8 @@ test-suite test
     , hspec             >= 2.0   && < 3
     , QuickCheck        >= 2.10  && < 2.15
   default-language: Haskell2010
+
+common compile-options
+    default-language: Haskell2010
+    ghc-options:      -Wall
+
