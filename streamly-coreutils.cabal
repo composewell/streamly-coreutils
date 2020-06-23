@@ -34,7 +34,7 @@ library
 test-suite test
   import: test-options
   type: exitcode-stdio-1.0
-  main-is: Streamly/Coreutils/coreutils.hs
+  main-is: Streamly/Coreutils.hs
   js-sources: jsbits/clock.js
   hs-source-dirs: test
   build-depends:
