@@ -8,11 +8,13 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/composewell/streamly-coreutils
--- bug-reports:
+bug-reports:         https://github.com/composewell/streamly-coreutils/issues
+license:             BSD-3-Clause
+
 license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Shruti Umat
-maintainer:          shruti.umat@composewell.com
+maintainer:          streamly@composewell.com
 -- copyright:
 -- category:
 extra-source-files:  CHANGELOG.md, README.md
