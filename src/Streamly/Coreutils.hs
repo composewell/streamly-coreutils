@@ -1,3 +1,11 @@
+module Streamly.Coreutils (
+      cpFile
+    , defaultOptsDict
+    , OptsDict
+   )
+where
+
+import Streamly.Coreutils.Types
 import qualified Streamly.Prelude as S
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Memory.Array as A
@@ -7,16 +15,15 @@ import qualified Streamly.Internal.Prelude as IP
 import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
-import Path (Path)
+import Path
 import Path.Posix
-      (Abs
-      , Rel
+      (Path
       , File
       , Dir
-      , Path
+      , Abs
+      , Rel
       , parseAbsFile
       , parseRelFile
-      , SomeBase(..)
       , parseSomeFile
       , fromRelFile
       , fromAbsFile
@@ -29,20 +36,9 @@ import Path.Posix
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 
-
 -------------------------------------------------------------------------------
--- Record for options used with cp
+-- helper functions - NOT useful at the moment (not using SomeBase type)
 -------------------------------------------------------------------------------
-
-
-data OptsDict = OptsDict {
-                  verbose :: Bool
-                }
-
-
-defaultOptsDict :: OptsDict
-defaultOptsDict = OptsDict True         -- set to False later
-
 
 someFileToFP :: SomeBase File -> FilePath
 someFileToFP some =
@@ -70,9 +66,9 @@ cpVerbose opt src dest = if opt == True
                            putStr ""
 
 
-cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
+cpFile :: OptsDict -> Path Abs File -> Path Abs File -> IO ()
 cpFile opt src dest = do
-                        let srcFP = someFileToFP src
-                        let dstFP = someFileToFP dest
+                        let srcFP = fromAbsFile src
+                        let dstFP = fromAbsFile dest
                         File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
                         cpVerbose (verbose opt) srcFP dstFP
