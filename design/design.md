@@ -1,6 +1,7 @@
 # Design for Streamly Coreutils package
 
 * cp :: SomeBase t ->
+* echo
 * cat
 * wc
 * yes
@@ -18,7 +19,9 @@ Primarily because they access/modify file structure
 * ls
 * mkdir
 * rm
+* rmdir
 
+Other packages have used the FileSystem package for the same.
 
 ## Points to remember while making the writeup
 
@@ -33,3 +36,10 @@ Primarily because they access/modify file structure
 * Clean and simple API for `coreutils`
 * Trying to avoid separate functions for a utility just because
   of differing file paths (absolute or relative)
+
+## References
+
+* MaiZure's projects
+* Turtle
+* Shelly
+* `mrak/coreutils`
