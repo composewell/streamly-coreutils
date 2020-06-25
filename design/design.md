@@ -1,6 +1,20 @@
 # Design for Streamly Coreutils package
 
-* cp :: SomeBase t ->
+* cp
+      data OptsDict = OptsDict {
+         attributesOnly :: Bool,
+         interactive :: Bool,
+         parents :: Bool,
+         symbolicLink :: Bool,
+         noTargetDir :: Bool,
+         verbose :: Bool,
+         ...
+      }
+
+  cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
+  cpFtoDir :: OptsDict -> [SomeBase File] -> SomeBase Dir -> IO ()
+    -- uses cpFile
+
 * echo
 * cat
 * wc
@@ -28,6 +42,9 @@ Other packages have used the FileSystem package for the same.
 * Module structure
 * Function signatures
 * Implementation details (brief) and important points
+  1. Try to keep the implementation streaming in nature.
+  2. Use streams over lists wherever it makes sense.
+
 * Interesting questions in mind
 
 
