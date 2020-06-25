@@ -118,8 +118,35 @@
 
    ```
 * head
+   ```
+      data HeadOptions = HeadOptions {
+         firstNbytes :: Int,
+         exceptLastNbytes :: Int,
+         lines :: Int,      -- default 10
+         quiet :: Bool,     -- never print headers
+         verbose :: Bool,   -- always print headers
+         zeroTerminated :: Bool,
+         ...
+      }
+
+   ```
+
+   1. Invalid option is one like :
+      HeadOptions {quiet = True, verbose = True}
+
+   2. Maybe we should check for validity of option arguments in
+      all utilities
+
+   ```
+      head :: (IsStream t, Monad m) => t m (SomeBase File) -> t m String
+
+   ```
+   The header can be interleaved in the String stream if verbose is True.
+
 * tail
+
 * sort
+
 
 
 ## Utilities for which I currently have ~no ideas
