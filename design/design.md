@@ -18,12 +18,12 @@
 
   ```
 
-  Similar to srcFile -> destDir -> destFile
-  Copies the source file to a dest directory with dest file name
-  If dest file name is empty, then it becomes File -> Dir case (with same file name as source)
+  1. Similar to srcFile -> destDir -> destFile
+  2. Copies the source file to a dest directory with dest file name
+  3. If dest file name is empty, then it becomes File -> Dir case (with same file name as source)
 
-  For File -> File within same directory, current directory should be passed as destDir argument
-  Else we can also say that an empty Dest Dir argument is equivalent to copying in the same directory
+  4. For File -> File within same directory, current directory should be passed as destDir argument
+   Else we can also say that an empty Dest Dir argument is equivalent to copying in the same directory
 
   ```
       cpFiletoDir :: (IsStream t, Monad m) => CpOptions -> t m (SomeBase File) -> SomeBase Dir -> IO ()
@@ -48,13 +48,13 @@
 
    ```
 
-    for stdout, second arg should be "/dev/stdout"
-    writes the characters in the stream to the file
-    (as echo's output can be redirected to a file)
+   1. for stdout, second arg should be "/dev/stdout"
+   2. writes the characters in the stream to the file
+   (as echo's output can be redirected to a file)
 
 * cat
-  concatenates files to standard output
-  [ if no file -> reads from std input ]
+   1. concatenates files to standard output
+   2. [ if no file -> reads from std input ]
 
    ```
       data CatOptions = CpOptions {
@@ -85,8 +85,9 @@
    ```
        yes :: String -> IO ()
 
-         print the string indefinitely
+         print the string indefinitely - if string is empty, keeps printing "y"
          (Or should we generate an infinite stream using repeatM instead ? )
+
    ```
 
 * uniq
@@ -96,7 +97,7 @@
          count :: Bool,
          repeated :: Bool,      -- display only duplicate lines once for each group
          duplicate :: Bool,     -- print all duplicate lines
-         skipFiels :: Int,
+         skipFields :: Int,
          ignoreCase :: Bool,
          unique :: Bool,        -- print only unique lines
          zeroTerminated :: Bool,
@@ -104,7 +105,16 @@
          ...
       }
 
-      uniq
+      uniqUtil :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m String
+      uniqCount :: t m String -> t m (Int * String)
+         -- to count occurences of each line after uniqUtil
+
+   ```
+   1. Utility function to read the stream and process according to `UniqOptions`
+
+   ```
+      uniq :: (IsStream t, Monad m) => UniqOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
+      -- prints the output to the file or "/dev/stdout"
 
    ```
 * head
