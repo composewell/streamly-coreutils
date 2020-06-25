@@ -2,7 +2,7 @@
 
 * cp
    ```
-      data OptsDict = OptsDict {
+      data CpOptions = CpOptions {
          attributesOnly :: Bool,
          interactive :: Bool,
          parents :: Bool,
@@ -13,7 +13,7 @@
          ...
       }
 
-  cpFile :: OptsDict -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
+  cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
 
   Similar to srcFile -> destDir -> destFile
   ```
@@ -24,20 +24,34 @@
   Else we can also say that an empty Dest Dir argument is equivalent to copying in the same directory
 
   ```
-  cpFiletoDir :: (IsStream t, Monad m) => OptsDict -> t m (SomeBase File) -> SomeBase Dir -> IO ()
-
+  cpFiletoDir :: (IsStream t, Monad m) => CpOptions -> t m (SomeBase File) -> SomeBase Dir -> IO ()
     -- uses cpFile
     (stream of input files so that copying can be done concurrently with use of appropriate streams)
     -- or map can be used as well
 
-  cpDirToDir :: (IsStream t, Monad m) => OptsDict -> SomeBase Dir -> SomeBase Dir -> IO ()
+  cpDirToDir :: (IsStream t, Monad m) => CpOptions -> SomeBase Dir -> SomeBase Dir -> IO ()
+    -- should create a stream of files (t m (SomeBase File)) and call cpFileToDir
 
   ```
-
 * echo
+
+   ```
+      data CatOptions = CpOptions {
+         trailingLine:: Bool,
+         interpretBackSlash:: Bool,
+         ...
+      }
+
+  echo :: CatOptions -> t m Char -> SomeBase File -> IO ()
+    -- for stdout, second arg should be "/dev/stdout"
+  ```
+
 * cat
 * wc
 * yes
+   ```
+      yes :: String -> t m
+   ```
 * uniq
 * head
 * tail
@@ -45,7 +59,7 @@
 
 
 ## Utilities for which I currently have ~no ideas
-Primarily because they access/modify file structure
+Primarily because they access/modify the directory structure
 
 * mv
 * pwd
@@ -77,7 +91,7 @@ Other packages have used the FileSystem package for the same.
 
 ## References
 
-* MaiZure's projects
+* MaiZure's projects - GNU coreutils Decoded
 * Turtle
 * Shelly
 * `mrak/coreutils`
