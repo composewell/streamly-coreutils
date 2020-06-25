@@ -1,6 +1,7 @@
 # Design for Streamly Coreutils package
 
 * cp
+   `
       data OptsDict = OptsDict {
          attributesOnly :: Bool,
          interactive :: Bool,
@@ -14,6 +15,7 @@
   cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
   cpFtoDir :: OptsDict -> [SomeBase File] -> SomeBase Dir -> IO ()
     -- uses cpFile
+  `
 
 * echo
 * cat
