@@ -36,6 +36,22 @@
 * echo
 
    ```
+      data EchoOptions = CpOptions {
+         trailingLine:: Bool,
+         interpretBackSlash:: Bool,
+         ...
+      }
+
+  echo :: EchoOptions -> t m Char -> SomeBase File -> IO ()
+    -- for stdout, second arg should be "/dev/stdout"
+    writes the characters in the stream to the file
+    (as echo's output can be redirected to a file)
+
+  ```
+
+* cat
+
+   ```
       data CatOptions = CpOptions {
          trailingLine:: Bool,
          interpretBackSlash:: Bool,
@@ -44,9 +60,11 @@
 
   echo :: CatOptions -> t m Char -> SomeBase File -> IO ()
     -- for stdout, second arg should be "/dev/stdout"
+    writes the characters in the stream to the file
+    (as echo's output can be redirected to a file)
+
   ```
 
-* cat
 * wc
 * yes
    ```
