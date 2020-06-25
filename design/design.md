@@ -132,18 +132,34 @@
    ```
 
    1. Invalid option is one like :
-      HeadOptions {quiet = True, verbose = True}
+   HeadOptions {quiet = True, verbose = True}
 
    2. Maybe we should check for validity of option arguments in
-      all utilities
+   all utilities
 
    ```
-      head :: (IsStream t, Monad m) => t m (SomeBase File) -> t m String
+      head :: (IsStream t, Monad m) => HeadOptions -> t m (SomeBase File) -> t m String
 
    ```
    The header can be interleaved in the String stream if verbose is True.
+   If input stream of files is empty, read and print from /dev/stdin 10 times
 
 * tail
+   ```
+      data TailOptions = TailOptions {
+         bytes :: Int,
+         follow :: Bool,
+         lines :: Int,              -- default 10
+         maxUnchangedStats :: Int,
+         pid :: Int,
+         sleepInterval :: Int,       -- seconds
+         verbose :: Bool,
+         ...
+      }
+
+      tail :: (IsStream t, Monad m) => TailOptions -> t m (SomeBase File) -> t m String
+   ```
+   If input stream is empty, keep reading from /dev/stdin indefinitely.
 
 * sort
 
