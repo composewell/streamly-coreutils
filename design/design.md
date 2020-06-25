@@ -80,6 +80,7 @@
   ```
 
 * wc
+      The wc utility code can be taken from the examples directory, WordCount.hs
 
 * yes
 
