@@ -37,12 +37,12 @@
 
    ```
       data EchoOptions = CpOptions {
-         trailingLine:: Bool,
-         interpretBackSlash:: Bool,
+         trailingLine :: Bool,
+         interpretBackSlash :: Bool,
          ...
       }
 
-  echo :: EchoOptions -> t m Char -> SomeBase File -> IO ()
+   echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> SomeBase File -> IO ()
     -- for stdout, second arg should be "/dev/stdout"
     writes the characters in the stream to the file
     (as echo's output can be redirected to a file)
@@ -50,23 +50,33 @@
   ```
 
 * cat
+  concatenates files to standard output
+  [ if no file -> reads from std input ]
 
    ```
       data CatOptions = CpOptions {
-         trailingLine:: Bool,
-         interpretBackSlash:: Bool,
+         showAll :: Bool,
+         numberNonEmptyLines :: Bool,
+         showEnds :: Bool,
+         numberAllLines :: Bool,
+         suppressRepeatedEmpty :: Bool,
          ...
       }
 
-  echo :: CatOptions -> t m Char -> SomeBase File -> IO ()
+   cat :: (IsStream t, Monad m) => CatOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
     -- for stdout, second arg should be "/dev/stdout"
-    writes the characters in the stream to the file
-    (as echo's output can be redirected to a file)
+    reads the files, concatenates the output and writes in the destination file
+
+    ( can be made streaming by not concatenating the output ; reading and writing parallely )
+
+    TODO: Redirection
+    Ex: cat *.md | sort
 
   ```
 
 * wc
 * yes
+
    ```
       yes :: String -> t m
    ```
