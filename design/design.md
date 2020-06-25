@@ -2,7 +2,7 @@
 
 * cp
 
-   ```
+  ```
       data CpOptions = CpOptions {
          attributesOnly :: Bool,
          interactive :: Bool,
@@ -37,7 +37,7 @@
   ```
 * echo
 
-   ```
+  ```
       data EchoOptions = CpOptions {
          trailingLine :: Bool,
          interpretBackSlash :: Bool,
@@ -46,7 +46,7 @@
 
       echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> SomeBase File -> IO ()
 
-   ```
+  ```
 
    1. for stdout, second arg should be "/dev/stdout"
    2. writes the characters in the stream to the file
@@ -56,7 +56,7 @@
    1. concatenates files to standard output
    2. [ if no file -> reads from std input ]
 
-   ```
+  ```
       data CatOptions = CpOptions {
          showAll :: Bool,
          numberNonEmptyLines :: Bool,
@@ -80,19 +80,20 @@
   ```
 
 * wc
+
 * yes
 
-   ```
+  ```
        yes :: String -> IO ()
 
          print the string indefinitely - if string is empty, keeps printing "y"
          (Or should we generate an infinite stream using repeatM instead ? )
 
-   ```
+  ```
 
 * uniq
 
-   ```
+  ```
       data UniqOptions = UniqOptions {
          count :: Bool,
          repeated :: Bool,      -- display only duplicate lines once for each group
@@ -109,16 +110,16 @@
       uniqCount :: t m String -> t m (Int * String)
          -- to count occurences of each line after uniqUtil
 
-   ```
+  ```
    1. Utility function to read the stream and process according to `UniqOptions`
 
-   ```
+  ```
       uniq :: (IsStream t, Monad m) => UniqOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
       -- prints the output to the file or "/dev/stdout"
 
-   ```
+  ```
 * head
-   ```
+  ```
       data HeadOptions = HeadOptions {
          firstNbytes :: Int,
          exceptLastNbytes :: Int,
@@ -129,7 +130,7 @@
          ...
       }
 
-   ```
+  ```
 
    1. Invalid option is one like :
    HeadOptions {quiet = True, verbose = True}
@@ -137,15 +138,15 @@
    2. Maybe we should check for validity of option arguments in
    all utilities
 
-   ```
+  ```
       head :: (IsStream t, Monad m) => HeadOptions -> t m (SomeBase File) -> t m String
 
-   ```
+  ```
    The header can be interleaved in the String stream if verbose is True.
    If input stream of files is empty, read and print from /dev/stdin 10 times
 
 * tail
-   ```
+  ```
       data TailOptions = TailOptions {
          bytes :: Int,
          follow :: Bool,
@@ -158,12 +159,38 @@
       }
 
       tail :: (IsStream t, Monad m) => TailOptions -> t m (SomeBase File) -> t m String
-   ```
+  ```
    If input stream is empty, keep reading from /dev/stdin indefinitely.
 
 * sort
 
+  ```
+      data SortOptions = SortOptions {
+         ignoreLeadingBlanks :: Bool,
+         ignoreCase :: Bool,
+         dictionaryOrder :: Bool,
+         generalNumericSort :: Bool,
+         monthSort :: Bool,
+         humanNumericSort :: Bool,
+         numericSort :: Bool,
+         randomSource :: SomeBase File,
+         reverse :: Bool,
+         check :: Bool,
+         merge :: Bool,
+         debug :: Bool,
+         stable :: Bool,
+         bufferSize :: SIZE,        -- which type to use for sizes
+         separator :: Char,
+         parallel :: Int,
+         unique :: Bool,
+         randomSort :: Bool,        -- shuffle but group same keys
+         ...
+      }
 
+      sort :: (IsStream t, Monad m) => t m (SomeBase File) -> t m String
+         -- a very basic version
+
+  ```
 
 ## Utilities for which I currently have ~no ideas
 Primarily because they access/modify the directory structure
