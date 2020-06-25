@@ -201,7 +201,6 @@ Primarily because they access/modify the directory structure
 * mkdir
 * rm
 * rmdir
-* cd ( should it change the current working directory of the process? )
 
 Other packages have used the FileSystem package for the same.
 
@@ -220,6 +219,10 @@ Other packages have used the FileSystem package for the same.
 ## End Goal
 
 * Clean and simple API for `coreutils`
+* Enable use of Haskell instead of shell scripting
+* No dependency on the installation of coreutils package
+* Platform independent (Linux/MacOS/Windows)
+* Concurrency support
 * Trying to avoid separate functions for a utility just because
   of differing paths (absolute or relative)
 
