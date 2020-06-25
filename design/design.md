@@ -17,6 +17,7 @@
 
   Similar to srcFile -> destDir -> destFile
   ```
+
   Copies the source file to a dest directory with dest file name
   If dest file name is empty, then it becomes File -> Dir case (with same file name as source)
 
@@ -78,8 +79,12 @@
 * yes
 
    ```
-      yes :: String -> t m
+      yes :: String -> IO ()
+
    ```
+      print the string indefinitely
+      (Or should we generate an infinite stream using repeatM instead ? )
+
 * uniq
 * head
 * tail
