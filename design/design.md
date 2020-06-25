@@ -1,6 +1,7 @@
 # Design for Streamly Coreutils package
 
 * cp
+
    ```
       data CpOptions = CpOptions {
          attributesOnly :: Bool,
@@ -13,11 +14,11 @@
          ...
       }
 
-  cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
+      cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
 
-  Similar to srcFile -> destDir -> destFile
   ```
 
+  Similar to srcFile -> destDir -> destFile
   Copies the source file to a dest directory with dest file name
   If dest file name is empty, then it becomes File -> Dir case (with same file name as source)
 
@@ -25,13 +26,13 @@
   Else we can also say that an empty Dest Dir argument is equivalent to copying in the same directory
 
   ```
-  cpFiletoDir :: (IsStream t, Monad m) => CpOptions -> t m (SomeBase File) -> SomeBase Dir -> IO ()
-    -- uses cpFile
-    (stream of input files so that copying can be done concurrently with use of appropriate streams)
-    -- or map can be used as well
+      cpFiletoDir :: (IsStream t, Monad m) => CpOptions -> t m (SomeBase File) -> SomeBase Dir -> IO ()
+         uses cpFile
+         (stream of input files so that copying can be done concurrently with use of appropriate streams)
+         or map can be used as well
 
-  cpDirToDir :: (IsStream t, Monad m) => CpOptions -> SomeBase Dir -> SomeBase Dir -> IO ()
-    -- should create a stream of files (t m (SomeBase File)) and call cpFileToDir
+      cpDirToDir :: (IsStream t, Monad m) => CpOptions -> SomeBase Dir -> SomeBase Dir -> IO ()
+         should create a stream of files (t m (SomeBase File)) and call cpFileToDir
 
   ```
 * echo
@@ -43,12 +44,13 @@
          ...
       }
 
-   echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> SomeBase File -> IO ()
-    -- for stdout, second arg should be "/dev/stdout"
+      echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> SomeBase File -> IO ()
+
+   ```
+
+    for stdout, second arg should be "/dev/stdout"
     writes the characters in the stream to the file
     (as echo's output can be redirected to a file)
-
-  ```
 
 * cat
   concatenates files to standard output
@@ -64,14 +66,16 @@
          ...
       }
 
-   cat :: (IsStream t, Monad m) => CatOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
-    -- for stdout, second arg should be "/dev/stdout"
-    reads the files, concatenates the output and writes in the destination file
+      cat :: (IsStream t, Monad m) => CatOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
+         for stdout, second arg should be "/dev/stdout"
+         reads the files, concatenates the output and writes in the destination file
 
-    ( can be made streaming by not concatenating the output ; reading and writing parallely )
+         if empty stream, accept input indefinitely
 
-    TODO: Redirection
-    Ex: cat *.md | sort
+         ( can be made streaming by not concatenating the output ; reading and writing parallely )
+
+      TODO: Redirection
+      Ex: cat *.md | sort
 
   ```
 
@@ -79,13 +83,30 @@
 * yes
 
    ```
-      yes :: String -> IO ()
+       yes :: String -> IO ()
 
+         print the string indefinitely
+         (Or should we generate an infinite stream using repeatM instead ? )
    ```
-      print the string indefinitely
-      (Or should we generate an infinite stream using repeatM instead ? )
 
 * uniq
+
+   ```
+      data UniqOptions = UniqOptions {
+         count :: Bool,
+         repeated :: Bool,      -- display only duplicate lines once for each group
+         duplicate :: Bool,     -- print all duplicate lines
+         skipFiels :: Int,
+         ignoreCase :: Bool,
+         unique :: Bool,        -- print only unique lines
+         zeroTerminated :: Bool,
+         checkChar :: Int,
+         ...
+      }
+
+      uniq
+
+   ```
 * head
 * tail
 * sort
@@ -128,3 +149,4 @@ Other packages have used the FileSystem package for the same.
 * Turtle
 * Shelly
 * `mrak/coreutils`
+* Linux man pages
