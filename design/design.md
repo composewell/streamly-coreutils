@@ -85,10 +85,9 @@
 * yes
 
   ```
-       yes :: String -> IO ()
+         yes :: (IsStream t, MonadAsync m) => m a -> t m a
 
-         print the string indefinitely - if string is empty, keeps printing "y"
-         (Or should we generate an infinite stream using repeatM instead ? )
+         Generate an infinite stream using S.repeatM
 
   ```
 
