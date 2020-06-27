@@ -1,19 +1,22 @@
-module Streamly.Coreutils (
-      cpFile
-    , defaultOptsDict
-    , OptsDict
-   )
-where
+--module Streamly.Coreutils (
+--      cpFile
+--    , defaultOptsDict
+--    , OptsDict
+--   )
+--where
 
-import Streamly.Coreutils.Types
+--import Streamly.Coreutils.Types
 import qualified Streamly.Prelude as S
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Memory.Array as A
 
 import qualified Streamly.Internal.Data.Fold as FL
 import qualified Streamly.Internal.Prelude as IP
-import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Dir as Dir
+import qualified Streamly.Internal.FileSystem.File as File
+import qualified Streamly.Internal.FileSystem.Handle as FH
+
+import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
 import Path
 import Path.Posix
@@ -34,7 +37,7 @@ import Path.Posix
       , fromRelDir
       , fromAbsDir)
 
-import System.IO (Handle)
+import System.IO (Handle, stdout)
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 
@@ -56,6 +59,9 @@ dirToFilePath some =
                      Rel x -> fromRelDir x
 
 
+data EchoOptions = EchoOptions {
+                     verbose :: Bool
+                  }
 -------------------------------------------------------------------------------
 -- cp and helper functions for options
 -------------------------------------------------------------------------------
@@ -67,11 +73,18 @@ cpVerbose opt src dest = if opt == True
                          else
                            putStr ""
 
---echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> Handle -> IO ()
+echo :: EchoOptions -> Handle -> IO ()
+echo opt handle = FH.fromBytes handle $ FH.getBytes
 
-cpFile :: OptsDict -> Path Abs File -> Path Abs File -> IO ()
-cpFile opt src dest = do
-                        let srcFP = fromAbsFile src
-                        let dstFP = fromAbsFile dest
-                        File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
-                        cpVerbose (verbose opt) srcFP dstFP
+--cpFile :: OptsDict -> Path Abs File -> Path Abs File -> IO ()
+--cpFile opt src dest = do
+--                        let srcFP = fromAbsFile src
+--                        let dstFP = fromAbsFile dest
+--                        File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
+--                        cpVerbose (verbose opt) srcFP dstFP
+--
+
+main :: IO ()
+main = do
+      let out = stdout
+      echo (EchoOptions True) out
