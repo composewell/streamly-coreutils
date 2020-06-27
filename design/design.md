@@ -1,6 +1,10 @@
 # Design for Streamly Coreutils package
 
    ```
+
+    import qualified Streamly.Internal.FileSystem.File as FL
+    import qualified Streamly.Internal.FileSystem.Handle as FH
+
     someFileToFP :: SomeBase File -> FilePath
     someFileToFP some =
                       case some of
@@ -31,7 +35,7 @@
 
       cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
 
-      fromChunks, toChunksWithBufferOf
+      FL.fromChunks, FL.toChunksWithBufferOf
 
   ```
 
@@ -61,7 +65,9 @@
          ...
       }
 
-      echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> Handle -> IO ()
+      echo :: (MonadAsync m, MonadCatch m, MonadIO m) => EchoOptions -> SerialT m Word8 -> Handle -> IO ()
+
+      FH.getBytes, FL.fromBytes
 
   ```
 
