@@ -1,5 +1,20 @@
 # Design for Streamly Coreutils package
 
+   ```
+    someFileToFP :: SomeBase File -> FilePath
+    someFileToFP some =
+                      case some of
+                         Abs x -> fromAbsFile x
+                         Rel x -> fromRelFile x
+
+
+    someDirToFP :: SomeBase Dir -> FilePath
+    someDirToFP some =
+                       case some of
+                         Abs x -> fromAbsDir x
+                         Rel x -> fromRelDir x
+   ```
+
 * cp
 
   ```
@@ -15,6 +30,8 @@
       }
 
       cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
+
+      fromChunks, toChunksWithBufferOf
 
   ```
 
@@ -44,7 +61,7 @@
          ...
       }
 
-      echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> SomeBase File -> IO ()
+      echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> Handle -> IO ()
 
   ```
 
