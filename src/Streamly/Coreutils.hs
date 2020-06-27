@@ -33,6 +33,8 @@ import Path.Posix
       , parseRelDir
       , fromRelDir
       , fromAbsDir)
+
+import System.IO (Handle)
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 
@@ -65,6 +67,7 @@ cpVerbose opt src dest = if opt == True
                          else
                            putStr ""
 
+--echo :: (IsStream t, Monad m) => EchoOptions -> t m Char -> Handle -> IO ()
 
 cpFile :: OptsDict -> Path Abs File -> Path Abs File -> IO ()
 cpFile opt src dest = do
