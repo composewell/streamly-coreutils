@@ -31,7 +31,6 @@ homepage:            https://github.com/composewell/streamly-coreutils
 bug-reports:         https://github.com/composewell/streamly-coreutils/issues
 license:             BSD-3-Clause
 
-license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Shruti Umat
 maintainer:          streamly@composewell.com
@@ -43,9 +42,26 @@ library
   build-depends:
       streamly
     , base              >= 4.8   && < 5
-    , path              >= 0.7   && <= 0.8
+    , path              >= 0.8
   hs-source-dirs:      src
+  exposed-modules:
+                       Streamly.Coreutils.Types
+                     , Streamly.Coreutils.Cp
+                     , Streamly.Coreutils.Uniq
+                     , Streamly.Coreutils
+
   default-language:    Haskell2010
+
+
+common compile-options
+    default-language: Haskell2010
+    ghc-options:      -Wall
+
+common exe-options
+    import: compile-options
+
+common test-options
+    import: compile-options
 
 -------------------------------------------------------------------------------
 -- Test suites
@@ -54,18 +70,14 @@ library
 test-suite test
   import: test-options
   type: exitcode-stdio-1.0
-  main-is: Streamly/Coreutils.hs
+  main-is: Coreutils.hs
   js-sources: jsbits/clock.js
-  hs-source-dirs: test
+  hs-source-dirs: test/Streamly
   build-depends:
-      streamly
+      streamly-coreutils
+    , streamly
     , base              >= 4.8   && < 5
-    , path              >= 0.7   && <= 0.8
-    , hspec             >= 2.0   && < 3
-    , QuickCheck        >= 2.10  && < 2.15
+    , path              >= 0.8
+--    , hspec             >= 2.0   && < 3
+--    , QuickCheck        >= 2.10  && < 2.15
   default-language: Haskell2010
-
-common compile-options
-    default-language: Haskell2010
-    ghc-options:      -Wall
-
