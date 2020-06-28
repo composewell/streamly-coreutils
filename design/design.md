@@ -132,7 +132,7 @@
       splitOnNewLine :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m (Array Char)
          -- U.decodeLatin1, S.splitOnSuffix, A.write
 
-      uniqCount :: t m (Array Char) -> t m (Int * String)
+      uniqCount :: (IsStream t, Monad m) => t m (Array Char) -> t m (Int * String)
          -- to count occurences of each array of characters after splitOnNewLine
          -- S.groupsBy
 
