@@ -1,5 +1,4 @@
-module Streamly.Coreutils.Cp (
-      cpFile
+module Streamly.Coreutils.Uniq (
    )
 where
 
@@ -20,21 +19,8 @@ import System.IO (Handle, stdout)
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 
+
 -------------------------------------------------------------------------------
 -- cp and helper functions for options
 -------------------------------------------------------------------------------
 
-cpVerbose :: Bool -> FilePath -> FilePath -> IO ()
-cpVerbose opt src dest = if opt == True
-                         then
-                           putStrLn $ src ++ " -> " ++ dest
-                         else
-                           putStr ""
-
-
-cpFile :: OptsDict -> SomeBase File -> SomeBase File -> IO ()
-cpFile opt src dest = do
-                        let srcFP = someFileToFP src
-                        let dstFP = someFileToFP dest
-                        File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
-                        cpVerbose (verbose opt) srcFP dstFP
