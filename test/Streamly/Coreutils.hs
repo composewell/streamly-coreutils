@@ -1,4 +1,4 @@
-module Main (main) where
+module Main where
 import qualified Streamly.Prelude as S
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Memory.Array as A
@@ -44,12 +44,8 @@ second _ = Nothing
 
 main :: IO ()
 main = do
-         lst <- getArgs
-         case safeHead lst of
-               Just hd -> case second lst of
-                           Just sec -> do
-                                          src <- parseAbsFile hd
-                                          dst <- parseAbsFile sec
-                                          cpFile defaultOptsDict src dst
-                           _        -> putStrLn "error"
-               _       -> putStrLn "error"
+      hd <- getLine
+      sec <- getLine
+      src <- parseSomeFile hd
+      dst <- parseSomeFile sec
+      cpFile defaultOptsDict src dst
