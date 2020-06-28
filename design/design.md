@@ -1,12 +1,13 @@
 # Design for Streamly Coreutils package
 
    ```
-
+    import qualified S as S
     import qualified Streamly.Array as A
     import qualified Streamly.Internal.FileSystem.File as File
     import qualified Streamly.Internal.FileSystem.Handle as FH
     import qualified Streamly.Internal.Data.Fold as FL
 
+    import qualified Streamly.Data.Unicode.Stream as U
     someFileToFP :: SomeBase File -> FilePath
     someFileToFP some =
                       case some of
@@ -129,11 +130,12 @@
          ...
       }
 
-      uniqUtil :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m (Array Word8)
-      -- Streamly.Prelude.splitOnSuffix, A.write
+      splitOnNewLine :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m (Array Char)
+         -- U.decodeLatin1, S.splitOnSuffix, A.write
 
-      uniqCount :: t m String -> t m (Int * String)
-         -- to count occurences of each line after uniqUtil
+      uniqCount :: t m (Array Char) -> t m (Int * String)
+         -- to count occurences of each array of characters after splitOnNewLine
+         -- S.groupsBy
 
   ```
    1. Utility function to read the stream and process according to `UniqOptions`
