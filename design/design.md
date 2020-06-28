@@ -141,7 +141,7 @@
    1. Utility function to read the stream and process according to `UniqOptions`
 
   ```
-      uniq :: (IsStream t, Monad m) => UniqOptions -> t m (SomeBase File) -> SomeBase File -> IO ()
+      uniq :: (IsStream t, Monad m) => UniqOptions -> SomeBase File -> Handle -> IO ()
       -- prints the output to the file or "/dev/stdout"
 
   ```
