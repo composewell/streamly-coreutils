@@ -2,8 +2,10 @@
 
    ```
 
-    import qualified Streamly.Internal.FileSystem.File as FL
+    import qualified Streamly.Array as A
+    import qualified Streamly.Internal.FileSystem.File as File
     import qualified Streamly.Internal.FileSystem.Handle as FH
+    import qualified Streamly.Internal.Data.Fold as FL
 
     someFileToFP :: SomeBase File -> FilePath
     someFileToFP some =
@@ -35,7 +37,7 @@
 
       cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
 
-      FL.fromChunks, FL.toChunksWithBufferOf
+      File.fromChunks, File.toChunksWithBufferOf
 
   ```
 
@@ -67,12 +69,10 @@
 
       echo :: (MonadAsync m, MonadCatch m, MonadIO m) => EchoOptions -> SerialT m Word8 -> Handle -> IO ()
 
-      FH.getBytes, FL.fromBytes
 
   ```
 
-   1. for stdout, second arg should be "/dev/stdout"
-   2. writes the characters in the stream to the file
+   1. writes the bytes in the stream to the handle
    (as echo's output can be redirected to a file)
 
 * cat
@@ -129,7 +129,9 @@
          ...
       }
 
-      uniqUtil :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m String
+      uniqUtil :: (IsStream t, Monad m) => UniqOptions -> t m Word8 -> t m (Array Word8)
+      -- Streamly.Prelude.splitOnSuffix, A.write
+
       uniqCount :: t m String -> t m (Int * String)
          -- to count occurences of each line after uniqUtil
 
