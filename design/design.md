@@ -37,8 +37,7 @@
       }
 
       cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
-
-      File.fromChunks, File.toChunksWithBufferOf
+      -- File.fromChunks, File.toChunksWithBufferOf
 
   ```
 
