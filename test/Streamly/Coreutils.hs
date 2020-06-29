@@ -10,6 +10,8 @@ import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 import Path (Path)
+import System.IO (stdout, IOMode(ReadMode))
+import GHC.IO.Handle.FD (openFile)
 import Path.Posix (Abs, Rel, File, Dir, Path, parseAbsFile, parseRelFile, SomeBase(..), parseSomeFile, fromRelFile, fromAbsFile, fromRelFile, parseAbsDir, (</>), parseRelDir, fromRelDir, fromAbsDir)
 import Data.Char (ord, chr, digitToInt)
 import System.Environment (getArgs)
@@ -55,3 +57,4 @@ main = do
       S.mapM_ print $ uniqCount 0 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       S.mapM_ print $ uniqRepeated $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       S.mapM_ print $ uniqDistinct $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.drain $ cat defaultCatOptions stdout (S.yieldM $ openFile "/home/shruti/test-cat.txt" ReadMode)
