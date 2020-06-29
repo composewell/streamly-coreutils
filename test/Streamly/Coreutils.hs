@@ -50,7 +50,7 @@ main = do
 --      dst <- parseSomeFile sec
 --      cpFile defaultCpOptions src dst
 
-      S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine defaultUniqOptions (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
       -- S.mapM_
-      S.mapM_ print $ uniqCount (splitOnNewLine defaultUniqOptions (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ uniqCount (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
 
