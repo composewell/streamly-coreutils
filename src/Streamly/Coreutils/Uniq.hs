@@ -1,12 +1,12 @@
 module Streamly.Coreutils.Uniq (
       splitOnNewLine
+    , uniqCount
    )
 where
 
 import Streamly.Coreutils.Types
 
 import qualified Streamly.Prelude as S
-import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Memory.Array as A
 
 import qualified Streamly.Data.Unicode.Stream as U
@@ -28,9 +28,10 @@ splitOnNewLine :: (MonadIO m, IsStream t, Monad m) => UniqOptions -> t m Word8 -
 splitOnNewLine opt strm = S.splitOnSuffix (== '\n') A.write $ U.decodeLatin1 strm
 
 
-uniqCount :: (IsStream t, Monad m) => t m (A.Array Char) -> t m (Int * String)
-         -- to count occurences of each array of characters after splitOnNewLine
-         -- S.groupsBy
+uniqCount :: (IsStream t, Monad m) => t m (A.Array Char) -> t m (Int, String)
+uniqCount strm = S.groupsBy (\a -> \b -> a == b) (FL.mkPureId (\x -> \s -> (1 + fst x, A.toList s)) (0, "")) strm
+
+-- to count occurences of each array of characters after splitOnNewLine
 
 
 --uniq :: (IsStream t, Monad m) => UniqOptions -> SomeBase File -> Handle -> IO ()
