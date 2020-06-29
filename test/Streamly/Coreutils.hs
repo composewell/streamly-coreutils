@@ -53,4 +53,5 @@ main = do
       S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
       -- S.mapM_
       S.mapM_ print $ uniqCount (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
-
+      S.mapM_ print $ uniqRepeated $ uniqCount (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ uniqDistinct $ uniqCount (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
