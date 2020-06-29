@@ -44,8 +44,12 @@ second _ = Nothing
 
 main :: IO ()
 main = do
-      hd <- getLine
-      sec <- getLine
-      src <- parseSomeFile hd
-      dst <- parseSomeFile sec
-      cpFile defaultOptsDict src dst
+--      hd <- getLine
+--      sec <- getLine
+--      src <- parseSomeFile hd
+--      dst <- parseSomeFile sec
+--      cpFile defaultCpOptions src dst
+
+      S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine defaultUniqOptions (File.toBytes "/home/shruti/Downloads/coreutils.hs"))
+      -- S.mapM_
+
