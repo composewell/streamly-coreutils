@@ -1,5 +1,6 @@
 module Streamly.Coreutils.Uniq (
-      splitOnNewLine
+      ignoreCase
+    , splitOnNewLine
     , uniqCount
     , uniqRepeated
     , uniqDistinct
@@ -14,6 +15,7 @@ import qualified Streamly.Data.Unicode.Stream as U
 import qualified Streamly.Internal.Data.Fold as FL
 
 import Data.Word (Word8)
+import Data.Char (toLower)
 import System.IO (Handle, stdout)
 import Foreign.Storable (Storable)
 import System.Environment (getArgs)
@@ -22,10 +24,13 @@ import Streamly.Data.Unicode.Stream (decodeLatin1)
 import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
 
+-- convert stream of bytes to stream of characters - ignore case if bool is True
+ignoreCase :: (IsStream t, Monad m) => Bool -> t m Word8 -> t m Char
+ignoreCase flag strm = S.map toLower (U.decodeLatin1 strm)
 
-splitOnNewLine :: (MonadIO m, IsStream t, Monad m) => t m Word8 -> t m (A.Array Char)
-splitOnNewLine strm = S.splitOnSuffix (== '\n') A.write
-                    $ U.decodeLatin1 strm
+
+splitOnNewLine :: (MonadIO m, IsStream t, Monad m) => t m Char -> t m (A.Array Char)
+splitOnNewLine strm = S.splitOnSuffix (== '\n') A.write strm
 
 
 -- drops first n elements from a list

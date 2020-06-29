@@ -50,8 +50,8 @@ main = do
 --      dst <- parseSomeFile sec
 --      cpFile defaultCpOptions src dst
 
-      S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.drain $ S.mapM (putStrLn . A.toList) (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       -- S.mapM_
-      S.mapM_ print $ uniqCount 0 (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ uniqRepeated $ uniqCount 4 (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ uniqDistinct $ uniqCount 4 (splitOnNewLine (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ uniqCount 0 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ uniqRepeated $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ uniqDistinct $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
