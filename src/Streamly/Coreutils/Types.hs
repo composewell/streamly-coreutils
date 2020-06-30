@@ -20,11 +20,12 @@ where
 
 import Path
 import Path.Posix
-      (Path
+      ( Path
       , File
       , Dir
       , Abs
       , Rel
+      , SomeBase (..)
       , parseAbsFile
       , parseRelFile
       , parseSomeFile
@@ -111,7 +112,7 @@ data HeadOptions = HeadOptions {
                     , exceptLastNbytes :: Int
                     , lines :: Int       -- default 10
                     , quiet :: Bool      -- never print headers
-                    , verbose :: Bool    -- always print headers
+                    , headVerbose :: Bool    -- always print headers
                     , zeroTerminated :: Bool  -- line delimited is NULL, not newline
                    }
 
@@ -126,9 +127,9 @@ defaultHeadOptions = HeadOptions 1000 1000 10 False True False
 
 data TailOptions = TailOptions {
                         lastNbytes :: Int          -- last n bytes
-                      , fromNbytes : Int           -- from n bytes from beginning to end
-                      , lines :: Int               -- default 10
-                      , verbose :: Bool            -- True for more than 1 file
+                      , fromNbytes :: Int          -- from n bytes from beginning to end
+                      , tailLines :: Int               -- default 10
+                      , tailVerbose :: Bool            -- True for more than 1 file
                    }
 
 

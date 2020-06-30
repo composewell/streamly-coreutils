@@ -6,7 +6,6 @@ module Streamly.Coreutils.Head (
 where
 
 import Streamly.Coreutils.Types
-import Streamly.Coreutils (someFiletoFP, someDirtoFP)
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
@@ -52,12 +51,13 @@ firstLines :: IsStream t => Int -> SomeBase File -> t m String
 firstLines n fp = S.take n
                 $ S.splitOnSuffix (== '\n') FL.toList
                 $ U.decodeLatin1
-                $ File.toByte
+                $ File.toBytes
                 $ someFileToFP fp
 
+
 -- interleave the name of the file
-interLeaveFile :: (IsStream t, MonadAsync m) => t m (SomeBase File) -> t m String -> t m String
-interLeaveFile = S.zipAsyncWith (\fp -> \s -> someFileToFP fp ++ s)
+addFile :: (IsStream t, Monad m) => SomeBase File -> t m String -> t m String
+addFile fp = S.cons $ someFileToFP fp
 
 
-head :: (IsStream t, Monad m) => HeadOptions -> t m (SomeBase File) -> t m String
+--head :: (IsStream t, Monad m) => HeadOptions -> t m (SomeBase File) -> t m String
