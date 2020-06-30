@@ -7,6 +7,10 @@ module Streamly.Coreutils.Types (
     , CatOptions (..)
     , defaultEchoOptions
     , EchoOptions (..)
+    , defaultHeadOptions
+    , HeadOptions
+    , defaultTailOptions
+    , TailOptions
     , someFileToFP
     , someDirToFP
     , module Path
@@ -95,6 +99,42 @@ data EchoOptions = EchoOptions {
 
 defaultEchoOptions :: EchoOptions
 defaultEchoOptions = EchoOptions True False
+
+
+-------------------------------------------------------------------------------
+-- Record for options used with head
+-------------------------------------------------------------------------------
+
+
+data HeadOptions = HeadOptions {
+                      firstNbytes :: Int
+                    , exceptLastNbytes :: Int
+                    , lines :: Int       -- default 10
+                    , quiet :: Bool      -- never print headers
+                    , verbose :: Bool    -- always print headers
+                    , zeroTerminated :: Bool  -- line delimited is NULL, not newline
+                   }
+
+defaultHeadOptions :: HeadOptions
+defaultHeadOptions = HeadOptions 1000 1000 10 False True False
+
+
+-------------------------------------------------------------------------------
+-- Record for options used with tail
+-------------------------------------------------------------------------------
+
+
+data TailOptions = TailOptions {
+                        lastNbytes :: Int          -- last n bytes
+                      , fromNbytes : Int           -- from n bytes from beginning to end
+                      , lines :: Int               -- default 10
+                      , verbose :: Bool            -- True for more than 1 file
+                   }
+
+
+defaultTailOptions :: TailOptions
+defaultTailOptions = TailOptions 1000 1000 10 True
+
 
 -------------------------------------------------------------------------------
 -- helper functions for converting from SomeBase t to FilePath

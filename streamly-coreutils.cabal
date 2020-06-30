@@ -66,6 +66,8 @@ library
                      , Streamly.Coreutils.Uniq
                      , Streamly.Coreutils.Cat
                      , Streamly.Coreutils.Echo
+                     , Streamly.Coreutils.Head
+                     , Streamly.Coreutils.Tail
                      , Streamly.Coreutils
 
   default-language:    Haskell2010
