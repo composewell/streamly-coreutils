@@ -58,3 +58,5 @@ main = do
       S.mapM_ print $ uniqRepeated $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       S.mapM_ print $ uniqDistinct $ uniqCount 4 (splitOnNewLine $ ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       S.drain $ cat defaultCatOptions stdout (S.yieldM $ openFile "/home/shruti/test-cat.txt" ReadMode)
+      echo defaultEchoOptions stdout (File.toBytes "/home/shruti/test-uniq.txt")
+      trailingNewLine (trailingLine defaultEchoOptions) stdout

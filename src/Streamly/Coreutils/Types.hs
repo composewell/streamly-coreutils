@@ -5,6 +5,8 @@ module Streamly.Coreutils.Types (
     , UniqOptions (..)
     , defaultCatOptions
     , CatOptions (..)
+    , defaultEchoOptions
+    , EchoOptions (..)
     , someFileToFP
     , someDirToFP
     , module Path
@@ -67,7 +69,7 @@ defaultUniqOptions = UniqOptions True True      -- add other options later
 
 
 -------------------------------------------------------------------------------
--- Record for options used with uniq
+-- Record for options used with cat
 -------------------------------------------------------------------------------
 
 data CatOptions = CatOptions {
@@ -80,6 +82,19 @@ data CatOptions = CatOptions {
 
 defaultCatOptions :: CatOptions
 defaultCatOptions = CatOptions True True True True True
+
+
+-------------------------------------------------------------------------------
+-- Record for options used with cat
+-------------------------------------------------------------------------------
+
+data EchoOptions = EchoOptions {
+                       trailingLine :: Bool
+                     , interpretBackSlash :: Bool
+                   }
+
+defaultEchoOptions :: EchoOptions
+defaultEchoOptions = EchoOptions True False
 
 -------------------------------------------------------------------------------
 -- helper functions for converting from SomeBase t to FilePath
