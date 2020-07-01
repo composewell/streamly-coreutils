@@ -33,8 +33,8 @@ import Control.Monad.IO.Class (MonadIO)
 data TailOptions = TailOptions {
                         lastNbytes :: Int          -- last n bytes
                       , fromNbytes :: Int          -- from n bytes from beginning to end
-                      , tailLines :: Int               -- default 10
-                      , tailVerbose :: Bool            -- True for more than 1 file
+                      , lines :: Int               -- default 10
+                      , verbose :: Bool            -- True for more than 1 file
                    }
 
 

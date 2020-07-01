@@ -37,7 +37,7 @@ data HeadOptions = HeadOptions {
                     , exceptLastNbytes :: Int
                     , lines :: Int       -- default 10
                     , quiet :: Bool      -- never print headers
-                    , headVerbose :: Bool    -- always print headers
+                    , verbose :: Bool    -- always print headers
                     , zeroTerminated :: Bool  -- line delimited is NULL, not newline
                    }
 

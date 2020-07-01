@@ -31,7 +31,7 @@ import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
 
 data UniqOptions = UniqOptions {
-                     uniqVerbose :: Bool
+                     verbose :: Bool
                    , count :: Bool
 --                     repeated :: Bool,      -- display only duplicate lines once for each group
 --                     duplicate :: Bool,     -- print all duplicate lines
