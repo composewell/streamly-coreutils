@@ -1,7 +1,6 @@
 module Main where
 
 import Streamly.Coreutils
-import Streamly.Coreutils.Types
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
 

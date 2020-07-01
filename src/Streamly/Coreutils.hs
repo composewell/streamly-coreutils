@@ -11,10 +11,10 @@ module Streamly.Coreutils (
    )
 where
 
-import Streamly.Coreutils.Cp
-import Streamly.Coreutils.Uniq
-import Streamly.Coreutils.Cat
-import Streamly.Coreutils.Echo
---import Streamly.Coreutils.Head
-import Streamly.Coreutils.Tail
+import qualified Streamly.Coreutils.Cp
+import qualified Streamly.Coreutils.Uniq
+import qualified Streamly.Coreutils.Cat
+import qualified Streamly.Coreutils.Echo
+--import qualified Streamly.Coreutils.Head
+import qualified Streamly.Coreutils.Tail
 import Streamly.Coreutils.Common
