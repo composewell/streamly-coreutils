@@ -27,7 +27,7 @@ import Gauge.Benchmark (nf, bench, bgroup, nfAppIO, nfIO, env, whnfAppIO, whnfIO
 import Control.Monad.Catch (MonadThrow, MonadCatch)
 
 srcFP :: FilePath
-srcFP = "/home/shruti/alice29.txt"
+srcFP = "/home/shruti/sorted.txt"
 
 dstFP :: FilePath
 dstFP = "/home/shruti/copied.txt"
@@ -35,7 +35,7 @@ dstFP = "/home/shruti/copied.txt"
 
 source :: MonadThrow m => m (SomeBase File)
 source = do
-            fp <- parseAbsFile "/home/shruti/thrice"
+            fp <- parseAbsFile "/home/shruti/sorted.txt"
             return $ Abs fp
 
 dest :: MonadThrow m => m (SomeBase File)
@@ -44,8 +44,18 @@ dest = do
             return $ Abs fp
 
 
+byteStrm :: (IsStream t, Monad m, MonadIO m, MonadCatch m) => FilePath -> t m Word8
+byteStrm fp = File.toBytes fp
+
+
 charStrm :: (IsStream t, Monad m, MonadIO m, MonadCatch m) => FilePath -> t m Char
 charStrm fp = Un.decodeLatin1 $ File.toBytes fp
+
+
+arrayChar :: (IsStream t, MonadCatch m, MonadIO m, Monad m) => FilePath -> t m (A.Array Char)
+arrayChar fp = U.splitOnNewLine
+             $ U.ignoreCase False
+             $ File.toBytes fp
 
 
 main :: IO ()
@@ -57,6 +67,9 @@ main = do
                bench "cpFile" $ nfIO (C.cpFile C.defaultCpOptions src dst)
             ],
             bgroup "uniq" [
-               bench "splitOnNewLine" $ nfAppIO (\strm -> S.drain $ U.splitOnNewLine strm) (charStrm srcFP)
+               bench "ignoreCase" $ nfAppIO (\strm -> S.drain $ U.ignoreCase True strm) (byteStrm srcFP),
+               bench "splitOnNewLine" $ nfAppIO (\strm -> S.drain $ U.splitOnNewLine strm) (charStrm srcFP),
+               bench "uniqCount skip 0" $ nfAppIO (\strm -> S.drain $ U.uniqCount 0 strm) (arrayChar "/home/shruti/sorted.txt"),
+               bench "uniqCount skip 1000" $ nfAppIO (\strm -> S.drain $ U.uniqCount 1000 strm) (arrayChar "/home/shruti/sorted.txt")
             ]
           ]
