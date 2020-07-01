@@ -53,7 +53,9 @@ defaultUniqOptions = UniqOptions True True      -- add other options later
 
 -- convert stream of bytes to stream of characters - ignore case if bool is True
 ignoreCase :: (IsStream t, Monad m) => Bool -> t m Word8 -> t m Char
-ignoreCase flag strm = S.map toLower (U.decodeLatin1 strm)
+ignoreCase flag strm = if flag == True
+                       then S.map toLower (U.decodeLatin1 strm)
+                       else U.decodeLatin1 strm
 
 
 splitOnNewLine :: (MonadIO m, IsStream t, Monad m) => t m Char -> t m (A.Array Char)
