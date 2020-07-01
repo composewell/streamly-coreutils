@@ -1,9 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Streamly.Coreutils.Cat (
       cat
+    , defaultCatOptions
+    , CatOptions (..)
    )
 where
-import Streamly.Coreutils.Types
+import Streamly.Coreutils.Common
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
@@ -23,44 +25,24 @@ import Streamly.Data.Unicode.Stream (decodeLatin1)
 
 import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
---DESCRIPTION
---       Concatenate FILE(s) to standard output.
---
---       With no FILE, or when FILE is -, read standard input.
---
---       -A, --show-all
---              equivalent to -vET
---
---       -b, --number-nonblank
---              number nonempty output lines, overrides -n
---
---       -e     equivalent to -vE
---
---       -E, --show-ends
---              display $ at end of each line
---
---       -n, --number
---              number all output lines
---
---       -s, --squeeze-blank
---              suppress repeated empty output lines
---
---       -t     equivalent to -vT
---
---       -T, --show-tabs
---              display TAB characters as ^I
---
---       -u     (ignored)
---
---       -v, --show-nonprinting
---              use ^ and M- notation, except for LFD and TAB
---
---       --help display this help and exit
---
---       --version
---              output version information and exit
+-------------------------------------------------------------------------------
+-- Record for options used with cat
+-------------------------------------------------------------------------------
 
+data CatOptions = CatOptions {
+                     showAll :: Bool
+                   , numberNonEmptyLines :: Bool
+                   , showEnds :: Bool
+                   , numberAllLines :: Bool
+                   , suppressRepeatedEmpty :: Bool
+                  }
 
+defaultCatOptions :: CatOptions
+defaultCatOptions = CatOptions True True True True True
+
+-------------------------------------------------------------------------------
+-- helper functions for cat
+-------------------------------------------------------------------------------
 
 -- TODO : suppresses non-blank lines if True
 

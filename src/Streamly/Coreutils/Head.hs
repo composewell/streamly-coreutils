@@ -2,10 +2,12 @@ module Streamly.Coreutils.Head (
       extractFirst
     , exceptLast
     , firstLines
+    , defaultHeadOptions
+    , HeadOptions (..)
    )
 where
 
-import Streamly.Coreutils.Types
+import Streamly.Coreutils.Common
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
@@ -25,6 +27,27 @@ import Streamly.Internal.Data.SVar (MonadAsync)
 import Streamly.Internal.Data.Stream.Serial (SerialT(..))
 import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
+-------------------------------------------------------------------------------
+-- Record for options used with head
+-------------------------------------------------------------------------------
+
+
+data HeadOptions = HeadOptions {
+                      firstNbytes :: Int
+                    , exceptLastNbytes :: Int
+                    , lines :: Int       -- default 10
+                    , quiet :: Bool      -- never print headers
+                    , headVerbose :: Bool    -- always print headers
+                    , zeroTerminated :: Bool  -- line delimited is NULL, not newline
+                   }
+
+defaultHeadOptions :: HeadOptions
+defaultHeadOptions = HeadOptions 1000 1000 10 False True False
+
+
+-------------------------------------------------------------------------------
+-- helper for head
+-------------------------------------------------------------------------------
 
 -- extracts first n bytes from a file as a stream of String
 extractFirst :: IsStream t => Int -> SomeBase File -> t m String

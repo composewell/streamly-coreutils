@@ -1,5 +1,5 @@
 module Streamly.Coreutils (
-      module Streamly.Coreutils.Types
+      module Streamly.Coreutils.Common
     , module Streamly.Coreutils.Cp
     , module Streamly.Coreutils.Uniq
     , module Streamly.Coreutils.Cat
@@ -17,4 +17,4 @@ import Streamly.Coreutils.Cat
 import Streamly.Coreutils.Echo
 --import Streamly.Coreutils.Head
 import Streamly.Coreutils.Tail
-import Streamly.Coreutils.Types
+import Streamly.Coreutils.Common

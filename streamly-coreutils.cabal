@@ -56,13 +56,14 @@ library
   import: lib-options
   build-depends:
       streamly
+    --, streamly-benchmarks
     , base              >= 4.8   && < 5
     , path              >= 0.8
     , monad-control     >= 1.0   && < 2
     , exceptions        >= 0.8   && < 0.11
   hs-source-dirs:      src
   exposed-modules:
-                       Streamly.Coreutils.Types
+                       Streamly.Coreutils.Common
                      , Streamly.Coreutils.Cp
                      , Streamly.Coreutils.Uniq
                      , Streamly.Coreutils.Cat
@@ -84,6 +85,7 @@ benchmark coreutils-bench
   build-depends:
       streamly-coreutils
     , streamly
+    , streamly-benchmarks
     , base              >= 4.8   && < 5
     , path              >= 0.8
     , gauge             >= 0.2.4 && < 0.3
@@ -106,6 +108,7 @@ test-suite test
   build-depends:
       streamly-coreutils
     , streamly
+    --, streamly-benchmarks
     , base              >= 4.8   && < 5
     , path              >= 0.8
     , monad-control     >= 1.0   && < 2

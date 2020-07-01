@@ -1,8 +1,6 @@
-module Streamly.Coreutils.Echo (
-      echo
-    , trailingNewLine
-    , defaultEchoOptions
-    , EchoOptions (..)
+module Streamly.Coreutils.Tail (
+      defaultTailOptions
+    , TailOptions (..)
    )
 where
 
@@ -28,29 +26,22 @@ import Streamly.Data.Unicode.Stream (decodeLatin1)
 import Control.Monad.IO.Class (MonadIO)
 
 -------------------------------------------------------------------------------
--- Record for options used with echo
+-- Record for options used with tail
 -------------------------------------------------------------------------------
 
-data EchoOptions = EchoOptions {
-                       trailingLine :: Bool
-                     , interpretBackSlash :: Bool
+
+data TailOptions = TailOptions {
+                        lastNbytes :: Int          -- last n bytes
+                      , fromNbytes :: Int          -- from n bytes from beginning to end
+                      , tailLines :: Int               -- default 10
+                      , tailVerbose :: Bool            -- True for more than 1 file
                    }
 
 
-defaultEchoOptions :: EchoOptions
-defaultEchoOptions = EchoOptions True False
+defaultTailOptions :: TailOptions
+defaultTailOptions = TailOptions 1000 1000 10 True
 
 
 -------------------------------------------------------------------------------
--- helper functions for cat
+-- helper functions for tail
 -------------------------------------------------------------------------------
-
-
-trailingNewLine :: Bool -> Handle -> IO ()
-trailingNewLine flag hd = if flag == True
-                          then hPutStr hd "\n"
-                          else hPutStr hd ""
-
-
-echo :: (Monad m, MonadIO m) => EchoOptions -> Handle -> SerialT m Word8 -> m ()
-echo opt hd strm = FH.fromBytes hd strm

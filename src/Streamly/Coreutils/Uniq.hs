@@ -4,10 +4,12 @@ module Streamly.Coreutils.Uniq (
     , uniqCount
     , uniqRepeated
     , uniqDistinct
+    , defaultUniqOptions
+    , UniqOptions (..)
    )
 where
 
-import Streamly.Coreutils.Types
+import Streamly.Coreutils.Common
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
@@ -22,6 +24,31 @@ import System.Environment (getArgs)
 import Control.Monad.IO.Class (MonadIO)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
 import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
+
+-------------------------------------------------------------------------------
+-- Record for options used with uniq
+-------------------------------------------------------------------------------
+
+
+data UniqOptions = UniqOptions {
+                     uniqVerbose :: Bool
+                   , count :: Bool
+--                     repeated :: Bool,      -- display only duplicate lines once for each group
+--                     duplicate :: Bool,     -- print all duplicate lines
+--                     skipFields :: Int,
+--                     ignoreCase :: Bool,
+--                     unique :: Bool,        -- print only unique lines
+--                     zeroTerminated :: Bool,
+--                     checkChar :: Int,
+                  }
+
+defaultUniqOptions :: UniqOptions
+defaultUniqOptions = UniqOptions True True      -- add other options later
+
+
+-------------------------------------------------------------------------------
+-- helper functions for uniq
+-------------------------------------------------------------------------------
 
 
 -- convert stream of bytes to stream of characters - ignore case if bool is True

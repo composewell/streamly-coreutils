@@ -53,4 +53,7 @@ main = do
             bgroup "cp bench" [
                 bench "cpFile" (nfIO (cpFile defaultCpOptions src dst))
                               ]
-                     ]
+            bgroup "uniq bench" [
+               bench "splitOnNewLine" (nfIO (splitOnNewLine $ U.decodeLatin1 $ File.toBytes "/home/shruti/thrice"))
+                              ]
+          ]

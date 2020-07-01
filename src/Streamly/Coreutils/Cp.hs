@@ -1,9 +1,11 @@
 module Streamly.Coreutils.Cp (
       cpFile
+    , defaultCpOptions
+    , CpOptions (..)
    )
 where
 
-import Streamly.Coreutils.Types
+import Streamly.Coreutils.Common
 import qualified Streamly.Prelude as S
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Memory.Array as A
@@ -19,6 +21,20 @@ import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 import System.IO (Handle, stdout)
 import System.Environment (getArgs)
 import Streamly.Data.Unicode.Stream (decodeLatin1)
+
+-------------------------------------------------------------------------------
+-- Record for options used with cp
+-------------------------------------------------------------------------------
+
+
+data CpOptions = CpOptions {
+                  verbose :: Bool
+                }
+
+
+defaultCpOptions :: CpOptions
+defaultCpOptions = CpOptions True        -- set to False later
+
 
 -------------------------------------------------------------------------------
 -- cp and helper functions for options
@@ -37,4 +53,4 @@ cpFile opt src dest = do
                         let srcFP = someFileToFP src
                         let dstFP = someFileToFP dest
                         File.fromChunks dstFP $ File.toChunksWithBufferOf (256*1024) srcFP
-                        cpPrint (cpVerbose opt) srcFP dstFP
+                        cpPrint (verbose opt) srcFP dstFP
