@@ -62,7 +62,7 @@ main = do
 --      let n = defaultCpOptions {C.verbose = False}
 --      cpFile n src dst
 
-        S.drainM $ U.ignoreCase False $ S.repeat a
+        S.drain $ U.ignoreCase False $ S.repeat a
 --      S.drain $ S.mapM (putStrLn . A.toList) (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
 --      -- S.mapM_
 --      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
