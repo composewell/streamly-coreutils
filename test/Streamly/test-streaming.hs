@@ -55,14 +55,21 @@ a = 97
 
 main :: IO ()
 main = do
+        let inf = 'a':'\n':inf
+        --S.drain $ U.ignoreCase False $ S.repeat a
+        --S.drain $ U.splitOnNewLine $ S.fromList inf
+        S.drain $ U.uniqCount 0 $ U.splitOnNewLine $ S.fromList inf
+        --S.drain $ U.uniqCount 0 $ U.splitOnNewLine $ S.fromList inf
+        --S.drain $ U.uniqRepeated $ U.uniqCount 100 $ U.splitOnNewLine $ S.fromList inf
+        --S.drain $$ U.uniqDistinct $ U.uniqCount 1000 $ U.splitOnNewLine $ S.fromList inf
+
 --      hd <- getLine
 --      sec <- getLine
 --      src <- parseSomeFile hd
 --      dst <- parseSomeFile sec
 --      let n = defaultCpOptions {C.verbose = False}
 --      cpFile n src dst
-
-        S.drain $ U.ignoreCase False $ S.repeat a
+--
 --      S.drain $ S.mapM (putStrLn . A.toList) (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
 --      -- S.mapM_
 --      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))

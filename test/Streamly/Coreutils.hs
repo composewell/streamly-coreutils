@@ -60,9 +60,9 @@ main = do
 
       S.drain $ S.mapM (putStrLn . A.toList) (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
       -- S.mapM_
-      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ U.uniqRepeated $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ U.uniqDistinct $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase False (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ U.uniqRepeated $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase False (File.toBytes "/home/shruti/test-uniq.txt"))
+      S.mapM_ print $ U.uniqDistinct $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase False (File.toBytes "/home/shruti/test-uniq.txt"))
       S.drain $ Ca.cat defaultCatOptions stdout (S.yieldM $ openFile "/home/shruti/test-cat.txt" ReadMode)
       E.echo E.defaultEchoOptions stdout (File.toBytes "/home/shruti/test-uniq.txt")
       E.trailingNewLine (E.trailingLine defaultEchoOptions) stdout
