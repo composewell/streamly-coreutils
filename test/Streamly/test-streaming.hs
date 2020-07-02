@@ -13,6 +13,7 @@ import qualified Streamly.Internal.Prelude as IP
 import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
+import Data.Word (Word8)
 import Path (Path)
 import System.IO (stdout, IOMode(ReadMode))
 import GHC.IO.Handle.FD (openFile)
@@ -49,6 +50,9 @@ safeHead _ = Nothing
 second (x:y:_) = Just y
 second _ = Nothing
 
+a :: Word8
+a = 97
+
 main :: IO ()
 main = do
 --      hd <- getLine
@@ -58,11 +62,12 @@ main = do
 --      let n = defaultCpOptions {C.verbose = False}
 --      cpFile n src dst
 
-      S.drain $ S.mapM (putStrLn . A.toList) (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      -- S.mapM_
-      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ U.uniqRepeated $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.mapM_ print $ U.uniqDistinct $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
-      S.drain $ Ca.cat defaultCatOptions stdout (S.yieldM $ openFile "/home/shruti/test-cat.txt" ReadMode)
-      E.echo E.defaultEchoOptions stdout (File.toBytes "/home/shruti/test-uniq.txt")
-      E.trailingNewLine (E.trailingLine defaultEchoOptions) stdout
+        S.drainM $ U.ignoreCase False $ S.repeat a
+--      S.drain $ S.mapM (putStrLn . A.toList) (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+--      -- S.mapM_
+--      S.mapM_ print $ U.uniqCount 0 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+--      S.mapM_ print $ U.uniqRepeated $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+--      S.mapM_ print $ U.uniqDistinct $ U.uniqCount 4 (U.splitOnNewLine $ U.ignoreCase True (File.toBytes "/home/shruti/test-uniq.txt"))
+--      S.drain $ Ca.cat defaultCatOptions stdout (S.yieldM $ openFile "/home/shruti/test-cat.txt" ReadMode)
+--      echo E.defaultEchoOptions stdout (File.toBytes "/home/shruti/test-uniq.txt")
+--      E.trailingNewLine (E.trailingLine defaultEchoOptions) stdout
