@@ -3,6 +3,7 @@ module Main where
 import Streamly.Coreutils
 import qualified Streamly.Coreutils.Cp as C
 import qualified Streamly.Coreutils.Cat as Cat
+import qualified Streamly.Coreutils.Echo as E
 import qualified Streamly.Coreutils.Uniq as U
 
 import qualified Streamly.Prelude as S
@@ -23,7 +24,6 @@ import System.Environment (getArgs)
 import Control.Monad.IO.Class (MonadIO)
 import System.IO (Handle, stdout, hPutStr)
 import System.IO (stdout, IOMode(ReadMode))
-import Streamly.Data.Unicode.Stream (decodeLatin1)
 
 import Gauge (defaultMain, benchmark, Benchmarkable (..))
 import Gauge.Benchmark (nf, bench, bgroup, nfAppIO, nfIO, env, whnfAppIO, whnfIO)
@@ -69,6 +69,9 @@ intStrStrm n fp = U.uniqCount n
 handleStrm :: IsStream t => [FilePath] -> t IO Handle
 handleStrm fpl = S.mapM (\s -> openFile s ReadMode) $ S.fromList fpl
 
+report :: Maybe FilePath
+report = Just "/home/shruti/report.txt"
+
 main :: IO ()
 main = do
          src <- source
@@ -90,5 +93,8 @@ main = do
             ],
             bgroup "cat" [
                bench "cat" $ nfIO (S.drain $ Cat.cat Cat.defaultCatOptions stdout (handleStrm [srcFP]))
+            ],
+            bgroup "echo" [
+               bench "echo" $ nfIO (E.echo E.defaultEchoOptions stdout $ File.toBytes srcFP)
             ]
           ]
