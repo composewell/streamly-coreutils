@@ -86,9 +86,9 @@ skipN n a b = let
 
 uniqCount :: (IsStream t, Monad m) => Int -> t m (A.Array Char) -> t m (Int, String)
 uniqCount n strm = S.groupsBy (skipN n)
-                  (FL.mkPureId (\x -> \s -> (1 + fst x, if snd x == ""
-                                                        then A.toList s
-                                                        else snd x)) (0, "")) strm
+                    (FL.mkPureId (\x -> \s -> (1 + fst x, if snd x == ""
+                                                          then A.toList s
+                                                          else snd x)) (0, "")) strm
 
 
 -- filters Strings which are repeated (occ >= 2)
