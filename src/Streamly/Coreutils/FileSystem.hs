@@ -54,5 +54,9 @@ defaultRmdirOptions = RmdirOptions True False False
 -- helper functions for rmdir
 -------------------------------------------------------------------------------
 
-rmdir :: FilePath -> IO ()
-rmdir = removeDirectory
+
+rmdir :: RmdirOptions -> SomeBase Dir -> IO ()
+rmdir opt fp = if (parents opt) == True
+               -- get a/b/c a, b, c to be removed
+               else
+                  removeDirectory fp
