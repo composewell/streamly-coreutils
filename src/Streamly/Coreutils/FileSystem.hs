@@ -1,11 +1,7 @@
 module Streamly.Coreutils.FileSystem (
       defaultRmdirOptions
     , RmdirOptions (..)
-    ,
-    ,
-    ,
-    ,
-    ,
+    , rmdir
    )
 where
 import Control.Monad.Trans.Control (MonadBaseControl (..))
@@ -18,6 +14,7 @@ import qualified Streamly.Data.Unicode.Stream as Un
 import qualified Streamly.Internal.FileSystem.File as File
 import qualified Streamly.Internal.FileSystem.Handle as FH
 
+import System.Directory (removeDirectory)
 import Data.Word (Word8)
 import System.IO (hPutStr)
 import Data.Char (toLower, isSpace)
@@ -40,7 +37,7 @@ intMax :: Int
 intMax = maxBound
 
 
-data RmdirOptions = UniqOptions {
+data RmdirOptions = RmdirOptions {
                        verbose :: Bool
                      , ignoreFail :: Bool   -- ignore failure because of a non-empty directory
                      , parents :: Bool      -- remove directory & its ancestors
@@ -56,3 +53,6 @@ defaultRmdirOptions = RmdirOptions True False False
 -------------------------------------------------------------------------------
 -- helper functions for rmdir
 -------------------------------------------------------------------------------
+
+rmdir :: FilePath -> IO ()
+rmdir = removeDirectory
