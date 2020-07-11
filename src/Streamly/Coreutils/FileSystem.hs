@@ -30,6 +30,7 @@ import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 -------------------------------------------------------------------------------
 -- Record for options used with uniq
 -------------------------------------------------------------------------------
+-- pwd, rm, rmdir, mkdir, mv, ls
 
 {-# INLINE intMax #-}
 
@@ -49,6 +50,30 @@ data RmdirOptions = RmdirOptions {
 defaultRmdirOptions :: RmdirOptions
 defaultRmdirOptions = RmdirOptions True False False
 
+
+
+data PwdOptions = PwdOptions {
+                       physical :: Bool     -- avoid all symlinks
+                  }
+
+{-# INLINE defaultPwdOptions #-}
+
+defaultPwdOptions :: PwdOptions
+defaultPwdOptions = PwdOptions True
+
+
+
+
+data MkdirOptions = MkdirOptions {
+                       parents :: Bool     -- create parents if not present
+                     , verbose :: Bool     -- print each directory created
+                     --, mode :: String      -- TODO need to understand
+                  }
+
+{-# INLINE defaultMkdirOptions #-}
+
+defaultMkdirOptions :: MkdirOptions
+defaultMkdirOptions = MkdirOptions True True
 
 -------------------------------------------------------------------------------
 -- helper functions for rmdir
