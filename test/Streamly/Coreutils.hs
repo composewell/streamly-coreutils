@@ -1,27 +1,43 @@
 module Main(main) where
 
 import qualified Streamly.Prelude as S
+import qualified Streamly.Internal.Data.Fold as FL
 import qualified Streamly.Data.Unicode.Stream as Un
 import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.Uniq
+
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Catch (MonadCatch)
 import System.Directory (getHomeDirectory)
-
-
-opt :: UniqOptions
-opt = defaultUniqOptions {skipFields = 1, skipChar = 1, duplicate = False, unique = False, repeated = True}
+import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
 home :: IO FilePath
 home = getHomeDirectory
+
+opt :: UniqOptions
+opt = defaultUniqOptions { skipFields = 1
+                         , skipChar = 1
+                         , ignoreCase = True
+                         , duplicate = True
+                         , unique = False }
+
+charStrm :: (IsStream t, Monad m, MonadCatch m, MonadIO m) => FilePath -> t m Char
+charStrm = Un.decodeLatin1 . File.toBytes
+
+splitOnNewLine :: (IsStream t, Monad m, MonadIO m) => t m Char -> t m String
+splitOnNewLine = S.splitOnSuffix (== '\n') FL.toList
+
+
 
 main :: IO ()
 main = do
          homeFP <- home
          let srcFP = homeFP ++ "/test-uniq.txt"
-         S.drain $ S.mapM putChar (ignCase True $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM putChar (ignCase False $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM putStrLn (splitOnNewLine $ ignCase False $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM print (uniqCount opt $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM print (getRepetition opt $ splitOnNewLine $ ignCase True $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM print (filterStream opt $ getRepetition opt $ splitOnNewLine $ ignCase True $ Un.decodeLatin1 $ File.toBytes srcFP)
-         S.drain $ S.mapM putStrLn (merge opt $ filterStream opt $ getRepetition opt $ splitOnNewLine $ ignCase True $ Un.decodeLatin1 $ File.toBytes srcFP)
+         let comp = compareUsingOptions opt
+         S.drain $ S.mapM print $ getRepetition comp $ splitOnNewLine $ charStrm srcFP
+         S.drain $ S.mapM print $ onlyUnique comp $ splitOnNewLine $ charStrm srcFP
+         S.drain $ S.mapM print $ onlyDuplicate comp $ splitOnNewLine $ charStrm srcFP
+         S.drain $ S.mapM print $ onlyRepeated comp $ splitOnNewLine $ charStrm srcFP
+         S.drain $ S.mapM print $ uniq opt $ splitOnNewLine $ charStrm srcFP
+         S.drain $ S.mapM print $ uniqCount opt $ splitOnNewLine $ charStrm srcFP

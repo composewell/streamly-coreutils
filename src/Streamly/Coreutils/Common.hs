@@ -1,8 +1,6 @@
 module Streamly.Coreutils.Common (
       someFileToFP
     , someDirToFP
-    , module Path
-    , module Path.Posix
    )
 where
 
@@ -29,7 +27,10 @@ import Path.Posix
 -- helper functions for converting from SomeBase t to FilePath
 -------------------------------------------------------------------------------
 
-
+-- |
+-- Converts a type @SomeBase File@ to the type @FilePath@
+--
+-- @since 0.1.0.0
 someFileToFP :: SomeBase File -> FilePath
 someFileToFP some =
                   case some of
@@ -37,6 +38,10 @@ someFileToFP some =
                      Rel x -> fromRelFile x
 
 
+-- |
+-- Converts a type @SomeBase Dir@ to the type @FilePath@
+--
+-- @since 0.1.0.0
 someDirToFP :: SomeBase Dir -> FilePath
 someDirToFP some =
                    case some of

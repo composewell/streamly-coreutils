@@ -2,12 +2,12 @@ module Main where
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Array as A
-import qualified Streamly.Coreutils.Uniq as U
+import qualified Streamly.Internal.Data.Fold as FL
 import qualified Streamly.Data.Unicode.Stream as Un
 import qualified Streamly.Internal.FileSystem.File as File
 
-
 import Data.Word (Word8)
+import Streamly.Coreutils.Uniq
 import Control.Monad.IO.Class (MonadIO)
 import System.IO (
          Handle
@@ -16,8 +16,8 @@ import System.IO (
        , IOMode(..)
        , openFile)
 
-import System.Directory (getHomeDirectory)
 import Gauge (defaultMain)
+import System.Directory (getHomeDirectory)
 import Control.Monad.Catch (MonadThrow, MonadCatch)
 import Gauge.Benchmark (bench, bgroup, nfAppIO, nfIO)
 import Streamly.Internal.Data.Stream.Serial (SerialT(..))
@@ -39,20 +39,27 @@ charStrm :: (IsStream t, Monad m, MonadIO m, MonadCatch m) => FilePath -> t m Ch
 charStrm fp = Un.decodeLatin1 $ File.toBytes fp
 
 
-opt :: U.UniqOptions
-opt = U.defaultUniqOptions {U.skipFields = 2}
+splitOnNewLine :: (MonadIO m, IsStream t, Monad m) => t m Char -> t m String
+splitOnNewLine strm = S.splitOnSuffix (== '\n') FL.toList strm
+
+
+opt :: UniqOptions
+opt = defaultUniqOptions { skipFields = 12
+                         , duplicate = True
+                         , unique = False }
 
 main :: IO ()
 main = do
          src <- srcFP
          dst <- dstFP
+         let comp = compareUsingOptions opt
          defaultMain [
             bgroup "uniq" [
-               bench "ignCase" $ nfAppIO (\strm -> S.drain $ U.ignCase True strm) (charStrm src),
-               bench "splitOnNewLine" $ nfAppIO (\strm -> S.drain $ U.splitOnNewLine strm) (U.ignCase False $ charStrm src),
-               bench "getRepetition" $ nfAppIO (\strm -> S.drain $ U.getRepetition opt strm) (U.splitOnNewLine $ U.ignCase False $ charStrm src),
-               bench "filterStream" $ nfAppIO (\strm -> S.drain $ U.filterStream opt strm) (U.getRepetition opt $ U.splitOnNewLine $ U.ignCase False $ charStrm src),
-               bench "uniqCount" $ nfAppIO (\strm -> S.drain $ U.uniqCount opt strm) (charStrm src),
-               bench "merge" $ nfAppIO (\strm -> S.drain $ U.merge opt strm) (U.uniqCount opt $ charStrm src)
+               bench "getRepetition" $ nfAppIO (\strm -> S.drain $ getRepetition comp strm) (splitOnNewLine $ charStrm src),
+               bench "onlyUnique" $ nfAppIO (\strm -> S.drain $ onlyUnique comp strm) (splitOnNewLine $ charStrm src),
+               bench "onlyDuplicate" $ nfAppIO (\strm -> S.drain $ onlyDuplicate comp strm) (splitOnNewLine $ charStrm src),
+               bench "onlyRepeated" $ nfAppIO (\strm -> S.drain $ onlyRepeated comp strm) (splitOnNewLine $ charStrm src),
+               bench "uniq" $ nfAppIO (\strm -> S.drain $ uniq opt strm) (splitOnNewLine $ charStrm src),
+               bench "uniqCount" $ nfAppIO (\strm -> S.drain $ uniqCount opt strm) (splitOnNewLine $ charStrm src)
             ]
           ]
