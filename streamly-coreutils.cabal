@@ -42,6 +42,31 @@ library
     , base              >= 4.8   && < 5
   hs-source-dirs:      src
   exposed-modules:     Streamly.Coreutils.Uniq
+
+common lib-options
+    import: compile-options
+
+common exe-options
+    import: compile-options
+
+common test-options
+    import: compile-options
+
+
+library
+  import: lib-options
+  build-depends:
+      streamly
+    , base              >= 4.8   && < 5
+    , path              >= 0.8
+    , monad-control     >= 1.0   && < 2
+    , exceptions        >= 0.8   && < 0.11
+    , directory         >= 1.2.2 && < 1.4
+  hs-source-dirs:      src
+  exposed-modules:
+                       Streamly.Coreutils.Common
+                     , Streamly.Coreutils.Cp
+                     , Streamly.Coreutils.Uniq
                      , Streamly.Coreutils
 
   default-language:    Haskell2010
