@@ -1,13 +1,12 @@
 module Streamly.Coreutils.Uniq (
-        UniqOptions (..)
+        Output (..)
+      , UniqResult (..)
+      , UniqOptions (..)
       , defaultUniqOptions
       , getRepetition
       , compareUsingOptions
-      , onlyUnique
-      , onlyDuplicate
-      , onlyRepeated
       , uniq
-      , uniqCount
+      , uniqResultToString
    )
 where
 import qualified Streamly.Prelude as S
@@ -18,19 +17,43 @@ import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
 
 
 -- |
+-- Data type to capture the output of the stream -
+-- the stream should either be composed of
+-- unique, repeated, duplicate or all of the strings
+--
+-- @since 0.1.0.0
+data Output = Unique
+            | Repeated
+            | Duplicate
+            | All
+            -- ^ Returns @UniqResult@ without filtering
+            -- any strings based on counts
+
+
+-- |
+-- Data type of uniq's output.
+-- @Count n s@ represents that the string @s@ occurs @n@
+-- times in the output stream.
+--
+-- @since 0.1.0.0
+data UniqResult = Count Int String
+
+
+-- |
+-- Show instance for @UniqResult@
+--
+-- @since 0.1.0.0
+instance Show UniqResult where
+    show (Count n s) = show n ++ " " ++ s
+
+
+-- |
 -- Record to specify command line options like count,
 -- skip-fields, check-chars used in GNU uniq
 --
 -- @since 0.1.0.0
 data UniqOptions = UniqOptions {
-                       count :: Bool
--- ^ generate a stream of (Int, String) where
--- the integer is the number of occurrences of the corresponding string
-                     , duplicate :: Bool
--- ^ print only duplicate lines (which occur more than once)
-                     , repeated :: Bool
--- ^ display only duplicate lines, once for each group
-                     , skipFields :: Int
+                       skipFields :: Int
 -- ^ skips first skipFields number of non-space strings
                      , skipChar :: Int
 -- ^ skips first skipChar number of characters (after skipFields)
@@ -39,8 +62,8 @@ data UniqOptions = UniqOptions {
 -- If Nothing, takes the entire string
                      , ignoreCase :: Bool
 -- ^ ignore case while comparison
-                     , unique :: Bool
--- ^ print only unique lines (which occur exactly once)
+                     , output :: Output
+-- ^ whether the output stream should be of unique, repeated or duplicate strings
                   }
 
 -- |
@@ -50,7 +73,7 @@ data UniqOptions = UniqOptions {
 {-# INLINE defaultUniqOptions #-}
 
 defaultUniqOptions :: UniqOptions
-defaultUniqOptions = UniqOptions True False False 0 0 Nothing False True
+defaultUniqOptions = UniqOptions 0 0 Nothing False All
 
 
 -------------------------------------------------------------------------------
@@ -144,101 +167,42 @@ compareUsingOptions opt = compareXYZ (ignoreCase opt) (skipFields opt) (skipChar
 -- is the count of occurrences of the string
 --
 -- @since 0.1.0.0
-getRepetition :: (IsStream t, Monad m) => (String -> String -> Bool) -> t m String -> t m (Int, String)
+getRepetition :: (IsStream t, Monad m) => (String -> String -> Bool) -> t m String -> t m UniqResult
 getRepetition comparator = S.groupsBy comparator
-                              (FL.mkPureId (\(i, a) s -> if a == ""
-                                                         then (i + 1, s)
-                                                         else (i + 1, a)) (0, ""))
+                              (FL.mkPureId (\(Count i a) s ->
+                                  if a == ""
+                                  then Count (i + 1) s
+                                  else Count (i + 1) a) (Count 0 ""))
 
 
 -- |
--- Processes the input stream from the beginning and
--- creates a @String@ stream as output,
--- inserting a string into the stream
--- once if its occurrence is exactly 1
---
--- @since 0.1.0.0
-onlyUnique :: (IsStream t, Monad m) => (String -> String -> Bool) -> t m String -> t m String
-onlyUnique comparator strm = S.map snd
-   $ S.filter (\(i, _) -> i == 1)
-   $ getRepetition comparator strm
-
-
--- |
--- Similar to @onlyUnique@ but inserts the string only
--- when the number of its occurrences is strictly greater than 1.
--- Inserts the string into the stream
--- equal to the number of times it occurs
---
--- @since 0.1.0.0
-onlyDuplicate :: (IsStream t, Monad m) => (String -> String -> Bool) -> t m String -> t m String
-onlyDuplicate comparator = S.concatMap (\(i, x) -> if i > 1
-                                                   then S.replicate i x
-                                                   else S.nil) . getRepetition comparator
-
-
--- |
--- Similar to @onlyDuplicate@ but inserts the string
--- in the output stream only once
---
--- @since 0.1.0.0
-onlyRepeated :: (IsStream t, Monad m) => (String -> String -> Bool) -> t m String -> t m String
-onlyRepeated comparator strm = S.map snd
-   $ S.filter (\(i, _) -> i > 1)
-   $ getRepetition comparator strm
-
-
-
--- |
--- Exactly one of @unique@, @duplicate@ and @repeated@ should be True
--- as the output stream can contain unique, duplicate (multiple repetitions)
--- or repeated (once for multiple repetitions) strings\/@(Int, String)@
--- tuples at a time
---
--- @since 0.1.0.0
-validateOptions :: UniqOptions -> Bool
-validateOptions opt =
-    if u == True && not (d || r)
-    then True
-    else if d == True && not (r || u)
-    then True
-    else if r == True && not (u || d)
-    then True
-    else False
-
-    where
-
-    u = unique opt
-    d = duplicate opt
-    r = repeated opt
-
-
--- |
--- Generates a @String@ stream
+-- Generates a @UniqResult@ stream
 -- applying uniq on the input stream
--- according to the the @UniqOptions@ specified
+-- according to the the @UniqOptions@ specified.
+-- When the output is @Repeated@, the @Int@ values in
+-- @Count Int String@ are set to 1.
 --
 -- @since 0.1.0.0
-uniq :: (IsStream t, Monad m) => UniqOptions -> t m String -> t m String
-uniq opt strm = if validateOptions opt == False
-                then S.nil
-                else if (unique opt)
-                then onlyUnique (compareUsingOptions opt) strm
-                else if (duplicate opt)
-                then onlyDuplicate (compareUsingOptions opt) strm
-                else onlyRepeated (compareUsingOptions opt) strm
+uniq :: (IsStream t, Monad m) => UniqOptions -> t m String -> t m UniqResult
+uniq opt strm =
+    let
+        eq n (Count i _) = i == n
+        ge n (Count i _) = i > n
+        extract predicate = S.filter predicate
+            $ getRepetition (compareUsingOptions opt) strm
+    in
+        case (output opt) of
+            Unique -> extract (eq 1)
+            All -> extract (\_ -> True)
+            Duplicate -> extract (ge 1)
+            Repeated -> S.map (\(Count _ x) -> Count 1 x) $ extract (ge 1)
 
 
 -- |
--- Generates a @(Int, String)@ stream
--- where each tuple @(n, str)@ represents that the string @str@
--- occurred @n@ times consecutively.
--- String comparison is performed using options provided
+-- Converts a @UniqResult@ stream to a @String@ stream by
+-- For each @Count n s@ in the input stream, it
+-- concatenates the string @s n@ times in the output stream
 --
 -- @since 0.1.0.0
-uniqCount :: (IsStream t, Monad m) => UniqOptions -> t m String -> t m (Int, String)
-uniqCount opt strm = if validateOptions opt == False
-                     then S.nil
-                     else if (unique opt)
-                     then S.filter (\(i, _) -> i == 1) $ getRepetition (compareUsingOptions opt) strm
-                     else S.filter (\(i, _) -> i >= 1) $ getRepetition (compareUsingOptions opt) strm
+uniqResultToString :: (IsStream t, Monad m) => t m UniqResult -> t m String
+uniqResultToString = S.concatMap (\(Count i x) -> S.replicate i x)
