@@ -45,8 +45,7 @@ splitOnNewLine strm = S.splitOnSuffix (== '\n') FL.toList strm
 
 opt :: UniqOptions
 opt = defaultUniqOptions { skipFields = 12
-                         , duplicate = True
-                         , unique = False }
+                         , skipChar = 10 }
 
 main :: IO ()
 main = do
@@ -56,10 +55,7 @@ main = do
          defaultMain [
             bgroup "uniq" [
                bench "getRepetition" $ nfAppIO (\strm -> S.drain $ getRepetition comp strm) (splitOnNewLine $ charStrm src),
-               bench "onlyUnique" $ nfAppIO (\strm -> S.drain $ onlyUnique comp strm) (splitOnNewLine $ charStrm src),
-               bench "onlyDuplicate" $ nfAppIO (\strm -> S.drain $ onlyDuplicate comp strm) (splitOnNewLine $ charStrm src),
-               bench "onlyRepeated" $ nfAppIO (\strm -> S.drain $ onlyRepeated comp strm) (splitOnNewLine $ charStrm src),
                bench "uniq" $ nfAppIO (\strm -> S.drain $ uniq opt strm) (splitOnNewLine $ charStrm src),
-               bench "uniqCount" $ nfAppIO (\strm -> S.drain $ uniqCount opt strm) (splitOnNewLine $ charStrm src)
+               bench "uniqResultToString" $ nfAppIO (\strm -> S.drain $ uniqResultToString $ uniq opt strm) (splitOnNewLine $ charStrm src)
             ]
           ]
