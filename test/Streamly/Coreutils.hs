@@ -21,18 +21,32 @@ opt = defaultUniqOptions { skipFields = 1
                          , ignoreCase = True
                          }
 
-charStrm :: (IsStream t, Monad m, MonadCatch m, MonadIO m) => FilePath -> t m Char
+charStrm
+    :: (IsStream t, Monad m, MonadCatch m, MonadIO m)
+    => FilePath -> t m Char
 charStrm = Un.decodeLatin1 . File.toBytes
 
-splitOnNewLine :: (IsStream t, Monad m, MonadIO m) => t m Char -> t m String
+splitOnNewLine
+    :: (IsStream t, Monad m, MonadIO m)
+    => t m Char -> t m String
 splitOnNewLine = S.splitOnSuffix (== '\n') FL.toList
 
 
 main :: IO ()
 main = do
-         homeFP <- home
-         let srcFP = homeFP ++ "/test-uniq.txt"
-         let comp = compareUsingOptions opt
-         S.drain $ S.mapM print $ getRepetition comp $ splitOnNewLine $ charStrm srcFP
-         S.drain $ S.mapM print $ uniq opt $ splitOnNewLine $ charStrm srcFP
-         S.drain $ S.mapM print $ uniqResultToString $ uniq opt $ splitOnNewLine $ charStrm srcFP
+    homeFP <- home
+    let srcFP = homeFP ++ "/test-uniq.txt"
+    let comp = compareUsingOptions opt
+    S.drain $ S.mapM print
+        $ getRepetition comp
+        $ splitOnNewLine
+        $ charStrm srcFP
+    S.drain $ S.mapM print
+        $ uniq opt
+        $ splitOnNewLine
+        $ charStrm srcFP
+    S.drain $ S.mapM print
+        $ uniqResultToString
+        $ uniq opt
+        $ splitOnNewLine
+        $ charStrm srcFP
