@@ -46,13 +46,12 @@ common test-options
 
 
 library
-  import: lib-options
+  import: compile-options
   build-depends:
       streamly
     , base              >= 4.8   && < 5
   hs-source-dirs:      src
-  exposed-modules:
-                       Streamly.Coreutils.Uniq
+  exposed-modules:     Streamly.Coreutils.Uniq
                      , Streamly.Coreutils
 
   default-language:    Haskell2010
