@@ -35,16 +35,6 @@ common compile-options
     default-language: Haskell2010
     ghc-options:      -Wall
 
-common lib-options
-    import: compile-options
-
-common exe-options
-    import: compile-options
-
-common test-options
-    import: compile-options
-
-
 library
   import: compile-options
   build-depends:
@@ -89,20 +79,5 @@ test-suite coreutils-test
     , streamly
     , base              >= 4.8   && < 5
     , exceptions        >= 0.8   && < 0.11
-    , directory         >= 1.2.2 && < 1.4
-  default-language: Haskell2010
-
--------------------------------------------------------------------------------
--- Executables
--------------------------------------------------------------------------------
-
-executable test-streaming
-  import: exe-options
-  main-is: test-streaming.hs
-  hs-source-dirs:  test/Streamly
-  build-depends:
-      streamly-coreutils
-    , streamly
-    , base              >= 4.8   && < 5
     , directory         >= 1.2.2 && < 1.4
   default-language: Haskell2010
