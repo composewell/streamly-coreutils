@@ -75,17 +75,15 @@ benchmark coreutils-bench
     , random            >= 1.0.0 && < 2
   default-language: Haskell2010
 
-
 -------------------------------------------------------------------------------
 -- Test suites
 -------------------------------------------------------------------------------
 
-test-suite test
-  import: test-options
+test-suite coreutils-test
+  import: compile-options
   type: exitcode-stdio-1.0
-  main-is: Coreutils.hs
-  js-sources: jsbits/clock.js
-  hs-source-dirs: test/Streamly
+  main-is: Main.hs
+  hs-source-dirs: test
   build-depends:
       streamly-coreutils
     , streamly
