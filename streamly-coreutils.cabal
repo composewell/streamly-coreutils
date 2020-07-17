@@ -61,9 +61,10 @@ library
 -------------------------------------------------------------------------------
 
 benchmark coreutils-bench
+  import: compile-options
   type: exitcode-stdio-1.0
-  hs-source-dirs: Benchmark/
-  main-is: Coreutils.hs
+  hs-source-dirs: benchmark
+  main-is: Main.hs
   build-depends:
       streamly-coreutils
     , streamly
@@ -71,8 +72,7 @@ benchmark coreutils-bench
     , gauge             >= 0.2.4 && < 0.3
     , exceptions        >= 0.8   && < 0.11
     , directory         >= 1.2.2 && < 1.4
-
-
+    , random            >= 1.0.0 && < 2
   default-language: Haskell2010
 
 
