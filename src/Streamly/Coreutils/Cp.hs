@@ -1,11 +1,10 @@
-{-# LANGUAGE BlockArguments #-}
 module Streamly.Coreutils.Cp
     ( CpOptions (..)
     , defaultCpOptions
     , cpFileWithRename
     , cpFiles
-    , cpDir
     , traverseDir
+    , cpDir
    )
 where
 
@@ -25,7 +24,9 @@ import System.Directory (listDirectory, doesFileExist, createDirectoryIfMissing)
 -- Record for options used with cp
 -------------------------------------------------------------------------------
 
--- |
+-- | Data type to represent flags\/options in GNU @cp@
+--
+-- @since 0.1.0.0
 data CpOptions = CpOptions
     { verbose :: Bool
     -- ^ Prints the source and destination files being copied
@@ -40,6 +41,8 @@ data CpOptions = CpOptions
 
 -- | Default options for @cp@ are @verbose@ and @overwriteExisting@ to
 -- @True@ and @force@ set to @False@
+--
+-- @since 0.1.0.0
 {-# INLINE defaultCpOptions #-}
 defaultCpOptions :: CpOptions
 defaultCpOptions = CpOptions True False True
@@ -56,6 +59,8 @@ defaultCpOptions = CpOptions True False True
 -- @False@ is returned in cases where a file by the same name
 -- exists in the destination path and @overwriteExisting@ is set to
 -- @False@ or if the source file does not exist.
+--
+-- @since 0.1.0.0
 {-# INLINE copy #-}
 copy
     :: CpOptions
@@ -85,6 +90,8 @@ copy opt src dst = do
 
 -- | Append two paths - first one should be a directory
 -- Assumes second path is relative and without a leading '/'
+--
+-- @since 0.1.0.0
 {-# INLINE append #-}
 append
     :: FilePath
@@ -103,6 +110,8 @@ append dir file =
 
 
 -- | Removes a trailing slash from a file path
+--
+-- @since 0.1.0.0
 {-# INLINE removeTrailingSlash #-}
 removeTrailingSlash
     :: FilePath
@@ -122,6 +131,8 @@ removeTrailingSlash path =
 -- relative to the argument directory.
 -- @Left path@ represents that @path@ is a directory while @Right path@
 -- represents that it is a file.
+--
+-- @since 0.1.0.0
 traverseDir
     :: IsStream t
     => FilePath
@@ -153,6 +164,8 @@ traverseDir baseDir = do
 -- | Recursively copies the contents of the source directory
 -- to the destination directory.
 -- Arguments are of type @FilePath@.
+--
+-- @since 0.1.0.0
 copyDirToDir
     :: IsStream t
     => CpOptions
@@ -162,40 +175,35 @@ copyDirToDir
 copyDirToDir opt src dest = do
     if force opt == True
     then
-      S.mapM handleForce $ traverseDir src
+        S.mapM handleForce
+        $ traverseDir src
     else
-      S.mapM (\_ -> return ()) $ S.takeWhileM handleNonForce $ traverseDir src
-    -- Create destination directory if it does not exist
-    --S.mapM createDir $ S.filter isDir $ traverseDir src
-    --S.mapM  S.findIndices isDir $ traverseDir src
-    --S.mapM createDir $ S.filter isFile $ traverseDir src
+        S.mapM (\_ -> return ())
+        $ S.takeWhileM handleNonForce
+        $ traverseDir src
+
     where
-
-    createDir :: Either FilePath FilePath -> IO ()
-    createDir (Left dir) = createDirectoryIfMissing True $ append dest dir
-    createDir _ = return ()
-
-    isDir :: Either FilePath FilePath -> Bool
-    isDir (Left _) = True
-    isDir _ = False
-
-    isFile :: Either FilePath FilePath -> Bool
-    isFile (Right _) = True
-    isFile _ = False
 
     handleForce :: Either FilePath FilePath -> IO ()
     handleForce (Left dir) = createDirectoryIfMissing True $ append dest dir
-    handleForce (Right file) = do
-        copy opt (append src file) (append dest file)
-        return ()
+    handleForce (Right file) =
+        ( copy opt (append src file) (append dest file)
+        >> return ()
+        )
 
     handleNonForce :: Either FilePath FilePath -> IO Bool
-    handleNonForce (Left _) = return True
+    handleNonForce (Left dir) =
+        ( createDirectoryIfMissing True (append dest dir)
+        >> return True
+        )
     handleNonForce (Right file) =
         copy opt (append src file) (append dest file)
 
 
--- Copies the source file to the destination path with a possible rename
+-- | Copies the source file to the
+-- destination path with a possible rename.
+--
+-- @since 0.1.0.0
 cpFileWithRename
     :: CpOptions
     -> SomeBase File
@@ -211,6 +219,8 @@ cpFileWithRename opt src dst = do
 -- in the destination directory.
 -- Returns @True@ in the @IO@ monad if copying was successful,
 -- @False@ otherwise.
+--
+-- @since 0.1.0.0
 cpFile
     :: CpOptions
     -> SomeBase File
@@ -238,6 +248,8 @@ cpFile option src dest = do
 -- The stream can be drained with the appropriate combinator
 -- to achieve concurrency.
 -- Fails if the destination directory does not exist.
+--
+-- @since 0.1.0.0
 cpFiles
     :: IsStream t
     => CpOptions
@@ -255,6 +267,8 @@ cpFiles opt strm dir = do
 
 -- | Recursively copies the source directory's contents
 -- to the destination directory
+--
+-- @since 0.1.0.0
 cpDir
     :: IsStream t
     => CpOptions

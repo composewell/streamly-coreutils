@@ -1,26 +1,27 @@
-module Streamly.Coreutils.Common (
-      someFileToFP
+module Streamly.Coreutils.Common
+    ( someFileToFP
     , someDirToFP
-   )
+    )
 where
 
 import Path
 import Path.Posix
-      ( Path
-      , File
-      , Dir
-      , Abs
-      , Rel
-      , SomeBase (..)
-      , parseAbsFile
-      , parseRelFile
-      , parseSomeFile
-      , fromRelFile
-      , fromAbsFile
-      , fromRelDir
-      , fromAbsDir
-      , parseAbsDir
-      , parseRelDir)
+    ( Path
+    , File
+    , Dir
+    , Abs
+    , Rel
+    , SomeBase (..)
+    , parseAbsFile
+    , parseRelFile
+    , parseSomeFile
+    , fromRelFile
+    , fromAbsFile
+    , fromRelDir
+    , fromAbsDir
+    , parseAbsDir
+    , parseRelDir
+    )
 
 
 -------------------------------------------------------------------------------
