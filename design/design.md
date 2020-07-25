@@ -1,5 +1,85 @@
 # Design for Streamly Coreutils package
 
+* tsort
+  ```
+  (a, b) and a -> b mean that b depends on a.
+
+  tsort
+      :: (IsStream t, Monad m, Eq a)
+      => t m (a, a)             -- ^ stream of edges
+      -> Either (t m a) (t m a) -- ^ If tsort exists, else 1 cycle
+      -- ^ @Left strm@ is a cycle, @Right strm@ is tsort if exists
+
+
+  vertices
+      :: (IsStream t, Monad m)
+      => t m (a, a)
+      -> t m (Int, a)     -- ^ map each vertex to a unique integer
+
+  -- need to map the vertices to integers
+  -- need to demap integers to vertices
+
+
+  -- particularly inefficient
+  buildAdjList
+      :: t m (a, a)       -- ^ stream of edges
+      -> t m (Int, a)     -- ^ map
+      -> t m (t m Int)    -- ^ stream of streams
+      -- wanted to use Array [Int] but it will involve lists
+
+
+  -- | runs dfs from the starting node given
+  -- updates visited, parent and stack
+  -- (need parent info to detect cycle if tsort does not exist)
+  dfs
+      :: (IsStream t, Monad m)
+      :: Int              -- ^ root node to begin dfs from
+      -> t m (t m Int)    -- ^ adj list
+      -> t m Bool         -- ^ visited
+      -> t m Int          -- ^ parent
+      -> t m Int          -- ^ the stack
+      -> ()
+
+
+  -- | for each node, if it is unvisited, calls @dfs@
+  driverDfs
+      :: (IsStream t, Monad m, Eq a)
+      :: t m (t m Int)    -- ^ adj list
+      -> t m Int          -- ^ visited
+      -> t m Int          -- ^ parent
+      -> t m Int          -- ^ the stack
+      -> t m Int          -- ^ the final tsort
+
+
+  -- | if the final tsort has a back edge, then no tsort exists
+  cycleCheck
+      :: (IsStream t, Monad m, Eq a)
+      :: t m Int                    -- ^ the final tsort
+      -> t m (t m Int)              -- ^ adj list
+      -> t m Int                    -- ^ parent info
+      -> Either (t m Int) (t m Int)
+      -- ^ @Left strm@ is a cycle, @Right strm@ is original tsort
+
+
+  ```
+
+  ```
+      data CpOptions = CpOptions {
+         attributesOnly :: Bool,
+         interactive :: Bool,
+         parents :: Bool,
+         symbolicLink :: Bool,
+         noTargetDir :: Bool,
+         verbose :: Bool,
+         noTargetDir :: Bool
+         ...
+      }
+
+      cpFile :: CpOptions -> SomeBase File -> SomeBase Dir -> SomeBase File -> IO ()
+      -- File.fromChunks, File.toChunksWithBufferOf
+
+  ```
+
    ```
     import qualified S as S
     import qualified Streamly.Array as A
