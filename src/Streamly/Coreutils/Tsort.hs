@@ -1,20 +1,22 @@
 module Streamly.Coreutils.Tsort
     ( vertices
-    --, dfs
+    , buildAdjList
+    , dfs
     ) where
 
 import qualified Streamly.Prelude as S
-import qualified Streamly.Internal.Data.Fold as FL
+--import qualified Streamly.Internal.Data.Fold as FL
 
-import Data.Char (isSpace, toLower)
+--import Data.Char (isSpace, toLower)
+import System.IO.Unsafe (unsafePerformIO)
 
 import Streamly
 
 vertices
-    :: (IsStream t, Monad m, Eq a)
-    => t m (a, a)
+    :: Eq a
+    => SerialT IO (a, a)
     -- ^ Edges
-    -> t m (Int, a)
+    -> SerialT IO (Int, a)
     -- ^ Map each vertex to a unique integer
 vertices strm =
     S.indexed
@@ -22,32 +24,79 @@ vertices strm =
     $ S.concatMap (\(x, y) -> S.fromList [x, y]) strm
 
 
---buildAdjList
---    :: (IsStream t, Monad m)
---    => t m (a, a)
---    -- ^ stream of edges
---    -> t m (Int, a)
---    -- ^ Map from @a@ to @Int@
---    -> t m (t m Int)
---    -- ^ initial adj list
---    -> t m (t m Int)
---    -- ^ adj list now
+buildAdjList
+    :: Eq a
+    => SerialT IO (a, a)
+    -- ^ stream of edges
+    -> SerialT IO (Int, a)
+    -- ^ Map from @a@ to @Int@
+    -> SerialT IO (SerialT IO Int)
+    -- ^ initial adj list
+    -> SerialT IO (SerialT IO Int)
+    -- ^ adj list now
+buildAdjList edges vtx adj = do
+    let maybeStrm = unsafePerformIO $ S.last $ S.scanl' (insertPair vtx) adj edges
+    case maybeStrm of
+         Just strm -> strm
+         Nothing -> S.nil
+
+    where
+
+    insertPair
+        :: Eq a
+        => SerialT IO (Int, a)
+        -> SerialT IO (SerialT IO Int)
+        -> (a, a)
+        -> SerialT IO (SerialT IO Int)
+    insertPair vtxMap adjl (xa, xb) = do
+        let indexA = unsafePerformIO $ getInt vtxMap xa
+        let indexB = unsafePerformIO $ getInt vtxMap xb
+        let maybeStrm = unsafePerformIO $ (S.!!) adjl indexA
+        case maybeStrm of
+            Just strm -> modifyNeighbours indexA (S.cons indexB $ strm) adjl
+            Nothing -> modifyNeighbours indexA (S.yield indexB) adjl
 
 
+    getInt
+        :: Eq a
+        => SerialT IO (Int, a)
+        -> a
+        -> IO Int
+    getInt vtxMap ele = do
+        maybeIndex <- S.findIndex (\(_, v) -> v == ele) vtxMap
+        case maybeIndex of
+            Just idx -> return idx
+            Nothing -> return (-1) -- won't ever equal any other index in a stream
+
+    modifyNeighbours
+       :: Int
+       -> SerialT IO Int
+       -> SerialT IO (SerialT IO Int)
+       -> SerialT IO (SerialT IO Int)
+    modifyNeighbours idx newNbd adjStrm =
+        S.map (\(_, v) -> v)
+        $ S.map (\(i, v) -> do
+                   if i == idx
+                   then (i, newNbd)
+                   else (i, v))
+        $ S.indexed adjStrm
+
+
+-- | dfs
 dfs
-    :: (IsStream t, Monad m)
+    :: IsStream t
     => Int
     -- ^ root node to start dfs
-    -> SerialT m (SerialT m Int)
+    -> SerialT IO (SerialT IO Int)
     -- ^ adj list
-    -> SerialT m Bool
+    -> SerialT IO Bool
     -- ^ visited
-    -> t m Int
+    -> t IO Int
     -- ^ parent
-    -> t m Int
+    -> t IO Int
     -- ^ the stack
-    -> m (SerialT m Bool, t m Int, t m Int)
-    -- ^ (parent, stack)
+    -> IO (SerialT IO Bool, t IO Int, t IO Int)
+    -- ^ (visited, parent, stack)
 dfs root adj vis par stck = do
     strm <- (S.!!) adj root
     case strm of
@@ -55,11 +104,12 @@ dfs root adj vis par stck = do
             maybeTuple <- S.last
                $ S.scanlM'
                (\(visi, parent, stack) v -> dfs v adj
-                  (markVisited visi v) (setParent parent v root) (S.cons v stck))
+                  (markVisited visi v) (setParent parent v root) (S.cons v stack))
                (vis, par, stck)
                $ S.filterM (unVisited vis) nbd
             case maybeTuple of
                    Just ans -> return ans
+                   _ -> return (S.nil, S.nil, S.nil)
         Nothing -> return (vis, par, stck)
 
     where
@@ -69,8 +119,8 @@ dfs root adj vis par stck = do
         => SerialT m Bool
         -> Int
         -> m Bool
-    unVisited vis n = do
-        ele <- (S.!!) vis n
+    unVisited visStream n = do
+        ele <- (S.!!) visStream n
         case ele of
             Just v -> return $ not v
             Nothing -> return False
@@ -91,7 +141,7 @@ dfs root adj vis par stck = do
         -> Int
         -> Int
         -> t m Int
-    setParent strm u par = do
+    setParent strm u parent = do
         S.map (\(_, v) -> v)
-        $ S.map (\(i, v) -> if i == u then (i, par) else (i, v))
+        $ S.map (\(i, v) -> if i == u then (i, parent) else (i, v))
         $ S.indexed strm
