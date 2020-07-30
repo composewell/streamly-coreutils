@@ -48,7 +48,6 @@ library
   exposed-modules:
                        Streamly.Coreutils.Cp
                      , Streamly.Coreutils.Uniq
-                     , Streamly.Coreutils.Common
                      , Streamly.Coreutils
 
   default-language:    Haskell2010

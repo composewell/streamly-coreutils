@@ -54,8 +54,7 @@ defaultCpOptions = CpOptions True False True
 -------------------------------------------------------------------------------
 
 
--- |
--- Prints paths of source, destination files when @verbose@ is @True@.
+-- | Prints paths of source, destination files when @verbose@ is @True@.
 -- Returns @True@ if copying operation was successful.
 -- @False@ is returned in cases where a file by the same name
 -- exists in the destination path and @overwriteExisting@ is set to
@@ -92,7 +91,7 @@ copy opt src dst = do
 
 
 -- | Lists the contents (both files and directories) of the directory
--- relative to the argument directory.
+-- as absolute paths.
 -- @Left path@ represents that @path@ is a directory while @Right path@
 -- represents that it is a file.
 --
@@ -129,7 +128,6 @@ traverseDir baseDir = do
 
 -- | Recursively copies the contents of the source directory
 -- to the destination directory.
--- Arguments are of type @FilePath@.
 --
 -- @since 0.1.0.0
 copyDirToDir
