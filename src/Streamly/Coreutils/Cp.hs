@@ -1,22 +1,23 @@
 module Streamly.Coreutils.Cp
     ( CpOptions (..)
     , defaultCpOptions
-    , cpFileWithRename
-    , cpFiles
+    , copy
     , traverseDir
-    , cpDir
+    , cpFile
+    , cpFiles
+    , cpDirSerial
+    , cpDirAsync
+    , cpDirParallel
    )
 where
 
 import Path
 import Streamly
-import Streamly.Coreutils.Common
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Internal.Prelude as IP
 import qualified Streamly.Internal.FileSystem.File as File
 
-import System.Info (os)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Directory (listDirectory, doesFileExist, createDirectoryIfMissing)
 
@@ -53,7 +54,7 @@ defaultCpOptions = CpOptions True False True
 -------------------------------------------------------------------------------
 
 
--- | Basic file copying with @FilePath@ as argument types.
+-- |
 -- Prints paths of source, destination files when @verbose@ is @True@.
 -- Returns @True@ if copying operation was successful.
 -- @False@ is returned in cases where a file by the same name
@@ -64,67 +65,30 @@ defaultCpOptions = CpOptions True False True
 {-# INLINE copy #-}
 copy
     :: CpOptions
-    -> FilePath
-    -> FilePath
+    -> Path Abs File
+    -> Path Abs File
     -> IO Bool
 copy opt src dst = do
-    existDst <- doesFileExist dst
-    existSrc <- doesFileExist src
+    let srcFp = fromAbsFile src
+    let dstFp = fromAbsFile dst
+    existDst <- doesFileExist dstFp
+    existSrc <- doesFileExist srcFp
     if not existSrc
     then do
-        putStrLn $ "Source file " ++ src ++ " does not exist"
+        putStrLn $ "Source file " ++ srcFp ++ " does not exist"
         return False
     else if existDst && not (overwriteExisting opt)
     then do
-        putStrLn $ "overwriteExisting : False " ++ dst ++ " already exists"
+        putStrLn $ "overwriteExisting : False " ++ dstFp ++ " already exists"
         return False
     else if verbose opt == True
     then do
-        File.fromChunks dst $ File.toChunksWithBufferOf (256*1024) src
-        putStrLn $ src ++ " -> " ++ dst
+        File.fromChunks dstFp $ File.toChunksWithBufferOf (256*1024) srcFp
+        putStrLn $ srcFp ++ " -> " ++ dstFp
         return True
     else do
-        File.fromChunks dst $ File.toChunksWithBufferOf (256*1024) src
+        File.fromChunks dstFp $ File.toChunksWithBufferOf (256*1024) srcFp
         return True
-
-
--- | Append two paths - first one should be a directory
--- Assumes second path is relative and without a leading '/'
---
--- @since 0.1.0.0
-{-# INLINE append #-}
-append
-    :: FilePath
-    -> FilePath
-    -> FilePath
-append dir file =
-    let end = last dir
-        osName = os
-        pathSep = if osName == "windows" then '\\' else '/'
-     in
-         if dir == ""
-         then file
-         else if end == pathSep
-         then dir ++ file
-         else dir ++ [pathSep] ++ file
-
-
--- | Removes a trailing slash from a file path
---
--- @since 0.1.0.0
-{-# INLINE removeTrailingSlash #-}
-removeTrailingSlash
-    :: FilePath
-    -> FilePath
-removeTrailingSlash "" = ""
-removeTrailingSlash path =
-    let end = last path
-        osName = os
-        pathSep = if osName == "windows" then '\\' else '/'
-     in
-         if end == pathSep
-         then init path
-         else path
 
 
 -- | Lists the contents (both files and directories) of the directory
@@ -135,29 +99,31 @@ removeTrailingSlash path =
 -- @since 0.1.0.0
 traverseDir
     :: IsStream t
-    => FilePath
-    -> t IO (Either FilePath FilePath)
+    => Path Abs Dir
+    -> t IO (Either (Path Abs Dir) (Path Abs File))
 traverseDir baseDir = do
-    IP.concatMapTreeWith ahead listContents $ S.yield $ Left ""
+    IP.concatMapTreeWith ahead listContents $ S.yield $ Left baseDir
 
     where
 
-    listContents :: IsStream t => FilePath -> t IO (Either FilePath FilePath)
+    listContents :: IsStream t => Path Abs Dir -> t IO (Either (Path Abs Dir) (Path Abs File))
     listContents dir = do
-        S.fromListM $ map (identify dir) $ contents dir
+        S.fromListM $ map (identify dir) $ contents $ fromAbsDir dir
 
-    identify :: FilePath -> FilePath -> IO (Either FilePath FilePath)
+    identify :: Path Abs Dir -> FilePath -> IO (Either (Path Abs Dir) (Path Abs File))
     identify dir path = do
-       let actualPath = append baseDir $ append dir path
-       isFile <- doesFileExist actualPath
+       asFile <- parseRelFile path
+       let filePath = dir </> asFile
+       isFile <- doesFileExist $ fromAbsFile filePath
        if isFile == True
-       then
-           return $ Right $ append dir path     -- RELATIVE File
-       else
-           return $ Left $ append dir path      -- RELATIVE Dir
+       then do
+           return $ Right filePath
+       else do
+           asDir <- parseRelDir path
+           return $ Left $ dir </> asDir
 
     contents :: FilePath -> [FilePath]
-    contents dir = unsafePerformIO $ listDirectory $ append baseDir dir
+    contents dir = unsafePerformIO $ listDirectory dir
 
 
 
@@ -169,8 +135,8 @@ traverseDir baseDir = do
 copyDirToDir
     :: IsStream t
     => CpOptions
-    -> FilePath
-    -> FilePath
+    -> Path Abs Dir
+    -> Path Abs Dir
     -> t IO ()
 copyDirToDir opt src dest = do
     if force opt == True
@@ -184,35 +150,39 @@ copyDirToDir opt src dest = do
 
     where
 
-    handleForce :: Either FilePath FilePath -> IO ()
-    handleForce (Left dir) = createDirectoryIfMissing True $ append dest dir
-    handleForce (Right file) =
-        ( copy opt (append src file) (append dest file)
-        >> return ()
-        )
-
-    handleNonForce :: Either FilePath FilePath -> IO Bool
-    handleNonForce (Left dir) =
-        ( createDirectoryIfMissing True (append dest dir)
-        >> return True
-        )
-    handleNonForce (Right file) =
-        copy opt (append src file) (append dest file)
+    handleForce :: Either (Path Abs Dir) (Path Abs File) -> IO ()
+    handleForce (Left dir) = do
+        if dir == src
+        then createDirectoryIfMissing True $ fromAbsDir dest
+        else do
+            actualPath <- stripAndPrepend dir src dest
+            createDirectoryIfMissing True $ fromAbsDir actualPath
+    handleForce (Right file) = do
+        actualPath <- stripAndPrepend file src dest
+        _ <- copy opt file actualPath
+        return ()
 
 
--- | Copies the source file to the
--- destination path with a possible rename.
---
--- @since 0.1.0.0
-cpFileWithRename
-    :: CpOptions
-    -> SomeBase File
-    -> SomeBase File
-    -> IO Bool
-cpFileWithRename opt src dst = do
-    let srcFp = removeTrailingSlash $ someFileToFP src
-    let dstFp = removeTrailingSlash $ someFileToFP dst
-    copy opt srcFp dstFp
+    handleNonForce :: Either (Path Abs Dir) (Path Abs File) -> IO Bool
+    handleNonForce (Left dir) = do
+        if dir == src
+        then do
+            createDirectoryIfMissing True $ fromAbsDir dest
+            return True
+        else do
+            actualPath <- stripAndPrepend dir src dest
+            createDirectoryIfMissing True $ fromAbsDir actualPath
+            return True
+    handleNonForce (Right file) = do
+        actualPath <- stripAndPrepend file src dest
+        copy opt file actualPath
+
+    stripAndPrepend :: Path Abs t -> Path Abs Dir -> Path Abs Dir  -> IO (Path Abs t)
+    stripAndPrepend path strip pref = do
+        suffix <- stripProperPrefix strip path
+        return $ pref </> suffix
+
+
 
 
 -- | Copies the source file preserving the source file name
@@ -223,25 +193,11 @@ cpFileWithRename opt src dst = do
 -- @since 0.1.0.0
 cpFile
     :: CpOptions
-    -> SomeBase File
-    -> SomeBase Dir
+    -> Path Abs File
+    -> Path Abs Dir
     -> IO Bool
-cpFile option src dest = do
-    copy option srcFp destFp
-
-    where
-
-    srcFp = removeTrailingSlash $ someFileToFP src
-    dirFp = someDirToFP dest
-    destFp = append dirFp fileName
-    fileName = extractFileName src
-
-    -- | To extract the file part of a @SomeBase File@ path
-    extractFileName :: SomeBase File -> FilePath
-    extractFileName srcFile =
-        case srcFile of
-            Abs fpath -> fromRelFile $ filename fpath
-            Rel fpath -> fromRelFile $ filename fpath
+cpFile option src dest =
+    copy option src $ dest </> filename src
 
 
 -- | Copies a stream of files to the destination directory.
@@ -253,9 +209,9 @@ cpFile option src dest = do
 cpFiles
     :: IsStream t
     => CpOptions
-    -> t IO (SomeBase File)
-    -> SomeBase Dir
-    -> t IO (SomeBase File)
+    -> t IO (Path Abs File)
+    -> Path Abs Dir
+    -> t IO (Path Abs File)
     -- ^ Stream of files for which copying was successful
 cpFiles opt strm dir = do
     if force opt == True
@@ -265,17 +221,40 @@ cpFiles opt strm dir = do
         S.takeWhileM (\f -> cpFile opt f dir) strm
 
 
--- | Recursively copies the source directory's contents
+-- | Recursively and @serially@ copies the source directory's contents
 -- to the destination directory
 --
 -- @since 0.1.0.0
-cpDir
-    :: IsStream t
-    => CpOptions
-    -> SomeBase Dir
-    -> SomeBase Dir
-    -> t IO ()
-cpDir opt src dst = do
-    let srcFp = someDirToFP src
-    let dstFp = someDirToFP dst
-    copyDirToDir opt srcFp dstFp
+cpDirSerial
+    :: CpOptions
+    -> Path Abs Dir
+    -> Path Abs Dir
+    -> IO ()
+cpDirSerial opt src dst = do
+    S.drain $ serially $ copyDirToDir opt src dst
+
+
+-- | Recursively and @asyncly@ copies the source directory's contents
+-- to the destination directory
+--
+-- @since 0.1.0.0
+cpDirAsync
+    :: CpOptions
+    -> Path Abs Dir
+    -> Path Abs Dir
+    -> IO ()
+cpDirAsync opt src dst = do
+    S.drain $ asyncly $ copyDirToDir opt src dst
+
+
+-- | Recursively and @parallely@ copies the source directory's contents
+-- to the destination directory
+--
+-- @since 0.1.0.0
+cpDirParallel
+    :: CpOptions
+    -> Path Abs Dir
+    -> Path Abs Dir
+    -> IO ()
+cpDirParallel opt src dst = do
+    S.drain $ parallely $ copyDirToDir opt src dst
