@@ -38,8 +38,8 @@ common compile-options
 library
   import: compile-options
   build-depends:
-      streamly
-    , base              >= 4.8   && < 5
+      base >= 4.8 && < 5
+    , streamly >= 0.8.0 && < 0.9
   hs-source-dirs:      src
   exposed-modules:     Streamly.Coreutils.Uniq
                      , Streamly.Coreutils

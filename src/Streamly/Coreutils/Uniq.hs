@@ -9,12 +9,11 @@ module Streamly.Coreutils.Uniq
     , uniqResultToString
     ) where
 
-import qualified Streamly.Prelude as S
-import qualified Streamly.Internal.Data.Fold as FL
-
 import Data.Char (isSpace, toLower)
+import Streamly.Prelude (IsStream)
 
-import Streamly
+import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Prelude as Stream
 
 -- | Data type to capture the output of the stream - the stream should either be
 -- composed of unique, repeated, duplicate or all of the strings
@@ -170,9 +169,9 @@ getRepetition ::
     -> t m String
     -> t m UniqResult
 getRepetition comparator =
-    S.groupsBy
+    Stream.groupsBy
         comparator
-        (FL.mkPureId
+        (Fold.foldl'
              (\(UniqResult i a) s ->
                   if i == 0
                   then UniqResult 1 s
@@ -191,12 +190,12 @@ uniq opt strm =
         Unique -> extract (eq 1)
         All -> extract (\_ -> True)
         Duplicate -> extract (ge 1)
-        Repeated -> S.map (\(UniqResult _ x) -> UniqResult 1 x) $ extract (ge 1)
+        Repeated -> Stream.map (\(UniqResult _ x) -> UniqResult 1 x) $ extract (ge 1)
   where
     eq n (UniqResult i _) = i == n
     ge n (UniqResult i _) = i > n
     extract predicate =
-        S.filter predicate $ getRepetition (compareUsingOptions opt) strm
+        Stream.filter predicate $ getRepetition (compareUsingOptions opt) strm
 
 -- | Converts a @UniqResult@ stream to a @String@ stream.  For each @UniqResult
 -- n s@ in the input stream, it concatenates the string @s n@ times in the
@@ -205,4 +204,4 @@ uniq opt strm =
 -- @since 0.1.0.0
 {-# INLINE uniqResultToString #-}
 uniqResultToString :: (IsStream t, Monad m) => t m UniqResult -> t m String
-uniqResultToString = S.concatMap (\(UniqResult i x) -> S.replicate i x)
+uniqResultToString = Stream.concatMap (\(UniqResult i x) -> Stream.replicate i x)
