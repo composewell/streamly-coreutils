@@ -64,8 +64,11 @@ module Streamly.Coreutils.FileTest
     )
 where
 
+import Control.Exception (catch, throwIO)
 import Data.Functor.Contravariant (Predicate(..))
 import Data.Time.Clock.POSIX (POSIXTime)
+import Foreign.C.Error (Errno(..), eNOENT)
+import GHC.IO.Exception (IOException(..), IOErrorType(..))
 import System.Posix.Types (Fd)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.Files as Files
@@ -90,9 +93,23 @@ FileTest (Predicate p) `pOr` FileTest (Predicate q) =
     FileTest (Predicate $ \a -> p a || q a)
 
 -- XXX Use a byte array instead of string filepath.
--- | Run a predicate on a 'FilePath'.
+--
+-- | Run a predicate on a 'FilePath'. Returns False if the path does not exist.
 test :: FilePath -> FileTest -> IO Bool
-test path (FileTest (Predicate f)) = Files.getFileStatus path >>= return . f
+test path (FileTest (Predicate f)) =
+    (Files.getFileStatus path >>= return . f) `catch` eatENOENT
+
+    where
+
+    isENOENT e =
+        case e of
+            IOError
+                { ioe_type = NoSuchThing
+                , ioe_errno = Just ioe
+                } -> Errno ioe == eNOENT
+            _ -> False
+
+    eatENOENT e = if isENOENT e then return False else throwIO e
 
 -- XXX Use Handle instead
 -- | Run a predicate on an 'Fd'.
@@ -110,10 +127,8 @@ predicate p = FileTest (Predicate p)
 -- | True if file exists.
 --
 -- Like coreutil @test -e file@
-exists :: FilePath -> IO FileTest
-exists path = do
-    r <- Files.fileExist path
-    return $ FileTest (Predicate (const r))
+exists :: FileTest
+exists = FileTest (Predicate (const True))
 
 -- | True if file has a size greater than zero.
 --
