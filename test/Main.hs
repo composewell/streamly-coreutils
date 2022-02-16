@@ -6,7 +6,7 @@ import qualified Streamly.Internal.Data.Fold as FL
 import Streamly.Coreutils.Uniq
 
 import Control.Monad.IO.Class (MonadIO)
-import Streamly.Internal.Data.Stream.StreamK.Type (IsStream)
+import Streamly.Prelude (IsStream)
 
 opt :: UniqOptions
 opt = defaultUniqOptions {skipFields = 1, skipChar = 1}

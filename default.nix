@@ -5,7 +5,7 @@
 
 {
   nixpkgs ?
-    import (builtins.fetchTarball https://github.com/NixOS/nixpkgs/archive/refs/tags/21.05.tar.gz)
+    import (builtins.fetchTarball https://github.com/NixOS/nixpkgs/archive/refs/tags/21.11.tar.gz)
         {}
 , compiler ? "default"
 , c2nix ? "" # cabal2nix CLI options
@@ -40,11 +40,15 @@ let haskellPackages =
 
                     streamly =
                       nixpkgs.haskell.lib.overrideCabal
-                        (super.callHackageDirect
-                          { pkg = "streamly";
-                            ver = "0.8.0";
-                            sha256 = "0vy2lkljizlhpbpbybmg9jcmj2g4s1aaqd2dzy5c0y0n4rgwxask";
-                          } {})
+                        #(super.callHackageDirect
+                        #  { pkg = "streamly";
+                        #    ver = "0.8.1.1";
+                        #    sha256 = "08n9cdlj2adx7jsnddswcsrrb5m2k0wh78nswgj547sws7fmazas";
+                        #  } {})
+                        (let src = fetchGit {
+                            url = "git@github.com:composewell/streamly.git";
+                            rev = "582410afda1587005f9a65473d545ad255a225e7";
+                        }; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
@@ -58,12 +62,13 @@ let haskellPackages =
                       nixpkgs.haskell.lib.overrideCabal
                         (super.callHackageDirect
                           { pkg = "streamly-process";
-                            ver = "0.1.0";
-                            sha256 = "01nxisqfmn29fbirdsx71sfjp2rdqwrf469qyjcql2d11i1bxn94";
+                            ver = "0.2.0";
+                            sha256 = "tHRalb4RD2rBYtw7Ld1HvCYA1+hQCfu+0K8btyIGuFw=";
                           } {})
                           (old:
                             { enableLibraryProfiling = false;
                               doHaddock = false;
+                              doCheck = false;
                             });
 
                 };
