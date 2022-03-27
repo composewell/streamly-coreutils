@@ -40,15 +40,15 @@ let haskellPackages =
 
                     streamly =
                       nixpkgs.haskell.lib.overrideCabal
-                        #(super.callHackageDirect
-                        #  { pkg = "streamly";
-                        #    ver = "0.8.1.1";
-                        #    sha256 = "08n9cdlj2adx7jsnddswcsrrb5m2k0wh78nswgj547sws7fmazas";
-                        #  } {})
-                        (let src = fetchGit {
-                            url = "git@github.com:composewell/streamly.git";
-                            rev = "582410afda1587005f9a65473d545ad255a225e7";
-                        }; in super.callCabal2nix "streamly" src {})
+                        (super.callHackageDirect
+                          { pkg = "streamly";
+                            ver = "0.8.2";
+                            sha256 = "sha256-CjFq9SCdbgLZa7NqOE4OtC8OaFg4vK8VmIDjGU5rGko=";
+                          } {})
+                        #(let src = fetchGit {
+                        #    url = "git@github.com:composewell/streamly.git";
+                        #    rev = "582410afda1587005f9a65473d545ad255a225e7";
+                        #}; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
@@ -62,8 +62,8 @@ let haskellPackages =
                       nixpkgs.haskell.lib.overrideCabal
                         (super.callHackageDirect
                           { pkg = "streamly-process";
-                            ver = "0.2.0";
-                            sha256 = "tHRalb4RD2rBYtw7Ld1HvCYA1+hQCfu+0K8btyIGuFw=";
+                            ver = "0.2.0.1";
+                            sha256 = "sha256-no/U5aWkZJXaA6HN6H78iZiYu3kaR7i2Ouu8oewAN2o=";
                           } {})
                           (old:
                             { enableLibraryProfiling = false;
