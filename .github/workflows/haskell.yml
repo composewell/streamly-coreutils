@@ -1,0 +1,120 @@
+name: Haskell CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    env:
+      # ------------------------------------------------------------------------
+      # Common options
+      # ------------------------------------------------------------------------
+      CABAL_REINIT_CONFIG: y
+      LC_ALL: C.UTF-8
+      DISABLE_SDIST_BUILD: n
+
+      # ------------------------------------------------------------------------
+      # cabal options
+      # ------------------------------------------------------------------------
+      CABAL_CHECK_RELAX: y
+      CABAL_NO_SANDBOX: y
+      CABAL_PROJECT: ${{ matrix.cabal_project }}
+
+      # ------------------------------------------------------------------------
+      # Location of packcheck.sh
+      # ------------------------------------------------------------------------
+      PACKCHECK_LOCAL_PATH: "./packcheck.sh"
+      PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
+      PACKCHECK_GITHUB_COMMIT: "v0.6.0"
+
+      # ------------------------------------------------------------------------
+      # Build options
+      # ------------------------------------------------------------------------
+      BUILD: cabal-v2 ${{ matrix.pack_options }}
+      GHCVER: ${{ matrix.ghc_version }}
+
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - 8.4.4
+          - 8.6.5
+          - 8.8.4
+          - 9.0.2
+          - 8.10.7+macos
+          - 9.2.2
+          - hlint
+
+        include:
+
+          - name: 8.4.4
+            ghc_version: 8.4.4
+            runner: ubuntu-latest
+            cabal_version: 3.2
+
+          - name: 8.6.5
+            ghc_version: 8.6.5
+            runner: ubuntu-latest
+            cabal_version: 3.2
+
+          - name: 8.8.4
+            ghc_version: 8.8.4
+            runner: ubuntu-latest
+            cabal_version: 3.2
+
+          - name: 9.0.2
+            ghc_version: 9.0.2
+            runner: ubuntu-latest
+            cabal_version: 3.2
+
+          - name: hlint
+            ghc_version: 8.8.4
+            pack_options: HLINT_OPTIONS="lint" HLINT_TARGETS="src"
+            runner: ubuntu-latest
+            cabal_version: 3.2
+
+          - name: 8.10.7+macos
+            ghc_version: 8.10.7
+            runner: macos-latest
+            cabal_version: 3.2
+
+          - name: 9.2.2
+            ghc_version: 9.2.2
+            runner: ubuntu-latest
+            cabal_version: 3.6
+            pack_options: DISABLE_BENCH=y
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: haskell/actions/setup@v1
+      with:
+        ghc-version: ${{ matrix.ghc_version }}
+        cabal-version: ${{ matrix.cabal_version }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.cabal
+      with:
+        path: ~/.cabal
+        key: ${{ runner.os }}-${{ matrix.ghc_version }}-cabal
+
+    - name: Download packcheck
+      run: |
+        # If a custom stack-yaml is specified, replace the default with that
+        if test -e "$STACK_YAML"; then rm -f stack.yaml && ln -sv $STACK_YAML stack.yaml; else true; fi
+        unset STACK_YAML
+
+        # Get packcheck if needed
+        CURL=$(which curl)
+        PACKCHECK_URL=${PACKCHECK_GITHUB_URL}/${PACKCHECK_GITHUB_COMMIT}/packcheck.sh
+        if test ! -e "$PACKCHECK_LOCAL_PATH"; then $CURL -sL -o "$PACKCHECK_LOCAL_PATH" $PACKCHECK_URL; fi;
+        chmod +x $PACKCHECK_LOCAL_PATH
+
+    - name: Run packcheck
+      run: |
+        bash -c "$PACKCHECK_LOCAL_PATH $BUILD"
