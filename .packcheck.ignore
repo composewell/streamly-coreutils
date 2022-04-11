@@ -1,0 +1,6 @@
+.packcheck.ignore
+stack.yaml
+.github/workflows/haskell.yml
+.gitignore
+cabal.project
+default.nix

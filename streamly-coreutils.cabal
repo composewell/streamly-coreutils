@@ -29,7 +29,10 @@ category:            Streamly, Streaming
 stability:           Experimental
 build-type:          Simple
 
-extra-source-files:  CHANGELOG.md, README.md, NOTICE
+extra-source-files:  CHANGELOG.md
+                   , README.md
+                   , NOTICE
+                   , design/proposal.md
 
 common compile-options
     default-language: Haskell2010
