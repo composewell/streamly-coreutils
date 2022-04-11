@@ -65,13 +65,28 @@ module Streamly.Coreutils.FileTest
 where
 
 import Control.Exception (catch, throwIO)
-import Data.Functor.Contravariant (Predicate(..))
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
 import System.Posix.Types (Fd)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.Files as Files
+
+#if MIN_VERSION_base(4,12,0)
+import Data.Functor.Contravariant (Predicate(..))
+#else
+
+newtype Predicate a =
+    Predicate (a -> Bool)
+
+instance Semigroup (Predicate a) where
+    Predicate p1 <> Predicate p2 = Predicate $ \a -> p1 a && p2 a
+
+instance Monoid (Predicate a) where
+    mempty = Predicate $ \_ -> True
+    mappend = (<>)
+
+#endif
 
 -- | A predicate type for testing boolean statements about a file.
 --
