@@ -97,6 +97,7 @@ library
       Streamly.Coreutils
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.Cp
+    , Streamly.Coreutils.Directory
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Uniq
