@@ -117,6 +117,7 @@ library
     , Streamly.Coreutils.Mkdir
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.Ls
+    , Streamly.Coreutils.Rm
     , Streamly.Coreutils.String
     , Streamly.Coreutils.ReadLink
     , Streamly.Coreutils.ShellWords
