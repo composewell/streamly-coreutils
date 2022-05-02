@@ -115,6 +115,7 @@ library
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
+    , Streamly.Coreutils.Ln
 
   default-language:    Haskell2010
 
