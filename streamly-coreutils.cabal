@@ -111,6 +111,7 @@ library
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.Directory
+    , Streamly.Coreutils.Mv
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Uniq
