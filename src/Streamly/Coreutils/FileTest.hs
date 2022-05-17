@@ -290,13 +290,13 @@ egidIsUs = undefined
 ------------------------------
 
 -- | Returns the result of the comparison function with provided file's
--- modification time as first argument and the that of the file being tested as
--- the second argument
+-- modification time as second argument and the that of the file being tested as
+-- the first argument
 --
 compareModTime :: (POSIXTime -> POSIXTime -> Bool) -> FilePath -> IO FileTest
 compareModTime cmp path = do
     st <- Files.getFileStatus path
-    return $ FileTest (Predicate (f st))
+    return $ FileTest (Predicate ( `f` st))
 
     where
 
@@ -305,13 +305,13 @@ compareModTime cmp path = do
             t2 = Files.modificationTimeHiRes st2
         in t1 `cmp` t2
 
--- | True if the provided file path is newer than the file being tested.
+-- | True if the file being tested is newer than the provided file path.
 --
 -- Like the coreutil @test file1 -nt file2@
 isNewerThan :: FilePath -> IO FileTest
 isNewerThan = compareModTime (>)
 
--- | True if the provided file path is older than the file being tested.
+-- | True if the file being tested is older than the provided file path.
 --
 -- Like coreutil @test file1 -ot file2@.
 isOlderThan :: FilePath -> IO FileTest
