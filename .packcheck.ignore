@@ -3,4 +3,6 @@ stack.yaml
 .github/workflows/haskell.yml
 .gitignore
 cabal.project
+cabal.project.user
+cabal.project.Werror
 default.nix

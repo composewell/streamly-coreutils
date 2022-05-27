@@ -3,7 +3,7 @@ module Main where
 import Control.Monad.IO.Class (MonadIO)
 
 import Gauge
-import Streamly
+import Streamly.Prelude (IsStream, SerialT)
 import System.Random
 import Streamly.Coreutils.Uniq
 
