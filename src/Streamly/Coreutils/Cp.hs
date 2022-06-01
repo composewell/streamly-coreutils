@@ -11,7 +11,7 @@
 module Streamly.Coreutils.Cp
     ( cp
     , Cp
-    , noClobber
+    , createOnly
     , updateOnly
     , hardLink
     )
@@ -20,8 +20,6 @@ where
 import Control.Monad (unless, when)
 import Data.Default.Class (Default(..))
 import Data.Function ((&))
-import GHC.Generics (Generic)
-import Streamly.Coreutils.Common (Switch(..))
 #if !defined (CABAL_OS_WINDOWS)
 import System.Posix.Files (createLink)
 #endif
@@ -30,36 +28,33 @@ import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
 
-data Cp = Cp
-    { optNoClobber :: Switch
-    , optUpdateOnly :: Switch
-    , optHardLink :: Switch
-    } deriving (Generic, Eq , Show)
+data Cp = HardLink | UpdateOnly | CreateOnly | Copy
 
-instance Default Cp
+instance Default Cp where
+    def = Copy
 
-noClobber :: Switch -> Cp -> Cp
-noClobber sw options = options {optNoClobber = sw}
+updateOnly :: Cp
+updateOnly = UpdateOnly
 
-updateOnly :: Switch -> Cp -> Cp
-updateOnly sw options = options {optUpdateOnly = sw}
+createOnly :: Cp
+createOnly = CreateOnly
 
-hardLink :: Switch -> Cp -> Cp
-hardLink sw options = options {optHardLink = sw}
+hardLink :: Cp
+hardLink = HardLink
 
 -- | > cp input.txt output.txt
 cp :: Cp -> FilePath -> FilePath -> IO ()
 cp options src dest = do
     case options of
-        Cp {optNoClobber = On} ->
+        CreateOnly ->
             do
             exist <- test dest exists
             unless exist copy
 #if !defined (CABAL_OS_WINDOWS)
-        Cp {optHardLink = On} ->
+        HardLink ->
             createLink src dest
 #endif
-        Cp {optUpdateOnly = On} ->
+        UpdateOnly ->
             do
             destExists <- test dest exists
             if destExists
@@ -69,7 +64,7 @@ cp options src dest = do
                 when srcUpdated copy
             else copy
 
-        _ -> copy
+        Copy -> copy
 
     where
 
