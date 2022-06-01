@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Copy
+-- Module      : Streamly.Coreutils.Cp
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -10,6 +10,7 @@
 
 module Streamly.Coreutils.Cp
     ( cp
+    , Cp
     , noClobber
     , updateOnly
     , hardLink
@@ -29,36 +30,36 @@ import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
 
-data Options = Options
+data Cp = Cp
     { optNoClobber :: Switch
     , optUpdateOnly :: Switch
     , optHardLink :: Switch
     } deriving (Generic, Eq , Show)
 
-instance Default Options
+instance Default Cp
 
-noClobber :: Switch -> Options -> Options
+noClobber :: Switch -> Cp -> Cp
 noClobber sw options = options {optNoClobber = sw}
 
-updateOnly :: Switch -> Options -> Options
+updateOnly :: Switch -> Cp -> Cp
 updateOnly sw options = options {optUpdateOnly = sw}
 
-hardLink :: Switch -> Options -> Options
+hardLink :: Switch -> Cp -> Cp
 hardLink sw options = options {optHardLink = sw}
 
 -- | > cp input.txt output.txt
-cp :: Options -> FilePath -> FilePath -> IO ()
+cp :: Cp -> FilePath -> FilePath -> IO ()
 cp options src dest = do
     case options of
-        Options {optNoClobber = On} ->
+        Cp {optNoClobber = On} ->
             do
             exist <- test dest exists
             unless exist copy
 #if !defined (CABAL_OS_WINDOWS)
-        Options {optHardLink = On} ->
+        Cp {optHardLink = On} ->
             createLink src dest
 #endif
-        Options {optUpdateOnly = On} ->
+        Cp {optUpdateOnly = On} ->
             do
             destExists <- test dest exists
             if destExists
