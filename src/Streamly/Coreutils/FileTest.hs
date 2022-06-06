@@ -62,24 +62,47 @@ module Streamly.Coreutils.FileTest
     , isSticky
     , isSetUID
     , isSetGID
-    , isOwnerEUID
-    , isGroupEGID
+    , ownerMatchesEUID
+    , groupMatchesEGID
 
     -- ** Comparing with other files
     , isNewerThan
     , isOlderThan
     , isSameFile
+
+    -- ** Comparing access time with current time
+    , isAccessedBefore
+    , isAccessedWithin
+    -- ** Comparing modifications time with current time
+    , isModifiedBefore
+    , isModifiedWithin
+    -- ** Comparing size in bytes
+    , isSmallerThan
+    , isLargerThan
+    , hasSize
+
+    -- ** Comparing size with a reference file
+    , isSmallerThanFile
+    , isLargerThanFile
+    , hasSizeSameAs
     )
 where
 
 import Control.Exception (catch, throwIO)
+import Data.Bits ((.&.))
+import Data.Int (Int64)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
+import Foreign.C.Types (CTime(CTime))
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
-import System.Posix.Types (Fd)
+import System.Posix.Types (Fd, EpochTime, COff(..), FileMode)
 import System.Posix.Files (FileStatus)
+import qualified System.Posix.User as User
 import qualified System.Posix.Files as Files
+
 import Prelude hiding (and, or)
+import Streamly.Internal.Data.Time.Clock
+import Streamly.Internal.Data.Time.Units
 
 #if MIN_VERSION_base(4,12,0)
 import Data.Functor.Contravariant (Predicate(..))
@@ -273,19 +296,20 @@ isTerminalFD = undefined
 -- Permissions
 ---------------
 
+hasMode :: FileMode -> Predicate FileStatus
+hasMode mode = Predicate (\st -> (Files.fileMode st .&. mode) == mode)
+
 -- | True if file exists and its set user ID flag is set.
 --
 -- Like coreutil @test -u file@
 isSetUID :: FileTest
-isSetUID =
-    FileTest (Predicate (\st -> Files.fileMode st == Files.setUserIDMode))
+isSetUID = FileTest $ hasMode Files.setUserIDMode
 
 -- | True if file exists and its set group ID flag is set.
 --
 -- Like coreutil @test -g file@
 isSetGID :: FileTest
-isSetGID =
-    FileTest (Predicate (\st -> Files.fileMode st == Files.setGroupIDMode))
+isSetGID = FileTest $ hasMode  Files.setGroupIDMode
 
 -- | True if file exists and its sticky bit is set.
 --
@@ -294,7 +318,7 @@ isSetGID =
 -- /Unimplemented/
 isSticky :: FileTest
 isSticky = undefined
-    -- FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode)
+    --FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode))
 
 -- XXX To implement these we need to check:
 --
@@ -306,38 +330,86 @@ isSticky = undefined
 --
 -- Like coreutil @test -r file@
 --
--- /Unimplemented/
-isReadable :: FileTest
-isReadable = undefined
+-- /Pre-release/
 
--- | True if file exists and is writable.  True indicates
--- only that the write flag is on.  The file is not writable on a read-only
--- file system even if this test indicates true.
---
--- Like coreutil @test -w file@
---
--- /Unimplemented/
-isWritable :: FileTest
-isWritable = undefined
+isAccessible :: (FileMode, FileMode, FileMode) -> FilePath -> IO FileTest
+isAccessible (onr, grp, oth) path =  do
+    ownerIDMatch <- ownerMatchesEUID
+    groupIDMatch <- groupMatchesEGID
+    let ownerPerm = FileTest $ hasMode onr
+        groupPerm = FileTest $ hasMode grp
+        otherPerm = FileTest $ hasMode oth
+    ownerHasPermission <- test path ownerPerm
+    groupHasPermission <- test path groupPerm
+    isOwner <- test path ownerIDMatch
+    isGroup <- test path groupIDMatch
+    return $
+        if (isOwner && not ownerHasPermission) ||
+            (isGroup && not groupHasPermission)
+        then FileTest (Predicate $ const False)
+        else otherPerm
 
--- | True if file exists and is executable.  True indicates
--- only that the execute flag is on.  If file is a directory, true
+-- | True if file exists and readable to the owner, group or others.
+-- If the process euid is same as uderid and owner read permission is
+-- not set then user can't read the file even the group and others
+-- has read permissions.
+--
+-- /Pre-release/
+isReadable :: FilePath -> IO FileTest
+isReadable =
+    isAccessible
+        (
+          Files.ownerReadMode
+        , Files.groupReadMode
+        , Files.otherReadMode
+        )
+
+-- | True if file exists and writable to the owner, group or others.
+-- If the process euid is same as uderid and owner write permission is
+-- not set then user can't write the file even the group and others
+-- has write permissions.
+-- The file is not writable on a read-only file system even if
+-- this test indicates true.
+--
+-- /Pre-release/
+isWritable :: FilePath -> IO FileTest
+isWritable =
+    isAccessible
+        (
+          Files.ownerWriteMode
+        , Files.groupWriteMode
+        , Files.otherWriteMode
+        )
+
+-- | True if file exists and excutable to the owner, group or others.
+-- If the process euid is same as uderid and owner excute permission is
+-- not set then user can't execute the file even the group and others
+-- has execute permissions.
+-- If file is a directory, true
 -- indicates that file can be searched.
 --
--- Like coreutil @test -x file@
---
--- /Unimplemented/
-isExecutable :: FileTest
-isExecutable = undefined
-
+-- /Pre-release/
+isExecutable :: FilePath -> IO FileTest
+isExecutable =
+    isAccessible
+        (
+          Files.ownerExecuteMode
+        , Files.groupExecuteMode
+        , Files.otherExecuteMode
+        )
 -- | True if file exists and its owner matches the effective
 -- user id of this process.
 --
 -- Like coreutil @test -O file@
 --
 -- /Unimplemented/
-isOwnerEUID :: FileTest
-isOwnerEUID = undefined
+ownerMatchesEUID  :: IO FileTest
+ownerMatchesEUID  =
+    FileTest . Predicate . f <$> User.getEffectiveUserID
+
+    where
+
+    f euid st = Files.fileOwner st == euid
 
 -- | True if file exists and its group matches the effective
 -- group id of this process.
@@ -345,8 +417,13 @@ isOwnerEUID = undefined
 -- Like coreutil @test -G file@
 --
 -- /Unimplemented/
-isGroupEGID :: FileTest
-isGroupEGID = undefined
+groupMatchesEGID :: IO FileTest
+groupMatchesEGID =
+    FileTest . Predicate . f <$> User.getEffectiveGroupID
+
+    where
+
+    f guid st = Files.fileGroup st == guid
 
 ------------------------------
 -- Comparing with other files
@@ -385,3 +462,87 @@ isOlderThan = compareModTime (<)
 -- Like coreutil @test file1 -ef file2@.
 isSameFile :: FilePath -> IO FileTest
 isSameFile = undefined
+
+getLocalTime :: IO MilliSecond64
+getLocalTime = fromAbsTime <$> getTime Realtime
+
+compareFileStatusNsecondsBefore ::
+       (MilliSecond64 -> MilliSecond64 -> Bool)
+    -> (FileStatus -> EpochTime)
+    -> Double
+    -> IO FileTest
+compareFileStatusNsecondsBefore cmp getFileTime sec  =
+    FileTest . Predicate . f <$> getLocalTime
+
+    where
+
+    f ct st =
+        let CTime at = getFileTime st
+            touchedInMsecbefore = (ct - MilliSecond64 (at * 1000))
+         in cmp touchedInMsecbefore $ MilliSecond64 (round $ sec * 1000)
+
+-- | A file is accessed less than n seconds before the current time.
+-- /Pre-release/
+isAccessedBefore :: Double -> IO FileTest
+isAccessedBefore =
+    compareFileStatusNsecondsBefore (<) Files.accessTime
+
+-- | A file is accessed more than or equal to n seconds before
+-- the current time.
+-- /Pre-release/
+isAccessedWithin :: Double -> IO FileTest
+isAccessedWithin =
+    compareFileStatusNsecondsBefore (>=) Files.accessTime
+
+-- | A file is modified less than n seconds before the current time.
+-- /Pre-release/
+isModifiedBefore :: Double -> IO FileTest
+isModifiedBefore =
+    compareFileStatusNsecondsBefore (<) Files.modificationTime
+
+-- | A file is modified more than or equal to n seconds before
+-- the current time.
+-- /Pre-release/
+isModifiedWithin :: Double -> IO FileTest
+isModifiedWithin =
+    compareFileStatusNsecondsBefore (>=) Files.modificationTime
+
+compareFileSizeWith :: (Int64 -> Int64 -> Bool) -> Int64 -> IO FileTest
+compareFileSizeWith cmp n =
+    return $ FileTest (Predicate f)
+
+    where
+
+    f st =
+        let COff size = Files.fileSize st
+         in cmp size n
+
+isSmallerThan :: Int64 -> IO FileTest
+isSmallerThan = compareFileSizeWith (<)
+
+isLargerThan :: Int64 -> IO FileTest
+isLargerThan = compareFileSizeWith (>)
+
+hasSize :: Int64 -> IO FileTest
+hasSize = compareFileSizeWith (==)
+
+compareFileSizeWithRef :: (Int64 -> Int64 -> Bool) -> FilePath -> IO FileTest
+compareFileSizeWithRef cmp refPath = do
+    st <- Files.getFileStatus refPath
+    let COff size = Files.fileSize st
+    return $ FileTest (Predicate (f size))
+
+    where
+
+    f sizeRef st =
+        let COff size = Files.fileSize st
+         in cmp size sizeRef
+
+isSmallerThanFile :: FilePath -> IO FileTest
+isSmallerThanFile = compareFileSizeWithRef (<)
+
+isLargerThanFile :: FilePath -> IO FileTest
+isLargerThanFile = compareFileSizeWithRef (>)
+
+hasSizeSameAs  :: FilePath -> IO FileTest
+hasSizeSameAs  = compareFileSizeWithRef (==)
