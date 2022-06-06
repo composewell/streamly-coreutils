@@ -69,17 +69,30 @@ module Streamly.Coreutils.FileTest
     , isNewerThan
     , isOlderThan
     , isSameFile
+
+    -- ** Comparing with current time
+    , compareAccessTime
+    , compareChangeTime
+
+    -- ** Comparing size in bytes
+    , compareFileSize
     )
 where
 
 import Control.Exception (catch, throwIO)
+import Data.Bits ((.&.))
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
+import Foreign.C.Types (CTime(CTime))
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
-import System.Posix.Types (Fd)
+import System.Posix.Types (Fd, EpochTime, COff(..))
 import System.Posix.Files (FileStatus)
+
 import qualified System.Posix.Files as Files
 import Prelude hiding (and, or)
+
+import Streamly.Internal.Data.Time.Clock
+import Streamly.Internal.Data.Time.Units
 
 #if MIN_VERSION_base(4,12,0)
 import Data.Functor.Contravariant (Predicate(..))
@@ -294,7 +307,7 @@ isSetGID =
 -- /Unimplemented/
 isSticky :: FileTest
 isSticky = undefined
-    -- FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode)
+    --FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode))
 
 -- XXX To implement these we need to check:
 --
@@ -308,7 +321,15 @@ isSticky = undefined
 --
 -- /Unimplemented/
 isReadable :: FileTest
-isReadable = undefined
+isReadable =
+    FileTest
+        (Predicate
+            (\st ->
+                   (Files.fileMode st .&. Files.ownerReadMode) > 0
+                || (Files.fileMode st .&. Files.groupReadMode) > 0
+                || (Files.fileMode st .&. Files.otherReadMode) > 0
+            )
+        )
 
 -- | True if file exists and is writable.  True indicates
 -- only that the write flag is on.  The file is not writable on a read-only
@@ -318,7 +339,16 @@ isReadable = undefined
 --
 -- /Unimplemented/
 isWritable :: FileTest
-isWritable = undefined
+isWritable =
+    FileTest
+        (Predicate
+            (\st ->
+                   (Files.fileMode st .&. Files.ownerWriteMode) > 0
+                || (Files.fileMode st .&. Files.groupWriteMode) > 0
+                || (Files.fileMode st .&. Files.otherWriteMode) > 0
+
+            )
+        )
 
 -- | True if file exists and is executable.  True indicates
 -- only that the execute flag is on.  If file is a directory, true
@@ -328,7 +358,16 @@ isWritable = undefined
 --
 -- /Unimplemented/
 isExecutable :: FileTest
-isExecutable = undefined
+isExecutable =
+    FileTest
+        (Predicate
+            (\st ->
+                   (Files.fileMode st .&. Files.ownerExecuteMode) > 0
+                || (Files.fileMode st .&. Files.groupExecuteMode) > 0
+                || (Files.fileMode st .&. Files.otherExecuteMode) > 0
+
+            )
+        )
 
 -- | True if file exists and its owner matches the effective
 -- user id of this process.
@@ -385,3 +424,67 @@ isOlderThan = compareModTime (<)
 -- Like coreutil @test file1 -ef file2@.
 isSameFile :: FilePath -> IO FileTest
 isSameFile = undefined
+
+data TimeStampMin = TimeStampMin Ordering Int
+
+data FileSize = FileSize Ordering Integer
+
+getLocalTime :: IO MilliSecond64
+getLocalTime = fromAbsTime <$> getTime Realtime
+
+compareFsTime :: (FileStatus -> EpochTime) -> TimeStampMin -> IO FileTest
+compareFsTime toEpoc fopt = do
+    t <- getLocalTime
+    return $ FileTest (Predicate ( `f` t))
+
+    where
+
+    f st t =
+        case toEpoc st of
+            CTime t1 ->
+                let t2 =
+                        case fopt of
+                            TimeStampMin LT n ->
+                                t <
+                                MilliSecond64
+                                    (t1 * 1000 + fromIntegral (n * 60000))
+                            TimeStampMin GT n ->
+                                t >
+                                MilliSecond64
+                                    (t1 * 1000 + fromIntegral (n * 60000))
+                            TimeStampMin EQ n ->
+                                t ==
+                                MilliSecond64
+                                    (t1 * 1000 + fromIntegral (n * 60000))
+                  in t2
+
+compareAccessTime :: TimeStampMin -> IO FileTest
+compareAccessTime = compareFsTime Files.accessTime
+
+compareChangeTime :: TimeStampMin -> IO FileTest
+compareChangeTime = compareFsTime Files.modificationTime
+
+{-
+combinedFileTest :: IO FileTest
+combinedFileTest = do
+    ft1 <- compareAccessTime $ TimeStampMin LT 5
+    ft2 <- compareChangeTime $ TimeStampMin LT 10
+    return $ ft1 <> ft2
+-}
+
+compareFileSize :: FileSize -> IO FileTest
+compareFileSize fopt0 =
+    return $ FileTest (Predicate ( `f` fopt0))
+
+    where
+
+    f st fopt =
+        case Files.fileSize st of
+            COff t1 ->
+                let t2 =
+                        case fopt of
+                            FileSize LT n -> t1 < fromIntegral n
+                            FileSize GT n -> t1 > fromIntegral n
+                            FileSize EQ n -> t1 == fromIntegral n
+                  in t2
+                  
