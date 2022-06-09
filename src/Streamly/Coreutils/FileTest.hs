@@ -487,4 +487,3 @@ compareFileSize fopt0 =
                             FileSize GT n -> t1 > fromIntegral n
                             FileSize EQ n -> t1 == fromIntegral n
                   in t2
-                  
