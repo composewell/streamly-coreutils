@@ -88,6 +88,9 @@ instance Monoid (Predicate a) where
 
 #endif
 
+-- Naming Notes: Named FileTest rather than "Test" to be more explicit and
+-- specific. The command can also be named fileTest or testFile.
+
 -- | A predicate type for testing boolean statements about a file.
 --
 -- The 'Semigroup' instance acts as boolean @&&@. The 'Monoid' instance uses
