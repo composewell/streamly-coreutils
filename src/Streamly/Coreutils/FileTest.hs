@@ -58,8 +58,8 @@ module Streamly.Coreutils.FileTest
     , isSticky
     , isSetUID
     , isSetGID
-    , euidIsUs
-    , egidIsUs
+    , isOwnerEUID
+    , isGroupEGID
 
     -- ** Comparing with other files
     , isNewerThan
@@ -301,8 +301,8 @@ isExecutable = undefined
 -- Like coreutil @test -O file@
 --
 -- /Unimplemented/
-euidIsUs :: FileTest
-euidIsUs = undefined
+isOwnerEUID :: FileTest
+isOwnerEUID = undefined
 
 -- | True if file exists and its group matches the effective
 -- group id of this process.
@@ -310,8 +310,8 @@ euidIsUs = undefined
 -- Like coreutil @test -G file@
 --
 -- /Unimplemented/
-egidIsUs :: FileTest
-egidIsUs = undefined
+isGroupEGID :: FileTest
+isGroupEGID = undefined
 
 ------------------------------
 -- Comparing with other files
