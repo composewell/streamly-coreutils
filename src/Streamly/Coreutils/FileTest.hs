@@ -34,7 +34,7 @@ module Streamly.Coreutils.FileTest
     , predicate
 
     -- ** General
-    , exists
+    , isExisting
     , isNonNull
 
     -- ** File Type
@@ -142,8 +142,8 @@ predicate p = FileTest (Predicate p)
 -- | True if file exists.
 --
 -- Like coreutil @test -e file@
-exists :: FileTest
-exists = FileTest (Predicate (const True))
+isExisting :: FileTest
+isExisting = FileTest (Predicate (const True))
 
 -- | True if file has a size greater than zero.
 --

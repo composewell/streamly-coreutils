@@ -100,10 +100,10 @@ cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =
     case option of
         OverwriteAlways -> return True
-        OverwriteOnly -> test dest exists
-        OverwriteNever -> not <$> test dest exists
+        OverwriteOnly -> test dest isExisting
+        OverwriteNever -> not <$> test dest isExisting
         OverwriteUpdate -> do
-            r <- test dest exists
+            r <- test dest isExisting
             if r
             then test src =<< isNewerThan dest
             else return True
