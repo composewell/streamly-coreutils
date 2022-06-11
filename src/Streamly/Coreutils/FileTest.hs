@@ -24,7 +24,11 @@ module Streamly.Coreutils.FileTest
     (
     -- * File Test Predicate Type
       FileTest
-    , pOr
+
+    -- * Boolean Operations
+    , neg
+    , and
+    , or
 
     -- * Running Predicates
     , test
@@ -71,6 +75,7 @@ import GHC.IO.Exception (IOException(..), IOErrorType(..))
 import System.Posix.Types (Fd)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.Files as Files
+import Prelude hiding (and, or)
 
 #if MIN_VERSION_base(4,12,0)
 import Data.Functor.Contravariant (Predicate(..))
@@ -98,17 +103,37 @@ instance Monoid (Predicate a) where
 --
 newtype FileTest = FileTest (Predicate FileStatus) deriving (Semigroup, Monoid)
 
--- Though || can be expressed in terms of not and && but || is really
--- convienient.  If we had a type class for <|> we could have defined an
--- instance of that for Predicate. Or maybe we can have a typeclass for Bool
--- like we have for Num, defining "and", "or" and "not".
-
 -- | A boolean @or@ function for 'FileTest' predicates.
 --
--- For boolean and operation use the Semigroup instance.
-pOr :: FileTest -> FileTest -> FileTest
-FileTest (Predicate p) `pOr` FileTest (Predicate q) =
+or :: FileTest -> FileTest -> FileTest
+FileTest (Predicate p) `or` FileTest (Predicate q) =
     FileTest (Predicate $ \a -> p a || q a)
+
+-- | A boolean @and@ function for 'FileTest' predicates.
+--
+-- >>> and = (<>)
+--
+and :: FileTest -> FileTest -> FileTest
+and = (<>)
+
+-- Naming notes: I would prefer to use "not" instead of "neg" but this has to
+-- be used unqualified to remain short for common use and prelude "not" is also
+-- very common so we do not want to conflict with that.
+--
+-- XXX Should we have an IsBool type class in Data.Bool so that the boolean
+-- operations (&&, ||, not) can be overloaded.
+--
+-- class IsBool a where
+--  not :: a -> a
+--    (&&) :: a -> a -> a -- and
+--    (||) :: a -> a -> a -- or
+
+-- | A boolean @not@ function for 'FileTest' predicates.
+--
+-- >>> and = (<>)
+--
+neg :: FileTest -> FileTest
+neg (FileTest (Predicate p)) = FileTest (Predicate $ \a -> Prelude.not (p a))
 
 -- XXX Use a byte array instead of string filepath.
 --
