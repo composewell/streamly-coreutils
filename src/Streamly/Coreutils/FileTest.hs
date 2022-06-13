@@ -27,11 +27,15 @@ module Streamly.Coreutils.FileTest
 
     -- * Boolean Operations
     , neg
+    , negM
     , and
+    , andM
     , or
+    , orM
 
     -- * Running Predicates
     , test
+    , testM
     , testFD
 
     -- * Predicates
@@ -93,6 +97,9 @@ instance Monoid (Predicate a) where
 
 #endif
 
+-- $setup
+-- >>> import Prelude hiding (or, and)
+
 -- Naming Notes: Named FileTest rather than "Test" to be more explicit and
 -- specific. The command can also be named fileTest or testFile.
 
@@ -109,12 +116,26 @@ or :: FileTest -> FileTest -> FileTest
 FileTest (Predicate p) `or` FileTest (Predicate q) =
     FileTest (Predicate $ \a -> p a || q a)
 
+-- | Like `or` but for monadic predicates.
+--
+-- >>> orM t1 t2 = pure or <*> t1 <*> t2
+--
+orM :: IO FileTest -> IO FileTest -> IO FileTest
+orM t1 t2 = pure or <*> t1 <*> t2
+
 -- | A boolean @and@ function for 'FileTest' predicates.
 --
 -- >>> and = (<>)
 --
 and :: FileTest -> FileTest -> FileTest
 and = (<>)
+
+-- | Like `and` but for monadic predicates.
+--
+-- >>> andM t1 t2 = pure and <*> t1 <*> t2
+--
+andM :: IO FileTest -> IO FileTest -> IO FileTest
+andM t1 t2 = pure and <*> t1 <*> t2
 
 -- Naming notes: I would prefer to use "not" instead of "neg" but this has to
 -- be used unqualified to remain short for common use and prelude "not" is also
@@ -135,6 +156,13 @@ and = (<>)
 neg :: FileTest -> FileTest
 neg (FileTest (Predicate p)) = FileTest (Predicate $ \a -> Prelude.not (p a))
 
+-- | Like `neg` but for monadic predicates.
+--
+-- >>> negM = fmap neg
+--
+negM :: IO FileTest -> IO FileTest
+negM = fmap neg
+
 -- XXX Use a byte array instead of string filepath.
 --
 -- | Run a predicate on a 'FilePath'. Returns False if the path does not exist.
@@ -154,8 +182,15 @@ test path (FileTest (Predicate f)) =
 
     eatENOENT e = if isENOENT e then return False else throwIO e
 
+-- | Like 'test' but for a monadic predicate.
+--
+-- >>> testM path t = test path =<< t
+--
+testM :: FilePath -> IO FileTest -> IO Bool
+testM path t = test path =<< t
+
 -- XXX Use Handle instead
--- | Run a predicate on an 'Fd'.
+-- | Like 'test' but uses a file descriptor instead of file path.
 testFD :: Fd -> FileTest -> IO Bool
 testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= return . f
 
