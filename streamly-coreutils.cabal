@@ -114,6 +114,7 @@ library
     , Streamly.Coreutils.Mv
     , Streamly.Coreutils.Stat
     , Streamly.Coreutils.FileTest
+    , Streamly.Coreutils.Ls 
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
