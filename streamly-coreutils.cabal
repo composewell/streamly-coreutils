@@ -98,6 +98,7 @@ library
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.FileTest
+    , Streamly.Coreutils.Ls 
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
