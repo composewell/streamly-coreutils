@@ -113,6 +113,7 @@ library
     , Streamly.Coreutils.Directory
     , Streamly.Coreutils.Mv
     , Streamly.Coreutils.Stat
+    , Streamly.Coreutils.Mkdir
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.Ls 
     , Streamly.Coreutils.ShellWords
