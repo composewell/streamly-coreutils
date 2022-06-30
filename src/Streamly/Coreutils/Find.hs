@@ -14,7 +14,8 @@ module Streamly.Coreutils.Find
     )
 where
 
-import Streamly.Coreutils.FileTest ( FileTest, test )
+import Streamly.Coreutils.FileTest (FileTest, test)
+import Streamly.Coreutils.Ls (LsOptions(Recursive), ls)
 import Streamly.Prelude (SerialT)
 
 import qualified System.Directory as Directory
@@ -28,15 +29,10 @@ find = Directory.findFiles
 
 -- | Search recursively through the given directory for the given predicates
 -- returns all paths where the given predicates are True.
--- Print the file paths having the size of 292 bytes in current directory
--- @
---  do
---    ft <- compareFileSize (FileSize EQ 292)
---    findFilesWith "." ft & Stream.mapM_ print
--- @
+--
 findFilesWith :: FilePath -> FileTest -> SerialT IO (Either FilePath FilePath)
 findFilesWith dir ft = do
-    let strm = listDirRec dir
+    let strm = ls Recursive dir
         fs = Stream.filterM pred0 strm
     fs
 
