@@ -14,30 +14,11 @@ module Streamly.Coreutils.Find
     )
 where
 
-import Data.Bifunctor (bimap)
-import Data.Function ((&))
 import Streamly.Coreutils.FileTest ( FileTest, test )
 import Streamly.Prelude (SerialT)
 
 import qualified System.Directory as Directory
 import qualified Streamly.Prelude as Stream
-import qualified Streamly.Internal.Data.Stream.IsStream as Stream
-       (iterateMapLeftsWith)
-import qualified Streamly.Internal.FileSystem.Dir as Dir (toEither)
-
--- Lists a dir as a stream of (Either Dir File)
-listDir :: String -> SerialT IO (Either String String)
-listDir dir =
-      Dir.toEither dir               -- SerialT IO (Either String String)
-    & Stream.map (bimap mkAbs mkAbs) -- SerialT IO (Either String String)
-
-    where mkAbs x = dir ++ "/" ++ x
-
--- | List the current directory recursively using concurrent processing
-listDirRec :: FilePath -> SerialT IO (Either FilePath FilePath)
-listDirRec dir = do
-    let start = Stream.fromPure (Left dir)
-    Stream.iterateMapLeftsWith Stream.ahead listDir start
 
 -- | Search through the given list of directories for the given file and
 -- returns all paths where the given file exists.
