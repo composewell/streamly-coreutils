@@ -109,6 +109,7 @@ library
   hs-source-dirs:      src
   exposed-modules:
       Streamly.Coreutils
+    , Streamly.Coreutils.Chmod
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.Directory
