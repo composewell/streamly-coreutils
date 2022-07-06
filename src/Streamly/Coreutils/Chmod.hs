@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 -- |
 -- Module      : Streamly.Coreutils.Chmod
 -- Copyright   : (c) 2022 Composewell Technologies
@@ -9,38 +10,29 @@
 -- change file mode bits.
 
 module Streamly.Coreutils.Chmod
-    (  chmod
+    ( chmod
     )
 where
 
 import Data.Bits ((.|.), Bits ((.&.), complement))
-import Data.Default.Class (Default(..))
-
+import Streamly.Coreutils.StringQ
 import qualified System.Posix as Posix
-
-data UserType = Owner | Group | Others deriving (Eq, Ord, Read, Show)
-
-data Permissions = Permissions
-  { readable :: Bool
-  , writable :: Bool
-  , executable :: Bool
-  } deriving (Eq, Ord, Read, Show)
-
-instance Default Permissions where
-    def = Permissions
-        { readable = False
-        , writable = False
-        , executable = False
-        }
 
 modifyBit :: Bool -> Posix.FileMode -> Posix.FileMode -> Posix.FileMode
 modifyBit False b m = m .&. complement b
 modifyBit True  b m = m .|. b
 
-chmod :: UserType -> Permissions -> FilePath -> IO ()
-chmod utype (Permissions r w e) path = do
+chmodWith :: UserType -> Permissions -> FilePath -> IO ()
+chmodWith utype (Permissions r w e) path = do
     case utype of
-        Owner -> do
+        Owner -> setOwnerPermissions
+        Group -> setGroupPermissions
+        Others -> setOthersPermissions
+        All -> setAllPermissions
+
+        where
+
+        setOwnerPermissions = do
             stat <- Posix.getFileStatus path
             Posix.setFileMode
                 path
@@ -49,7 +41,8 @@ chmod utype (Permissions r w e) path = do
                 . modifyBit r Posix.ownerReadMode
                 . Posix.fileMode $ stat
                 )
-        Group ->  do
+
+        setGroupPermissions = do
             stat <- Posix.getFileStatus path
             Posix.setFileMode
                 path
@@ -58,7 +51,8 @@ chmod utype (Permissions r w e) path = do
                 . modifyBit r Posix.groupReadMode
                 . Posix.fileMode $ stat
                 )
-        Others -> do
+
+        setOthersPermissions = do
             stat <- Posix.getFileStatus path
             Posix.setFileMode
                 path
@@ -67,3 +61,14 @@ chmod utype (Permissions r w e) path = do
                 . modifyBit r Posix.otherReadMode
                 . Posix.fileMode $ stat
                 )
+
+        setAllPermissions = do
+            setOwnerPermissions
+            setGroupPermissions
+            setOthersPermissions
+
+-- | Supports only override permissions bits
+-- >> chmod [perm|a=rwx|] "a.txt"
+--
+chmod :: UserTypePerm -> FilePath -> IO ()
+chmod pat = chmodWith (utype pat) (permssions pat)

@@ -106,11 +106,15 @@ library
     , unix >= 2.7.0 && < 2.8
     , directory >= 1.2.2 && < 1.4
     , filepath >= 1.4 && < 1.5
+    , data-default-class >= 0.1 && < 0.2
+    , template-haskell >= 2.10.0 && < 2.19.0
+
   hs-source-dirs:      src
   exposed-modules:
       Streamly.Coreutils
     , Streamly.Coreutils.Chmod
     , Streamly.Coreutils.Common
+    , Streamly.Coreutils.StringQ
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.Directory
     , Streamly.Coreutils.Dirname
