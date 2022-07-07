@@ -121,6 +121,7 @@ library
     , Streamly.Coreutils.ReadLink
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Sleep
+    , Streamly.Coreutils.Touch
     , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
     , Streamly.Coreutils.Ln
