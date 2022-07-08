@@ -10,8 +10,10 @@
 
 module Streamly.Coreutils.Ln
     (
-      Ln
-    , ln
+      ln
+
+    -- * Options
+    , Ln
     , force
     , symbolic
     )
