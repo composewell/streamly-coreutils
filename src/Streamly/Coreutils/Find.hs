@@ -15,11 +15,12 @@ module Streamly.Coreutils.Find
 where
 
 import Streamly.Coreutils.FileTest (FileTest, test)
-import Streamly.Coreutils.Ls (LsOptions(Recursive), ls)
+import Streamly.Coreutils.Ls (ls, recursive)
 import Streamly.Prelude (SerialT)
 
 import qualified System.Directory as Directory
 import qualified Streamly.Prelude as Stream
+import Streamly.Coreutils.Common (Switch(On))
 
 -- | Search through the given list of directories for the given file and
 -- returns all paths where the given file exists.
@@ -32,7 +33,7 @@ find = Directory.findFiles
 --
 findFilesWith :: FilePath -> FileTest -> SerialT IO (Either FilePath FilePath)
 findFilesWith dir ft = do
-    let strm = ls Recursive dir
+    let strm = ls (recursive  On) dir
         fs = Stream.filterM pred0 strm
     fs
 
