@@ -11,6 +11,9 @@
 module Streamly.Coreutils.Ls
     (
       ls
+
+    -- * Options
+    , Ls
     , recursive
     )
 where
