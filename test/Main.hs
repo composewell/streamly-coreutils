@@ -1,4 +1,6 @@
-module Main where
+module Main
+    (main)
+where
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Internal.Data.Fold as FL
@@ -11,7 +13,7 @@ import Streamly.Prelude (IsStream)
 opt :: UniqOptions
 opt = defaultUniqOptions {skipFields = 1, skipChar = 1}
 
-splitOnNewLine :: (IsStream t, Monad m, MonadIO m) => t m Char -> t m String
+splitOnNewLine :: (IsStream t, MonadIO m) => t m Char -> t m String
 splitOnNewLine = S.splitOnSuffix (== '\n') FL.toList
 
 gen :: (IsStream t, Monad m) => Char -> Int -> t m Char
