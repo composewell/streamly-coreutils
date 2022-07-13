@@ -130,6 +130,7 @@ library
     , Streamly.Coreutils.Mkdir
     , Streamly.Coreutils.Mv
     , Streamly.Coreutils.ReadLink
+    , Streamly.Coreutils.RealPath
     , Streamly.Coreutils.Rm
     , Streamly.Coreutils.Sh
     , Streamly.Coreutils.Sleep
