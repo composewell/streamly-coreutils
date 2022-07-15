@@ -9,7 +9,14 @@
 -- Output the last part of files.
 
 module Streamly.Coreutils.Tail
-    (tail, tailN)
+
+    ( tail
+
+    -- * Options
+    , Tail
+    , follow
+    , tailN
+    )
 where
 
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -24,16 +31,42 @@ import qualified Streamly.Internal.Data.Fold as FL
 import qualified Streamly.Internal.Unicode.Stream as Unicode
 
 import Prelude hiding (tail)
+import Streamly.Coreutils.Common (Switch(..))
 
-tailN :: Int -> FilePath -> SerialT IO [Char]
-tailN n fp = do
+newtype Tail = Tail{tailFollow :: Switch}
+
+defaultConfig :: Tail
+defaultConfig = Tail Off
+
+follow :: Switch -> Tail -> Tail
+follow opt cfg = cfg {tailFollow = opt}
+
+tailForEver :: Int -> FilePath -> SerialT IO [Char]
+tailForEver n fp = do
     fh <- liftIO $ openFile fp ReadMode
-    Stream.unfold File.read fh
+    Stream.concatMap Stream.fromList
+        $ Stream.repeatM
+        $ Stream.toList
+        $ Stream.unfold File.read fh
         & Unicode.decodeUtf8
         & Unicode.lines FL.toList
         & Stream.fold (Array.writeLastN n)
         & Stream.map Array.toStream
         & Stream.concat
 
-tail :: FilePath -> SerialT IO [Char]
-tail = tailN 10
+tailN :: (Tail -> Tail) ->  Int -> FilePath -> SerialT IO [Char]
+tailN f n fp = do
+    fh <- liftIO $ openFile fp ReadMode
+    let opt = f defaultConfig
+    case tailFollow opt of
+        On -> tailForEver n fp
+        Off ->
+            Stream.unfold File.read fh
+                & Unicode.decodeUtf8
+                & Unicode.lines FL.toList
+                & Stream.fold (Array.writeLastN n)
+                & Stream.map Array.toStream
+                & Stream.concat
+
+tail :: (Tail -> Tail) -> FilePath -> SerialT IO [Char]
+tail f = tailN f 10
