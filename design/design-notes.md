@@ -1,3 +1,10 @@
+## Goals
+
+* Replace shell scripting with Haskell
+* Use Haskell library instead of installing and using coreutils package
+* Platform independent (Linux/MacOS/Windows)
+* Concurrency support
+
 ## Input and output objects
 
 The utilities must be written as Haskell functions that take an input object
