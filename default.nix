@@ -47,7 +47,7 @@ let haskellPackages =
                         #  } {})
                         (let src = fetchGit {
                             url = "git@github.com:composewell/streamly.git";
-                            rev = "cbccb7777792cb4bf8dd8716929f4e28ea6cf718";
+                            rev = "efa19570f8ef93650faab12b400043fde2c88390";
                         }; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
@@ -57,26 +57,34 @@ let haskellPackages =
                             enableLibraryProfiling = false;
                             doHaddock = false;
                           });
+
                     streamly-core =
                       nixpkgs.haskell.lib.overrideCabal
                         (let src = fetchGit {
                             url = "git@github.com:composewell/streamly.git";
-                            rev = "cbccb7777792cb4bf8dd8716929f4e28ea6cf718";
+                            rev = "efa19570f8ef93650faab12b400043fde2c88390";
                         }; in super.callCabal2nix "streamly-core" "${src}/core" {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
                               then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
                               else [];
-                            #enableLibraryProfiling = false;
+                            enableLibraryProfiling = false;
                             doHaddock = false;
                           });
+
+                    unicode-data =
+                      super.callHackageDirect
+                        { pkg = "unicode-data";
+                          ver = "0.3.0";
+                          sha256 = "sha256-3R8ZmLoN/oWU0Mr/V4o/90NqiWaE8fprVULgh8/s/Uc=";
+                        } {};
 
                     streamly-process =
                       nixpkgs.haskell.lib.overrideCabal
                         (let src = fetchGit {
                             url = "git@github.com:composewell/streamly-process.git";
-                            rev = "e8aef97965f3d89bb1d4e50564b69572db2e8a8a";
+                            rev = "e310c8a9c6e61515373a2f5f1fb82f6e15fe452b";
                             ref = "master";
                         }; in super.callCabal2nix "streamly-process" src {})
                       #  (super.callHackageDirect
@@ -102,7 +110,7 @@ let haskellPackages =
               license = "BSD-3-Clause";
 
               executableHaskellDepends = with drv; [
-                streamly-process
+                unicode-data
               ];
             };
 
