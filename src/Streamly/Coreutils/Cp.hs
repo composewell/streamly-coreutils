@@ -22,7 +22,6 @@ module Streamly.Coreutils.Cp
 where
 
 import Control.Monad (when)
-import Data.Default.Class (Default(..))
 import Data.Function ((&))
 #if !defined (CABAL_OS_WINDOWS)
 import System.Posix.Files (createLink)
@@ -67,17 +66,23 @@ data Cp = Cp
     , optCopyMethod :: CpMethod
     }
 
-instance Default Cp where
-    def = Cp
-        { optOverwrite = OverwriteAlways
-        , optCopyMethod = CopyContents
-        }
+defaultOptions :: Cp
+defaultOptions = Cp
+    { optOverwrite = OverwriteAlways
+    , optCopyMethod = CopyContents
+    }
 
 -- | Specify the overwrite behavior. See 'Overwrite'.
+--
+-- Default is 'OverwriteAlways'.
+--
 cpOverwrite :: CpOverwrite -> Cp -> Cp
 cpOverwrite opt options = options { optOverwrite = opt }
 
 -- | Specify the copy method.
+--
+-- Default is 'CopyContents'.
+--
 cpMethod :: CpMethod -> Cp -> Cp
 cpMethod opt options = options { optCopyMethod = opt }
 
@@ -108,8 +113,9 @@ cpShouldOverwrite option src dest =
             then test src =<< isNewerThan dest
             else return True
 
--- | @cp options source destination@. Copy a file or directory.
-cp :: Cp -> FilePath -> FilePath -> IO ()
-cp options src dest = do
+-- | @cp option-modifier source destination@. Copy a file or directory.
+cp :: (Cp -> Cp) -> FilePath -> FilePath -> IO ()
+cp f src dest = do
+    let options = f defaultOptions
     r <- cpShouldOverwrite (optOverwrite options) src dest
     when r $ cpCopy (optCopyMethod options) src dest
