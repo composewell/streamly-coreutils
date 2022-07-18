@@ -231,6 +231,8 @@ predicate p = FileTest (Predicate p)
 isExisting :: FileTest
 isExisting = FileTest (Predicate (const True))
 
+-- XXX In all documentation write "if file exists and ..."
+
 -- | True if file has a size greater than zero.
 --
 -- Like coreutil @test -s file@
@@ -320,83 +322,67 @@ isSticky :: FileTest
 isSticky = undefined
     --FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode))
 
--- XXX To implement these we need to check:
---
--- If we are owner, file is readable by owner
--- else check if we can read it via group membership
--- else if the file has permissions for others
+hasPermissions :: (FileMode, FileMode, FileMode) -> FilePath -> IO FileTest
+hasPermissions (user, group, other) path = do
+    -- XXX We are stating the file twice, ideally we should do it only
+    -- once. Maybe we can use monadic predicates to avoid that.
+    isOwner <- testM path ownerMatchesEUID
+    if isOwner
+    then return $ FileTest $ hasMode user
+    else do
+        isGroup <- testM path groupMatchesEGID
+        if isGroup
+        then return $ FileTest $ hasMode group
+        else return $ FileTest $ hasMode other
 
--- | True if file exists and is readable.
+-- XXX It's odd to use the filepath twice to use this predicate.
+-- e.g. testM path (isReadable path)
+
+-- | True if file exists and is readable for the current user.
 --
 -- Like coreutil @test -r file@
 --
 -- /Pre-release/
-
-isAccessible :: (FileMode, FileMode, FileMode) -> FilePath -> IO FileTest
-isAccessible (onr, grp, oth) path =  do
-    ownerIDMatch <- ownerMatchesEUID
-    groupIDMatch <- groupMatchesEGID
-    let ownerPerm = FileTest $ hasMode onr
-        groupPerm = FileTest $ hasMode grp
-        otherPerm = FileTest $ hasMode oth
-    ownerHasPermission <- test path ownerPerm
-    groupHasPermission <- test path groupPerm
-    isOwner <- test path ownerIDMatch
-    isGroup <- test path groupIDMatch
-    return $
-        if (isOwner && not ownerHasPermission) ||
-            (isGroup && not groupHasPermission)
-        then FileTest (Predicate $ const False)
-        else otherPerm
-
--- | True if file exists and readable to the owner, group or others.
--- If the process euid is same as uderid and owner read permission is
--- not set then user can't read the file even the group and others
--- has read permissions.
---
--- /Pre-release/
 isReadable :: FilePath -> IO FileTest
 isReadable =
-    isAccessible
+    hasPermissions
         (
           Files.ownerReadMode
         , Files.groupReadMode
         , Files.otherReadMode
         )
 
--- | True if file exists and writable to the owner, group or others.
--- If the process euid is same as uderid and owner write permission is
--- not set then user can't write the file even the group and others
--- has write permissions.
--- The file is not writable on a read-only file system even if
--- this test indicates true.
+-- | True if file exists and is writable for the current user.
+--
+-- Note that the file is not writable on a read-only file system even if this
+-- test indicates true.
+--
+-- Like coreutil @test -w file@
 --
 -- /Pre-release/
 isWritable :: FilePath -> IO FileTest
 isWritable =
-    isAccessible
+    hasPermissions
         (
           Files.ownerWriteMode
         , Files.groupWriteMode
         , Files.otherWriteMode
         )
 
--- | True if file exists and excutable to the owner, group or others.
--- If the process euid is same as uderid and owner excute permission is
--- not set then user can't execute the file even the group and others
--- has execute permissions.
--- If file is a directory, true
--- indicates that file can be searched.
+-- | True if file exists and is excutable for the current user.
+--
+-- Like coreutil @test -x file@
 --
 -- /Pre-release/
 isExecutable :: FilePath -> IO FileTest
 isExecutable =
-    isAccessible
+    hasPermissions
         (
           Files.ownerExecuteMode
         , Files.groupExecuteMode
         , Files.otherExecuteMode
         )
+
 -- | True if file exists and its owner matches the effective
 -- user id of this process.
 --
@@ -517,6 +503,7 @@ compareFileSizeWith cmp n =
         let COff size = Files.fileSize st
          in cmp size n
 
+-- XXX Should use Int or Int64?
 isSmallerThan :: Int64 -> IO FileTest
 isSmallerThan = compareFileSizeWith (<)
 
