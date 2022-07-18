@@ -104,7 +104,6 @@ library
     , time >= 1.9 && < 1.14
     , unix >= 2.7.0 && < 2.8
     , directory >= 1.2.2 && < 1.4
-    , data-default-class >= 0.1 && < 0.2
   hs-source-dirs:      src
   exposed-modules:
       Streamly.Coreutils
