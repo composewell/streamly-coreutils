@@ -6,7 +6,7 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Predicates to test certain properties of a file.
+-- A predicate DSL to filter files based on their properties.
 --
 -- Combine predicates for the same file and test those in one go for good
 -- performance.
@@ -17,6 +17,16 @@
 -- functionality. That leaves only file test routines. The routines provided in
 -- this module have a one to one correspondence with the @test@ utility.
 
+-- Design Notes:
+--
+-- "unix" package provides accessor functions for FileStatus.  Why not get the
+-- FileStatus and use those directly for testing properties of a file?
+-- Predicates are easier to understand and can wrap high level logic e.g.
+-- compare the file size with the size of another file. Predicates are easy to
+-- combine efficiently without worrying about passing around the FileStatus
+-- structure or accessing it multiple times.  It is easier to make predicates
+-- OS independent.
+--
 -- XXX This is for POSIX but some of it could be applicable to Windows as well.
 -- Should we create a platform independent abstraction too?
 
@@ -43,59 +53,70 @@ module Streamly.Coreutils.FileTest
 
     -- ** General
     , isExisting
-    , isNotEmpty
+    , isHardLinkOf
 
     -- ** File Type
     , isDir
     , isFile
     , isSymLink
-    , isChar
-    , isBlock
+    , isCharDevice
+    , isBlockDevice
     , isPipe
     , isSocket
     , isTerminalFD
 
     -- ** File Permissions
+    -- *** For current user
     , isReadable
     , isWritable
     , isExecutable
-    , isSticky
-    , isSetUID
-    , isSetGID
-    , ownerMatchesEUID
-    , groupMatchesEGID
 
-    -- ** Comparing with other files
-    , isNewerThan
-    , isOlderThan
-    , isSameFile
+    -- *** Mode check
+    -- , mkMode -- quasiquoters?
+    -- , hasMode
+    , hasSticky
+    , hasSetUID
+    , hasSetGID
 
-    -- ** Comparing access time with current time
-    , isAccessedBefore
-    , isAccessedWithin
-    -- ** Comparing modifications time with current time
-    , isModifiedBefore
-    , isModifiedWithin
-    -- ** Comparing size in bytes
-    , isSmallerThan
-    , isLargerThan
+    -- ** File Ownership
+    , isOwnedByEUID
+    , isOwnedByEGID
+
+    --, isOwnedByUser
+    --, isOwnedByUid
+    --, isOwnedByGroup
+    --, isOwnedByGid
+
+    -- ** File size
+    -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
     , hasSize
+    , cmpSize
 
-    -- ** Comparing size with a reference file
-    , isSmallerThanFile
-    , isLargerThanFile
-    , hasSizeSameAs
+    -- ** File times
+    -- XXX Need convenient time units and conversions (e.g. sec 5,
+    -- "2022-01-01")
+
+    -- *** File age
+    , hasAccessAge
+    , hasModifyAge
+    -- , hasCreateAge
+
+    -- *** File timestamp
+    , hasModifyTime
+
+    -- *** Compare timestamps with file
+    , cmpModifyTime
     )
 where
 
 import Control.Exception (catch, throwIO)
+import Control.Monad (when)
 import Data.Bits ((.&.))
 import Data.Int (Int64)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
-import Foreign.C.Types (CTime(CTime))
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
-import System.Posix.Types (Fd, EpochTime, COff(..), FileMode)
+import System.Posix.Types (Fd, COff(..), FileMode)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.User as User
 import qualified System.Posix.Files as Files
@@ -190,6 +211,10 @@ negM = fmap neg
 --
 -- | Run a predicate on a 'FilePath'. Returns 'True' if the file exists and
 -- the predicate is 'True' otherwise returns 'False'.
+--
+-- Fails with exception if the directory entry of the file is not accessible
+-- due to lack of permissions in the path.
+--
 test :: FilePath -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) =
     (Files.getFileStatus path >>= return . f) `catch` eatENOENT
@@ -232,12 +257,6 @@ predicate p = FileTest (Predicate p)
 isExisting :: FileTest
 isExisting = FileTest (Predicate (const True))
 
--- | True if file has a size greater than zero.
---
--- Like coreutil @test -s file@
-isNotEmpty :: FileTest
-isNotEmpty = FileTest (Predicate (\st -> Files.fileSize st > 0))
-
 ---------------
 -- Type of file
 ---------------
@@ -263,14 +282,14 @@ isSymLink = FileTest (Predicate Files.isSymbolicLink)
 -- | True if file is a block special file.
 --
 -- Like the coreutil @test -b file@.
-isBlock :: FileTest
-isBlock = FileTest (Predicate Files.isBlockDevice)
+isBlockDevice :: FileTest
+isBlockDevice = FileTest (Predicate Files.isBlockDevice)
 
 -- | True if is a character special file.
 --
 -- Like @test -c file:
-isChar :: FileTest
-isChar = FileTest (Predicate Files.isCharacterDevice)
+isCharDevice :: FileTest
+isCharDevice = FileTest (Predicate Files.isCharacterDevice)
 
 -- | True if file is a named pipe (FIFO).
 --
@@ -305,33 +324,33 @@ hasMode mode = Predicate (\st -> (Files.fileMode st .&. mode) == mode)
 -- | True if the file has set user ID flag is set.
 --
 -- Like coreutil @test -u file@
-isSetUID :: FileTest
-isSetUID = FileTest $ hasMode Files.setUserIDMode
+hasSetUID :: FileTest
+hasSetUID = FileTest $ hasMode Files.setUserIDMode
 
 -- | True if the file has set group ID flag is set.
 --
 -- Like coreutil @test -g file@
-isSetGID :: FileTest
-isSetGID = FileTest $ hasMode  Files.setGroupIDMode
+hasSetGID :: FileTest
+hasSetGID = FileTest $ hasMode Files.setGroupIDMode
 
 -- | True if file has sticky bit is set.
 --
 -- Like coreutil @test -k file@
 --
 -- /Unimplemented/
-isSticky :: FileTest
-isSticky = undefined
+hasSticky :: FileTest
+hasSticky = undefined
     --FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode))
 
 hasPermissions :: (FileMode, FileMode, FileMode) -> FilePath -> IO FileTest
 hasPermissions (user, group, other) path = do
     -- XXX We are stating the file twice, ideally we should do it only
     -- once. Maybe we can use monadic predicates to avoid that.
-    isOwner <- testM path ownerMatchesEUID
+    isOwner <- testM path isOwnedByEUID
     if isOwner
     then return $ FileTest $ hasMode user
     else do
-        isGroup <- testM path groupMatchesEGID
+        isGroup <- testM path isOwnedByEGID
         if isGroup
         then return $ FileTest $ hasMode group
         else return $ FileTest $ hasMode other
@@ -389,8 +408,8 @@ isExecutable =
 -- Like coreutil @test -O file@
 --
 -- /Unimplemented/
-ownerMatchesEUID  :: IO FileTest
-ownerMatchesEUID  =
+isOwnedByEUID  :: IO FileTest
+isOwnedByEUID =
     FileTest . Predicate . f <$> User.getEffectiveUserID
 
     where
@@ -403,8 +422,8 @@ ownerMatchesEUID  =
 -- Like coreutil @test -G file@
 --
 -- /Unimplemented/
-groupMatchesEGID :: IO FileTest
-groupMatchesEGID =
+isOwnedByEGID :: IO FileTest
+isOwnedByEGID =
     FileTest . Predicate . f <$> User.getEffectiveGroupID
 
     where
@@ -415,128 +434,96 @@ groupMatchesEGID =
 -- Comparing with other files
 ------------------------------
 
--- | Returns the result of the comparison function with provided file's
--- modification time as second argument and the that of the file being tested as
--- the first argument
---
-compareModTime :: (POSIXTime -> POSIXTime -> Bool) -> FilePath -> IO FileTest
-compareModTime cmp path = do
+compareTime ::
+       (FileStatus -> POSIXTime)
+    -> (POSIXTime -> POSIXTime -> Bool)
+    -> POSIXTime
+    -> FileTest
+compareTime getFileTime cmp t =
+    FileTest (Predicate (\st -> getFileTime st `cmp` t))
+
+-- | Compare the modification time of the file with a timestamp.
+hasModifyTime ::
+    (POSIXTime -> POSIXTime -> Bool) -> POSIXTime -> FileTest
+hasModifyTime = compareTime Files.modificationTimeHiRes
+
+compareTimeWith ::
+       (FileStatus -> POSIXTime)
+    -> (POSIXTime -> POSIXTime -> Bool)
+    -> FilePath
+    -> IO FileTest
+compareTimeWith getFileTime cmp path = do
     st <- Files.getFileStatus path
-    return $ FileTest (Predicate ( `f` st))
+    return $ compareTime getFileTime cmp (getFileTime st)
 
-    where
+-- | Compare the modification time of the file with the modification time of
+-- another file.
+cmpModifyTime ::
+    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> IO FileTest
+cmpModifyTime = compareTimeWith Files.modificationTimeHiRes
 
-    f st1 st2 =
-        let t1 = Files.modificationTimeHiRes st1
-            t2 = Files.modificationTimeHiRes st2
-        in t1 `cmp` t2
-
--- | True if the file being tested is newer than the provided file path.
---
--- Like the coreutil @test file1 -nt file2@
-isNewerThan :: FilePath -> IO FileTest
-isNewerThan = compareModTime (>)
-
--- | True if the file being tested is older than the provided file path.
---
--- Like coreutil @test file1 -ot file2@.
-isOlderThan :: FilePath -> IO FileTest
-isOlderThan = compareModTime (<)
-
--- | True if file1 and file2 exist and refer to the same file.
+-- | True if file1 and file2 exist and have the same device id and inode.
 --
 -- Like coreutil @test file1 -ef file2@.
-isSameFile :: FilePath -> IO FileTest
-isSameFile = undefined
+isHardLinkOf :: FilePath -> IO FileTest
+isHardLinkOf = undefined
 
-getLocalTime :: IO MilliSecond64
+getLocalTime :: IO TimeSpec
 getLocalTime = fromAbsTime <$> getTime Realtime
 
-compareFileStatusNsecondsBefore ::
-       (MilliSecond64 -> MilliSecond64 -> Bool)
-    -> (FileStatus -> EpochTime)
+compareAge ::
+       (FileStatus -> POSIXTime)
+    -> (POSIXTime -> POSIXTime -> Bool)
     -> Double
     -> IO FileTest
-compareFileStatusNsecondsBefore cmp getFileTime sec  =
-    FileTest . Predicate . f <$> getLocalTime
+compareAge getFileTime cmp ageSec = do
+    when (ageSec < 0) $ error "compareAge: age cannot be negative"
+
+    ts <- getLocalTime
+    let now = timespecToPosixTime ts
+        age = doubleToPosixTime ageSec
+    return $ compareTime getFileTime cmp (now - age)
 
     where
 
-    f ct st =
-        let CTime at = getFileTime st
-            touchedInMsecbefore = (ct - MilliSecond64 (at * 1000))
-         in cmp touchedInMsecbefore $ MilliSecond64 (round $ sec * 1000)
+    timespecToPosixTime (TimeSpec s ns) =
+        (fromIntegral s) + (fromIntegral ns) * 1E-9
 
--- | A file is accessed less than n seconds before the current time.
--- /Pre-release/
-isAccessedBefore :: Double -> IO FileTest
-isAccessedBefore =
-    compareFileStatusNsecondsBefore (<) Files.accessTime
+    -- XXX handle negative double value?
+    doubleToPosixTime :: Double -> POSIXTime
+    doubleToPosixTime sec =
+        let s = floor sec
+            ns = round $ (sec - fromIntegral s) * 1E9
+         in timespecToPosixTime (TimeSpec s ns)
 
--- | A file is accessed more than or equal to n seconds before
--- the current time.
--- /Pre-release/
-isAccessedWithin :: Double -> IO FileTest
-isAccessedWithin =
-    compareFileStatusNsecondsBefore (>=) Files.accessTime
+-- XXX Use a -> a -> Bool instead
+hasAccessAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasAccessAge = compareAge Files.accessTimeHiRes
 
--- | A file is modified less than n seconds before the current time.
--- /Pre-release/
-isModifiedBefore :: Double -> IO FileTest
-isModifiedBefore =
-    compareFileStatusNsecondsBefore (<) Files.modificationTime
+hasModifyAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasModifyAge = compareAge Files.modificationTimeHiRes
 
--- | A file is modified more than or equal to n seconds before
--- the current time.
--- /Pre-release/
-isModifiedWithin :: Double -> IO FileTest
-isModifiedWithin =
-    compareFileStatusNsecondsBefore (>=) Files.modificationTime
-
-compareFileSizeWith :: (Int64 -> Int64 -> Bool) -> Int64 -> IO FileTest
-compareFileSizeWith cmp n =
-    return $ FileTest (Predicate f)
-
-    where
-
-    f st =
-        let COff size = Files.fileSize st
-         in cmp size n
+{-
+-- See https://unix.stackexchange.com/questions/91197/how-to-find-creation-date-of-file
+hasCreateAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasCreateAge = undefined
+-}
 
 -- XXX Should use Int or Int64?
 
--- | True if the file size is smaller than the specified size.
-isSmallerThan :: Int64 -> IO FileTest
-isSmallerThan = compareFileSizeWith (<)
+getSize :: FileStatus -> Int64
+getSize st = let COff size = Files.fileSize st in size
 
--- | True if the file size is larger than the specified size.
-isLargerThan :: Int64 -> IO FileTest
-isLargerThan = compareFileSizeWith (>)
+-- | Compare the file size with the supplied size.
+--
+-- Coreutil @test -s file@ would be @hasSize (/=) 0@
+--
+hasSize :: (Int64 -> Int64 -> Bool) -> Int64 -> FileTest
+hasSize cmp n = FileTest (Predicate (\st -> getSize st `cmp` n))
 
--- | True if the file size is equal to the specified size.
-hasSize :: Int64 -> IO FileTest
-hasSize = compareFileSizeWith (==)
-
-compareFileSizeWithRef :: (Int64 -> Int64 -> Bool) -> FilePath -> IO FileTest
-compareFileSizeWithRef cmp refPath = do
-    st <- Files.getFileStatus refPath
-    let COff size = Files.fileSize st
-    return $ FileTest (Predicate (f size))
-
-    where
-
-    f sizeRef st =
-        let COff size = Files.fileSize st
-         in cmp size sizeRef
-
--- | True if the file size is smaller than the specified file's size.
-isSmallerThanFile :: FilePath -> IO FileTest
-isSmallerThanFile = compareFileSizeWithRef (<)
-
--- | True if the file size is larger than the specified file's size.
-isLargerThanFile :: FilePath -> IO FileTest
-isLargerThanFile = compareFileSizeWithRef (>)
-
--- | True if the file size is equal to the specified file's size.
-hasSizeSameAs  :: FilePath -> IO FileTest
-hasSizeSameAs  = compareFileSizeWithRef (==)
+-- | Compare the file size with the size of another file.
+--
+cmpSize :: (Int64 -> Int64 -> Bool) -> FilePath -> IO FileTest
+cmpSize cmp path = do
+    st <- Files.getFileStatus path
+    return $ hasSize cmp (getSize st)

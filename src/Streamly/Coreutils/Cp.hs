@@ -110,7 +110,7 @@ cpShouldOverwrite option src dest =
         OverwriteUpdate -> do
             r <- test dest isExisting
             if r
-            then test src =<< isNewerThan dest
+            then test src =<< cmpModifyTime (>) dest
             else return True
 
 -- | @cp option-modifier source destination@. Copy a file or directory.
