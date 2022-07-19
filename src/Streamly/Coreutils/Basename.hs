@@ -29,10 +29,9 @@ suffix opt cfg = cfg {keepSuffix = opt}
 defaultConfig :: Basename
 defaultConfig = Basename On
 
-basename :: (Basename -> Basename) -> FilePath -> IO String
-basename f path = do
+basename :: (Basename -> Basename) -> FilePath -> String
+basename f path =
     let opt = f defaultConfig
-    return $
-        case keepSuffix opt of
+        in case keepSuffix opt of
             Off -> takeBaseName path
             On -> takeFileName path
