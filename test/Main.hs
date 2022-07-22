@@ -26,6 +26,28 @@ gen c n = S.unfoldr step (0, True)
     step (1, flg) = Just (' ', (2, flg))
     step (i, flg) = Just (c, (i + 1, flg))
 
+-- TODO: rm tests. Compare rm with GNU rm for the following cases:
+--
+-- * rm
+-- * rm (force Force)
+-- * rm (force Nuke)
+--
+-- * rm (recursive On)
+-- * rm (force Force . recursive On)
+-- * rm (force Nuke . recursive On)
+--
+-- * File/dir with
+--      * rwx
+--      * rw-
+--      * r-x
+--      * r--
+--      * ---
+--  * Dir cases
+--      * Empty dir
+--      * Dir with file (different permission modes on dir and file)
+--      * Dir with subdir (different permission modes on dir and subdir)
+--  * File parent dirs not having permissions
+--  * File owned by someone else
 
 main :: IO ()
 main = do
