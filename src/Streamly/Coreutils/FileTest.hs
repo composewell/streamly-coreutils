@@ -43,7 +43,7 @@ module Streamly.Coreutils.FileTest
 
     -- ** General
     , isExisting
-    , isNonNull
+    , isNotEmpty
 
     -- ** File Type
     , isDir
@@ -235,8 +235,8 @@ isExisting = FileTest (Predicate (const True))
 -- | True if file has a size greater than zero.
 --
 -- Like coreutil @test -s file@
-isNonNull :: FileTest
-isNonNull = FileTest (Predicate (\st -> Files.fileSize st > 0))
+isNotEmpty :: FileTest
+isNotEmpty = FileTest (Predicate (\st -> Files.fileSize st > 0))
 
 ---------------
 -- Type of file
