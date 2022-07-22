@@ -25,7 +25,7 @@ module Streamly.Coreutils.FileTest
     -- * File Test Predicate Type
       FileTest
 
-    -- * Boolean Operations
+    -- * Predicate Combinators
     , neg
     , negM
     , and
@@ -188,7 +188,8 @@ negM = fmap neg
 
 -- XXX Use a byte array instead of string filepath.
 --
--- | Run a predicate on a 'FilePath'. Returns False if the path does not exist.
+-- | Run a predicate on a 'FilePath'. Returns 'True' if the file exists and
+-- the predicate is 'True' otherwise returns 'False'.
 test :: FilePath -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) =
     (Files.getFileStatus path >>= return . f) `catch` eatENOENT
@@ -231,8 +232,6 @@ predicate p = FileTest (Predicate p)
 isExisting :: FileTest
 isExisting = FileTest (Predicate (const True))
 
--- XXX In all documentation write "if file exists and ..."
-
 -- | True if file has a size greater than zero.
 --
 -- Like coreutil @test -s file@
@@ -243,31 +242,31 @@ isNonNull = FileTest (Predicate (\st -> Files.fileSize st > 0))
 -- Type of file
 ---------------
 
--- | True if file exists and is a directory.
+-- | True if file is a directory.
 --
 -- Like @test -d file@
 isDir :: FileTest
 isDir = FileTest (Predicate Files.isDirectory)
 
--- | True if file exists and is a regular file.
+-- | True if file is a regular file.
 --
 -- Like coreutil @test -f file@
 isFile :: FileTest
 isFile = FileTest (Predicate Files.isRegularFile)
 
--- | True if file exists and is a symbolic link.
+-- | True if file is a symbolic link.
 --
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest
 isSymLink = FileTest (Predicate Files.isSymbolicLink)
 
--- | True if file exists and is a block special file.
+-- | True if file is a block special file.
 --
 -- Like the coreutil @test -b file@.
 isBlock :: FileTest
 isBlock = FileTest (Predicate Files.isBlockDevice)
 
--- | True if file exists and is a character special file.
+-- | True if is a character special file.
 --
 -- Like @test -c file:
 isChar :: FileTest
@@ -279,7 +278,7 @@ isChar = FileTest (Predicate Files.isCharacterDevice)
 isPipe :: FileTest
 isPipe = FileTest (Predicate Files.isNamedPipe)
 
--- | True if file exists and is a socket.
+-- | True if file is a socket.
 --
 -- Like coreutil @test -S file@
 isSocket :: FileTest
@@ -298,22 +297,24 @@ isTerminalFD = undefined
 -- Permissions
 ---------------
 
+-- | True if the file has specified permission mode.
+--
 hasMode :: FileMode -> Predicate FileStatus
 hasMode mode = Predicate (\st -> (Files.fileMode st .&. mode) == mode)
 
--- | True if file exists and its set user ID flag is set.
+-- | True if the file has set user ID flag is set.
 --
 -- Like coreutil @test -u file@
 isSetUID :: FileTest
 isSetUID = FileTest $ hasMode Files.setUserIDMode
 
--- | True if file exists and its set group ID flag is set.
+-- | True if the file has set group ID flag is set.
 --
 -- Like coreutil @test -g file@
 isSetGID :: FileTest
 isSetGID = FileTest $ hasMode  Files.setGroupIDMode
 
--- | True if file exists and its sticky bit is set.
+-- | True if file has sticky bit is set.
 --
 -- Like coreutil @test -k file@
 --
@@ -338,7 +339,7 @@ hasPermissions (user, group, other) path = do
 -- XXX It's odd to use the filepath twice to use this predicate.
 -- e.g. testM path (isReadable path)
 
--- | True if file exists and is readable for the current user.
+-- | True if the file is readable for the current user.
 --
 -- Like coreutil @test -r file@
 --
@@ -352,7 +353,7 @@ isReadable =
         , Files.otherReadMode
         )
 
--- | True if file exists and is writable for the current user.
+-- | True if the file is writable for the current user.
 --
 -- Note that the file is not writable on a read-only file system even if this
 -- test indicates true.
@@ -369,7 +370,7 @@ isWritable =
         , Files.otherWriteMode
         )
 
--- | True if file exists and is excutable for the current user.
+-- | True if the file is executable for the current user.
 --
 -- Like coreutil @test -x file@
 --
@@ -383,8 +384,7 @@ isExecutable =
         , Files.otherExecuteMode
         )
 
--- | True if file exists and its owner matches the effective
--- user id of this process.
+-- | True if the file owner matches the effective user id of this process.
 --
 -- Like coreutil @test -O file@
 --
@@ -504,12 +504,16 @@ compareFileSizeWith cmp n =
          in cmp size n
 
 -- XXX Should use Int or Int64?
+
+-- | True if the file size is smaller than the specified size.
 isSmallerThan :: Int64 -> IO FileTest
 isSmallerThan = compareFileSizeWith (<)
 
+-- | True if the file size is larger than the specified size.
 isLargerThan :: Int64 -> IO FileTest
 isLargerThan = compareFileSizeWith (>)
 
+-- | True if the file size is equal to the specified size.
 hasSize :: Int64 -> IO FileTest
 hasSize = compareFileSizeWith (==)
 
@@ -525,11 +529,14 @@ compareFileSizeWithRef cmp refPath = do
         let COff size = Files.fileSize st
          in cmp size sizeRef
 
+-- | True if the file size is smaller than the specified file's size.
 isSmallerThanFile :: FilePath -> IO FileTest
 isSmallerThanFile = compareFileSizeWithRef (<)
 
+-- | True if the file size is larger than the specified file's size.
 isLargerThanFile :: FilePath -> IO FileTest
 isLargerThanFile = compareFileSizeWithRef (>)
 
+-- | True if the file size is equal to the specified file's size.
 hasSizeSameAs  :: FilePath -> IO FileTest
 hasSizeSameAs  = compareFileSizeWithRef (==)
