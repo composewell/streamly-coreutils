@@ -118,6 +118,7 @@ library
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.Ls
     , Streamly.Coreutils.String
+    , Streamly.Coreutils.RealPath
     , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Sleep
     , Streamly.Coreutils.Uniq
