@@ -6,3 +6,4 @@ cabal.project
 cabal.project.user
 cabal.project.Werror
 default.nix
+hie.yaml

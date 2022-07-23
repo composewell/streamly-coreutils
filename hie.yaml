@@ -1,0 +1,11 @@
+cradle:
+  multi:
+    - path: "./"
+      config:
+        cradle:
+          cabal:
+            - path: "./src"
+              component: "lib:streamly-coreutils"
+dependencies:
+  - streamly-coreutils.cabal
+  - hie.yaml
