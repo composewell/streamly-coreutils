@@ -20,7 +20,7 @@ module Streamly.Coreutils.Rm
 where
 
 import Streamly.Coreutils.Common (Switch(..))
-import Streamly.Coreutils.FileTest (isExisting, test, testM, isDir, isWritable)
+import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
 import System.Directory
     ( removeFile
     , removeDirectoryRecursive
@@ -71,7 +71,7 @@ rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
 rmFileWith rmfile options path = do
     case rmForce options of
         None -> do
-            writable <- testM path (isWritable path)
+            writable <- test path isWritable
             if writable
             then rmfile path
             else

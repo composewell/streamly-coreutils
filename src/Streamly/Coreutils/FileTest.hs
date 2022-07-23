@@ -37,15 +37,11 @@ module Streamly.Coreutils.FileTest
 
     -- * Predicate Combinators
     , neg
-    , negM
     , and
-    , andM
     , or
-    , orM
 
     -- * Running Predicates
     , test
-    , testM
     , testFD
 
     -- * Predicates
@@ -125,21 +121,16 @@ import Prelude hiding (and, or)
 import Streamly.Internal.Data.Time.Clock
 import Streamly.Internal.Data.Time.Units
 
-#if MIN_VERSION_base(4,12,0)
-import Data.Functor.Contravariant (Predicate(..))
-#else
+newtype Predicate m a =
+    Predicate (a -> m Bool)
 
-newtype Predicate a =
-    Predicate (a -> Bool)
+instance Applicative m => Semigroup (Predicate m a) where
+    Predicate p1 <> Predicate p2 =
+        Predicate $ \a -> (&&) <$> p1 a <*> p2 a
 
-instance Semigroup (Predicate a) where
-    Predicate p1 <> Predicate p2 = Predicate $ \a -> p1 a && p2 a
-
-instance Monoid (Predicate a) where
-    mempty = Predicate $ \_ -> True
+instance Applicative m => Monoid (Predicate m a) where
+    mempty = Predicate $ \_ -> pure True
     mappend = (<>)
-
-#endif
 
 -- $setup
 -- >>> import Prelude hiding (or, and)
@@ -152,20 +143,17 @@ instance Monoid (Predicate a) where
 -- The 'Semigroup' instance acts as boolean @&&@. The 'Monoid' instance uses
 -- 'True' as 'mempty'.
 --
-newtype FileTest = FileTest (Predicate FileStatus) deriving (Semigroup, Monoid)
+newtype FileTest =
+    FileTest (Predicate IO FileStatus) deriving (Semigroup, Monoid)
+
+-- XXX Rename to or_, and_, not_?
+-- XXX Make these work on a list rather than binary?
 
 -- | A boolean @or@ function for 'FileTest' predicates.
 --
 or :: FileTest -> FileTest -> FileTest
-FileTest (Predicate p) `or` FileTest (Predicate q) =
-    FileTest (Predicate $ \a -> p a || q a)
-
--- | Like `or` but for monadic predicates.
---
--- >>> orM t1 t2 = pure or <*> t1 <*> t2
---
-orM :: IO FileTest -> IO FileTest -> IO FileTest
-orM t1 t2 = pure or <*> t1 <*> t2
+or (FileTest (Predicate p)) (FileTest (Predicate q)) =
+    FileTest (Predicate $ \a -> (||) <$> p a <*> q a)
 
 -- | A boolean @and@ function for 'FileTest' predicates.
 --
@@ -173,13 +161,6 @@ orM t1 t2 = pure or <*> t1 <*> t2
 --
 and :: FileTest -> FileTest -> FileTest
 and = (<>)
-
--- | Like `and` but for monadic predicates.
---
--- >>> andM t1 t2 = pure and <*> t1 <*> t2
---
-andM :: IO FileTest -> IO FileTest -> IO FileTest
-andM t1 t2 = pure and <*> t1 <*> t2
 
 -- Naming notes: I would prefer to use "not" instead of "neg" but this has to
 -- be used unqualified to remain short for common use and prelude "not" is also
@@ -198,18 +179,11 @@ andM t1 t2 = pure and <*> t1 <*> t2
 -- >>> and = (<>)
 --
 neg :: FileTest -> FileTest
-neg (FileTest (Predicate p)) = FileTest (Predicate $ \a -> Prelude.not (p a))
-
--- | Like `neg` but for monadic predicates.
---
--- >>> negM = fmap neg
---
-negM :: IO FileTest -> IO FileTest
-negM = fmap neg
+neg (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 
 -- XXX Use a byte array instead of string filepath.
 --
--- | Run a predicate on a 'FilePath'. Returns 'True' if the file exists and
+-- | Apply a predicate to a 'FilePath'. Returns 'True' if the file exists and
 -- the predicate is 'True' otherwise returns 'False'.
 --
 -- Fails with exception if the directory entry of the file is not accessible
@@ -217,7 +191,7 @@ negM = fmap neg
 --
 test :: FilePath -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) =
-    (Files.getFileStatus path >>= return . f) `catch` eatENOENT
+    (Files.getFileStatus path >>= f) `catch` eatENOENT
 
     where
 
@@ -231,31 +205,35 @@ test path (FileTest (Predicate f)) =
 
     eatENOENT e = if isENOENT e then return False else throwIO e
 
--- | Like 'test' but for a monadic predicate.
---
--- >>> testM path t = test path =<< t
---
-testM :: FilePath -> IO FileTest -> IO Bool
-testM path t = test path =<< t
+-- | Apply a predicate to 'FileStatus'.
+apply :: FileStatus -> FileTest -> IO Bool
+apply st (FileTest (Predicate f)) = f st
 
 -- XXX Use Handle instead
 -- | Like 'test' but uses a file descriptor instead of file path.
 testFD :: Fd -> FileTest -> IO Bool
-testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= return . f
+testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= f
 
 -- | Convert a @FileStatus -> Bool@ type of function to a 'FileTest' predicate.
 predicate :: (FileStatus -> Bool) -> FileTest
-predicate p = FileTest (Predicate p)
+predicate p = FileTest (Predicate (pure . p))
+
+-- | Convert a @FileStatus -> IO Bool@ type of function to a 'FileTest'
+-- predicate.
+predicateM :: (FileStatus -> IO Bool) -> FileTest
+predicateM p = FileTest (Predicate p)
 
 --------------------
 -- Global properties
 --------------------
 
+-- XXX Drop the "is" from the predicates, like in parsers.
+
 -- | True if file exists.
 --
 -- Like coreutil @test -e file@
 isExisting :: FileTest
-isExisting = FileTest (Predicate (const True))
+isExisting = predicate (const True)
 
 ---------------
 -- Type of file
@@ -265,43 +243,43 @@ isExisting = FileTest (Predicate (const True))
 --
 -- Like @test -d file@
 isDir :: FileTest
-isDir = FileTest (Predicate Files.isDirectory)
+isDir = predicate Files.isDirectory
 
 -- | True if file is a regular file.
 --
 -- Like coreutil @test -f file@
 isFile :: FileTest
-isFile = FileTest (Predicate Files.isRegularFile)
+isFile = predicate Files.isRegularFile
 
 -- | True if file is a symbolic link.
 --
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest
-isSymLink = FileTest (Predicate Files.isSymbolicLink)
+isSymLink = predicate Files.isSymbolicLink
 
 -- | True if file is a block special file.
 --
 -- Like the coreutil @test -b file@.
 isBlockDevice :: FileTest
-isBlockDevice = FileTest (Predicate Files.isBlockDevice)
+isBlockDevice = predicate Files.isBlockDevice
 
 -- | True if is a character special file.
 --
 -- Like @test -c file:
 isCharDevice :: FileTest
-isCharDevice = FileTest (Predicate Files.isCharacterDevice)
+isCharDevice = predicate Files.isCharacterDevice
 
 -- | True if file is a named pipe (FIFO).
 --
 -- Like coreutil @test  -p file@
 isPipe :: FileTest
-isPipe = FileTest (Predicate Files.isNamedPipe)
+isPipe = predicate Files.isNamedPipe
 
 -- | True if file is a socket.
 --
 -- Like coreutil @test -S file@
 isSocket :: FileTest
-isSocket = FileTest (Predicate Files.isSocket)
+isSocket = predicate Files.isSocket
 
 -- | True if the file whose file descriptor number is
 -- file_descriptor is open and is associated with a terminal.
@@ -318,20 +296,20 @@ isTerminalFD = undefined
 
 -- | True if the file has specified permission mode.
 --
-hasMode :: FileMode -> Predicate FileStatus
-hasMode mode = Predicate (\st -> (Files.fileMode st .&. mode) == mode)
+hasMode :: FileMode -> FileTest
+hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
 
 -- | True if the file has set user ID flag is set.
 --
 -- Like coreutil @test -u file@
 hasSetUID :: FileTest
-hasSetUID = FileTest $ hasMode Files.setUserIDMode
+hasSetUID = hasMode Files.setUserIDMode
 
 -- | True if the file has set group ID flag is set.
 --
 -- Like coreutil @test -g file@
 hasSetGID :: FileTest
-hasSetGID = FileTest $ hasMode Files.setGroupIDMode
+hasSetGID = hasMode Files.setGroupIDMode
 
 -- | True if file has sticky bit is set.
 --
@@ -340,30 +318,44 @@ hasSetGID = FileTest $ hasMode Files.setGroupIDMode
 -- /Unimplemented/
 hasSticky :: FileTest
 hasSticky = undefined
-    --FileTest (Predicate (\st -> Files.fileMode st == Files.stickyMode))
 
-hasPermissions :: (FileMode, FileMode, FileMode) -> FilePath -> IO FileTest
-hasPermissions (user, group, other) path = do
-    -- XXX We are stating the file twice, ideally we should do it only
-    -- once. Maybe we can use monadic predicates to avoid that.
-    isOwner <- testM path isOwnedByEUID
+-- | True if the file owner matches the effective user id of this process.
+--
+-- Like coreutil @test -O file@
+--
+-- /Unimplemented/
+isOwnedByEUID  :: FileTest
+isOwnedByEUID = predicateM $ \st ->
+    (Files.fileOwner st ==) <$> User.getEffectiveUserID
+
+-- | True if file exists and its group matches the effective
+-- group id of this process.
+--
+-- Like coreutil @test -G file@
+--
+-- /Unimplemented/
+isOwnedByEGID :: FileTest
+isOwnedByEGID = predicateM $ \st ->
+    (Files.fileGroup st ==) <$> User.getEffectiveGroupID
+
+hasPermissions :: (FileMode, FileMode, FileMode) -> FileTest
+hasPermissions (user, group, other) = predicateM $ \st -> do
+    isOwner <- apply st isOwnedByEUID
+    let checkMode = apply st . hasMode
     if isOwner
-    then return $ FileTest $ hasMode user
+    then checkMode user
     else do
-        isGroup <- testM path isOwnedByEGID
+        isGroup <- apply st isOwnedByEGID
         if isGroup
-        then return $ FileTest $ hasMode group
-        else return $ FileTest $ hasMode other
-
--- XXX It's odd to use the filepath twice to use this predicate.
--- e.g. testM path (isReadable path)
+        then checkMode group
+        else checkMode other
 
 -- | True if the file is readable for the current user.
 --
 -- Like coreutil @test -r file@
 --
 -- /Pre-release/
-isReadable :: FilePath -> IO FileTest
+isReadable :: FileTest
 isReadable =
     hasPermissions
         (
@@ -380,7 +372,7 @@ isReadable =
 -- Like coreutil @test -w file@
 --
 -- /Pre-release/
-isWritable :: FilePath -> IO FileTest
+isWritable :: FileTest
 isWritable =
     hasPermissions
         (
@@ -394,7 +386,7 @@ isWritable =
 -- Like coreutil @test -x file@
 --
 -- /Pre-release/
-isExecutable :: FilePath -> IO FileTest
+isExecutable :: FileTest
 isExecutable =
     hasPermissions
         (
@@ -402,33 +394,6 @@ isExecutable =
         , Files.groupExecuteMode
         , Files.otherExecuteMode
         )
-
--- | True if the file owner matches the effective user id of this process.
---
--- Like coreutil @test -O file@
---
--- /Unimplemented/
-isOwnedByEUID  :: IO FileTest
-isOwnedByEUID =
-    FileTest . Predicate . f <$> User.getEffectiveUserID
-
-    where
-
-    f euid st = Files.fileOwner st == euid
-
--- | True if file exists and its group matches the effective
--- group id of this process.
---
--- Like coreutil @test -G file@
---
--- /Unimplemented/
-isOwnedByEGID :: IO FileTest
-isOwnedByEGID =
-    FileTest . Predicate . f <$> User.getEffectiveGroupID
-
-    where
-
-    f guid st = Files.fileGroup st == guid
 
 ------------------------------
 -- Comparing with other files
@@ -439,8 +404,7 @@ compareTime ::
     -> (POSIXTime -> POSIXTime -> Bool)
     -> POSIXTime
     -> FileTest
-compareTime getFileTime cmp t =
-    FileTest (Predicate (\st -> getFileTime st `cmp` t))
+compareTime getFileTime cmp t = predicate (\st -> getFileTime st `cmp` t)
 
 -- | Compare the modification time of the file with a timestamp.
 hasModifyTime ::
@@ -451,21 +415,21 @@ compareTimeWith ::
        (FileStatus -> POSIXTime)
     -> (POSIXTime -> POSIXTime -> Bool)
     -> FilePath
-    -> IO FileTest
-compareTimeWith getFileTime cmp path = do
-    st <- Files.getFileStatus path
-    return $ compareTime getFileTime cmp (getFileTime st)
+    -> FileTest
+compareTimeWith getFileTime cmp path = predicateM $ \st -> do
+    st1 <- Files.getFileStatus path
+    apply st $ compareTime getFileTime cmp (getFileTime st1)
 
 -- | Compare the modification time of the file with the modification time of
 -- another file.
 cmpModifyTime ::
-    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> IO FileTest
+    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
 cmpModifyTime = compareTimeWith Files.modificationTimeHiRes
 
 -- | True if file1 and file2 exist and have the same device id and inode.
 --
 -- Like coreutil @test file1 -ef file2@.
-isHardLinkOf :: FilePath -> IO FileTest
+isHardLinkOf :: FilePath -> FileTest
 isHardLinkOf = undefined
 
 getLocalTime :: IO TimeSpec
@@ -475,19 +439,19 @@ compareAge ::
        (FileStatus -> POSIXTime)
     -> (POSIXTime -> POSIXTime -> Bool)
     -> Double
-    -> IO FileTest
-compareAge getFileTime cmp ageSec = do
+    -> FileTest
+compareAge getFileTime cmp ageSec = predicateM $ \st -> do
     when (ageSec < 0) $ error "compareAge: age cannot be negative"
 
     ts <- getLocalTime
     let now = timespecToPosixTime ts
         age = doubleToPosixTime ageSec
-    return $ compareTime getFileTime (flip cmp) (now - age)
+    apply st $ compareTime getFileTime (flip cmp) (now - age)
 
     where
 
     timespecToPosixTime (TimeSpec s ns) =
-        (fromIntegral s) + (fromIntegral ns) * 1E-9
+        fromIntegral s + fromIntegral ns * 1E-9
 
     -- XXX handle negative double value?
     doubleToPosixTime :: Double -> POSIXTime
@@ -497,15 +461,15 @@ compareAge getFileTime cmp ageSec = do
          in timespecToPosixTime (TimeSpec s ns)
 
 -- XXX Use a -> a -> Bool instead
-hasAccessAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasAccessAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
 hasAccessAge = compareAge Files.accessTimeHiRes
 
-hasModifyAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasModifyAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
 hasModifyAge = compareAge Files.modificationTimeHiRes
 
 {-
 -- See https://unix.stackexchange.com/questions/91197/how-to-find-creation-date-of-file
-hasCreateAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> IO FileTest
+hasCreateAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
 hasCreateAge = undefined
 -}
 
@@ -519,11 +483,11 @@ getSize st = let COff size = Files.fileSize st in size
 -- Coreutil @test -s file@ would be @hasSize (/=) 0@
 --
 hasSize :: (Int64 -> Int64 -> Bool) -> Int64 -> FileTest
-hasSize cmp n = FileTest (Predicate (\st -> getSize st `cmp` n))
+hasSize cmp n = predicate (\st -> getSize st `cmp` n)
 
 -- | Compare the file size with the size of another file.
 --
-cmpSize :: (Int64 -> Int64 -> Bool) -> FilePath -> IO FileTest
-cmpSize cmp path = do
-    st <- Files.getFileStatus path
-    return $ hasSize cmp (getSize st)
+cmpSize :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest
+cmpSize cmp path = predicateM $ \st -> do
+    st1 <- Files.getFileStatus path
+    apply st $ hasSize cmp (getSize st1)
