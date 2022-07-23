@@ -19,7 +19,7 @@ module Streamly.Coreutils.Touch
     )
 where
 
-import Control.Monad (when, unless)
+import Control.Monad (unless)
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
 import System.IO (openFile, IOMode(WriteMode), hClose)
@@ -35,18 +35,37 @@ data Touch = Touch
 defaultConfig :: Touch
 defaultConfig = Touch On On
 
+-- | Default is 'On'.
 followLinks :: Switch -> Touch -> Touch
 followLinks opt cfg = cfg {deRef = opt}
 
+-- | Default is 'On'.
 create :: Switch -> Touch -> Touch
 create opt cfg = cfg {createNew = opt}
 
-touch :: (Touch ->Touch) -> FilePath -> IO ()
+-- | If the file does not exist create it only if both followLinks and create
+-- are set to 'On'.
+--
+-- If the file or symbolic link exists then update the access and modification
+-- times. If 'followLinks' is 'On' then the link target is updated otherwise
+-- the symbolic link itself is updated.
+--
+-- Fails if the parent directories in the path do not exist or if there is no
+-- permission to access a path component.
+--
+-- Defaults:
+--
+-- * create On
+-- * followLinks On
+--
+touch :: (Touch -> Touch) -> FilePath -> IO ()
 touch f path = do
     let opt = f defaultConfig
-    when (createNew opt == On) $ do
+    if (createNew opt == On && deRef opt == On)
+    then do
         found <- test path isExisting
         unless found $ openFile path WriteMode >>= hClose
-    case deRef opt of
-        On -> Posix.touchFile path
-        Off -> Posix.touchSymbolicLink path
+    else
+        case deRef opt of
+            On -> Posix.touchFile path
+            Off -> Posix.touchSymbolicLink path
