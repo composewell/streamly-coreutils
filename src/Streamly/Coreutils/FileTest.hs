@@ -482,7 +482,7 @@ compareAge getFileTime cmp ageSec = do
     ts <- getLocalTime
     let now = timespecToPosixTime ts
         age = doubleToPosixTime ageSec
-    return $ compareTime getFileTime cmp (now - age)
+    return $ compareTime getFileTime (flip cmp) (now - age)
 
     where
 
