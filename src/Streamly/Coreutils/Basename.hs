@@ -7,31 +7,42 @@
 -- Portability : GHC
 --
 -- Return pathe with any leading directory components removed.
--- If specified, also remove a trailing suffix (.extension).
+-- If specified, also remove a trailing suffix.
 
 module Streamly.Coreutils.Basename
     ( basename
+    , basenameWith
 
     -- * Options
     , Basename
+    , Suffix(..)
     , suffix
     )
 where
 
-import System.FilePath (takeBaseName, takeFileName)
-import Streamly.Coreutils.Common (Switch(..))
+import Data.List (stripPrefix)
 
-newtype Basename = Basename {keepSuffix :: Switch}
+data Suffix = None | Suffix [Char]
 
-suffix :: Switch -> Basename -> Basename
-suffix opt cfg = cfg {keepSuffix = opt}
+newtype Basename = Basename {removeSuffix :: Suffix}
+
+suffix :: Suffix -> Basename -> Basename
+suffix opt cfg = cfg {removeSuffix = opt}
 
 defaultConfig :: Basename
-defaultConfig = Basename On
+defaultConfig = Basename None
 
-basename :: (Basename -> Basename) -> FilePath -> String
-basename f path =
+basenameWith :: (Basename -> Basename) -> FilePath -> String
+basenameWith f path =
     let opt = f defaultConfig
-        in case keepSuffix opt of
-            Off -> takeBaseName path
-            On -> takeFileName path
+        base = reverse $ takeWhile (/= '/') $ reverse path
+        in case removeSuffix opt of
+            None -> base
+            Suffix x ->
+                let suf = reverse x
+                    val0 = stripPrefix suf $ takeWhile (/= '/') $ reverse path
+                    val = maybe base reverse val0
+                    in val
+
+basename :: FilePath -> String
+basename  = basenameWith id
