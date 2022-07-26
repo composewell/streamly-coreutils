@@ -11,6 +11,7 @@
 
 module Streamly.Coreutils.Chmod
     ( chmod
+    , perm
     )
 where
 
