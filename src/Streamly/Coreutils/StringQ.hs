@@ -22,7 +22,7 @@ import Control.Applicative (Alternative(..))
 import Control.Monad.Catch (MonadCatch)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Char (chr)
-import Data.Data (Data, Typeable)
+import Data.Data (Data)
 import Data.Default.Class (Default(..))
 import Language.Haskell.TH (Exp, Q, Pat)
 import Language.Haskell.TH.Quote (QuasiQuoter(..), dataToExpQ, dataToPatQ)
@@ -61,20 +61,20 @@ data Permissions = Permissions
   { readable :: Bool
   , writable :: Bool
   , executable :: Bool
-  } deriving (Eq, Ord, Read, Show, Typeable, Data)
+  } deriving (Eq, Ord, Read, Show, Data)
 
 data UserType =
       Owner
     | Group
     | Others
     | All
-        deriving (Eq, Ord, Read, Show, Typeable, Data)
+        deriving (Eq, Ord, Read, Show, Data)
 
 data UserTypePerm =
     UserTypePerm
     { utype :: UserType
     , permssions :: Permissions
-    } deriving (Eq, Ord, Read, Show, Typeable, Data)
+    } deriving (Eq, Ord, Read, Show, Data)
 
 instance Default Permissions where
     def = Permissions
