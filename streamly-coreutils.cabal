@@ -142,7 +142,6 @@ benchmark coreutils-bench
   build-depends:
       streamly-coreutils
     , streamly
-    , streamly-core     == 0.1.0
     , base              >= 4.8   && < 5
     , gauge             >= 0.2.4 && < 0.3
     , random            >= 1.0.0 && < 2
