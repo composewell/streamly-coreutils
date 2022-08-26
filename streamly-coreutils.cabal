@@ -101,6 +101,7 @@ library
     , exceptions >= 0.8  && < 0.11
     -- We use internal modules of streamly.
     , streamly == 0.9.0.*
+    , streamly-core == 0.1.0
     , time >= 1.9 && < 1.14
     , unix >= 2.7.0 && < 2.8
     , directory >= 1.2.2 && < 1.4
@@ -158,5 +159,6 @@ test-suite coreutils-test
   build-depends:
       streamly-coreutils
     , streamly
+    , streamly-core     == 0.1.0
     , base              >= 4.8   && < 5
   default-language: Haskell2010
