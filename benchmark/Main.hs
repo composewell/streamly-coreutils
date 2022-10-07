@@ -5,16 +5,17 @@ where
 import Control.Monad.IO.Class (MonadIO)
 
 import Gauge
-import Streamly.Prelude (IsStream, SerialT)
+import Streamly.Data.Stream (Stream)
 import System.Random
 import Streamly.Coreutils.Uniq
 
-import qualified Streamly.Prelude as S
+import qualified Streamly.Data.Stream as S
+import qualified Streamly.Data.Fold as Fold
 
 -- repeat (repeat str 1 n times then repeat str2 n times) l times
 {-# INLINE alternateStrings #-}
 alternateStrings ::
-       (IsStream t, MonadIO m) => Int -> Int -> String -> String -> t m String
+       MonadIO m => Int -> Int -> String -> String -> Stream m String
 alternateStrings l n str1 str2 = S.unfoldr step (l, Left (n - 1))
   where
     step (0, _) = Nothing
@@ -27,11 +28,11 @@ alternateStrings l n str1 str2 = S.unfoldr step (l, Left (n - 1))
 benchUniq ::
        Int
     -> String
-    -> (SerialT IO a -> SerialT IO b)
-    -> (Int -> SerialT IO a)
+    -> (Stream IO a -> Stream IO b)
+    -> (Int -> Stream IO a)
     -> Benchmark
 benchUniq i name transform src =
-    bench name $ nfIO $ randomRIO (i, i) >>= S.drain . transform . src
+    bench name $ nfIO $ randomRIO (i, i) >>= S.fold Fold.drain . transform . src
 
 -- XXX Should be improved a lot
 main :: IO ()

@@ -23,9 +23,10 @@ import Data.Function ((&))
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Internal.Data.Stream.Serial (SerialT)
 
-import qualified Streamly.Prelude as Stream
-import qualified Streamly.Internal.Data.Stream.IsStream as Stream
-       (iterateMapLeftsWith)
+-- XXX Use explicit concurrency instead
+import qualified Streamly.Prelude as Stream (ahead)
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Internal.Data.Stream as Stream (iterateMapLeftsWith)
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
@@ -39,7 +40,7 @@ recursive opt cfg = cfg {lsRecursive = opt}
 listDir :: String -> SerialT IO (Either String String)
 listDir dir =
       Dir.toEither dir
-    & Stream.map (bimap mkAbs mkAbs)
+    & fmap (bimap mkAbs mkAbs)
 
     where
 
