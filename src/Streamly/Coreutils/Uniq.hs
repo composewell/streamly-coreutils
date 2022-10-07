@@ -9,11 +9,14 @@ module Streamly.Coreutils.Uniq
     , uniqResultToString
     ) where
 
+import Control.Monad.Catch (MonadThrow)
 import Data.Char (isSpace, toLower)
-import Streamly.Prelude (IsStream)
+import Streamly.Data.Stream (Stream)
 
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Prelude as Stream
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Data.Parser as Parser
+import qualified Streamly.Internal.Data.Stream as Stream (parseMany)
 
 -- | Data type to capture the output of the stream - the stream should either be
 -- composed of unique, repeated, duplicate or all of the strings
@@ -164,12 +167,12 @@ compareUsingOptions opt =
 -- @since 0.1.0.0
 {-# INLINE getRepetition #-}
 getRepetition ::
-       (IsStream t, Monad m)
+       MonadThrow m
     => (String -> String -> Bool)
-    -> t m String
-    -> t m UniqResult
+    -> Stream m String
+    -> Stream m UniqResult
 getRepetition comparator =
-    Stream.groupsBy
+    Stream.parseMany $ Parser.groupBy
         comparator
         (Fold.foldl'
              (\(UniqResult i a) s ->
@@ -184,13 +187,13 @@ getRepetition comparator =
 --
 -- @since 0.1.0.0
 {-# INLINE uniq #-}
-uniq :: (IsStream t, Monad m) => UniqOptions -> t m String -> t m UniqResult
+uniq :: MonadThrow m => UniqOptions -> Stream m String -> Stream m UniqResult
 uniq opt strm =
     case (output opt) of
         Unique -> extract (eq 1)
         All -> extract (\_ -> True)
         Duplicate -> extract (ge 1)
-        Repeated -> Stream.map (\(UniqResult _ x) -> UniqResult 1 x) $ extract (ge 1)
+        Repeated -> (\(UniqResult _ x) -> UniqResult 1 x) <$> extract (ge 1)
   where
     eq n (UniqResult i _) = i == n
     ge n (UniqResult i _) = i > n
@@ -203,5 +206,5 @@ uniq opt strm =
 --
 -- @since 0.1.0.0
 {-# INLINE uniqResultToString #-}
-uniqResultToString :: (IsStream t, Monad m) => t m UniqResult -> t m String
+uniqResultToString :: Monad m => Stream m UniqResult -> Stream m String
 uniqResultToString = Stream.concatMap (\(UniqResult i x) -> Stream.replicate i x)
