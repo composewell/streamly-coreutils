@@ -16,7 +16,7 @@ import Streamly.Data.Stream (Stream)
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Parser as Parser
-import qualified Streamly.Internal.Data.Stream as Stream (parseMany)
+import qualified Streamly.Internal.Data.Stream as Stream (parseMany, rights)
 
 -- | Data type to capture the output of the stream - the stream should either be
 -- composed of unique, repeated, duplicate or all of the strings
@@ -172,14 +172,16 @@ getRepetition ::
     -> Stream m String
     -> Stream m UniqResult
 getRepetition comparator =
-    Stream.parseMany $ Parser.groupBy
-        comparator
-        (Fold.foldl'
-             (\(UniqResult i a) s ->
-                  if i == 0
-                  then UniqResult 1 s
-                  else UniqResult (i + 1) a)
-             (UniqResult 0 ""))
+    Stream.rights
+        . Stream.parseMany
+            (Parser.groupBy
+                comparator
+                (Fold.foldl'
+                    (\(UniqResult i a) s ->
+                        if i == 0
+                        then UniqResult 1 s
+                        else UniqResult (i + 1) a)
+                    (UniqResult 0 "")))
 
 -- | Generates a @UniqResult@ stream applying uniq on the input stream according
 -- to the the @UniqOptions@ specified.  When the output is @Repeated@, the @Int@
