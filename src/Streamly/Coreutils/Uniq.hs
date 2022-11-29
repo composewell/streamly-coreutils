@@ -16,7 +16,7 @@ import Streamly.Data.Stream (Stream)
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Parser as Parser
-import qualified Streamly.Internal.Data.Stream as Stream (parseMany, rights)
+import qualified Streamly.Internal.Data.Stream as Stream (rights)
 
 -- | Data type to capture the output of the stream - the stream should either be
 -- composed of unique, repeated, duplicate or all of the strings
