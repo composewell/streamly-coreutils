@@ -26,7 +26,6 @@ import Data.Foldable (asum)
 import Data.Maybe (fromMaybe)
 import Streamly.Internal.Data.Parser (Parser)
 
-import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Parser as Parser
 import qualified Streamly.Internal.Unicode.Char.Parser as Parser
@@ -37,7 +36,7 @@ import qualified Streamly.Internal.Unicode.Char.Parser as Parser
 
 -- | Match the input with the supplied string and return it if successful.
 string :: (MonadCatch m, Eq a) => [a] -> Parser a m [a]
-string s = s <$ Parser.eqBy (==) (Stream.fromList s)
+string s = s <$ Parser.listEqBy (==) s
 
 -- | Parse a single item of a series of items separated by the supplied
 -- separator.
@@ -67,7 +66,7 @@ space1 = Parser.takeWhile1 isSpace Fold.drain
 
 -- | Parse a char escaped by a backslash
 escapedChar :: MonadCatch m => Char -> Parser Char m Char
-escapedChar c = c <$ Parser.eqBy (==) (Stream.fromList ("\\" <> [c]))
+escapedChar c = c <$ Parser.listEqBy (==) ("\\" <> [c])
 
 -- | Take a non-space character, honor escaping of space.
 notSpace :: MonadCatch m => Parser Char m Char

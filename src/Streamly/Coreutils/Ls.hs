@@ -24,8 +24,8 @@ import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Data.Stream (Stream)
 
 import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Prelude as Stream (ahead)
 import qualified Streamly.Internal.Data.Stream as Stream (iterateMapLeftsWith)
-import qualified Streamly.Internal.Data.Stream.Concurrent as Concur
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
@@ -52,7 +52,4 @@ ls f dir = do
         Off -> listDir dir
         On ->
             let start = Stream.fromPure (Left ".")
-              in Stream.iterateMapLeftsWith combine listDir start
-
-    where
-    combine s1 s2 = Concur.parLazyOrdered [s1, s2]
+              in Stream.iterateMapLeftsWith Stream.ahead listDir start
