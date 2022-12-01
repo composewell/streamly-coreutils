@@ -91,7 +91,7 @@ cpMethod opt options = options { optCopyMethod = opt }
 cpCopy :: CpMethod -> FilePath -> FilePath -> IO ()
 cpCopy method src dest =
     case method of
-        CopyContents -> File.toChunks src & File.fromChunks dest
+        CopyContents -> File.readChunks src & File.fromChunks dest
 #if !defined (CABAL_OS_WINDOWS)
         HardLink ->
             createLink src dest

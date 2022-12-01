@@ -21,11 +21,10 @@ where
 import Data.Bifunctor (bimap)
 import Data.Function ((&))
 import Streamly.Coreutils.Common (Switch(..))
-import Streamly.Internal.Data.Stream.Serial (SerialT)
+import Streamly.Data.Stream (Stream)
 
--- XXX Use explicit concurrency instead
-import qualified Streamly.Prelude as Stream (ahead)
 import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.Prelude as Stream (ahead)
 import qualified Streamly.Internal.Data.Stream as Stream (iterateMapLeftsWith)
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
@@ -37,16 +36,16 @@ defaultConfig = Ls Off
 recursive :: Switch -> Ls -> Ls
 recursive opt cfg = cfg {lsRecursive = opt}
 
-listDir :: String -> SerialT IO (Either String String)
+listDir :: String -> Stream IO (Either String String)
 listDir dir =
-      Dir.toEither dir
+      Dir.readEither dir
     & fmap (bimap mkAbs mkAbs)
 
     where
 
     mkAbs x = dir ++ "/" ++ x
 
-ls :: (Ls -> Ls) -> String -> SerialT IO (Either String String)
+ls :: (Ls -> Ls) -> String -> Stream IO (Either String String)
 ls f dir = do
     let opt = f defaultConfig
     case lsRecursive opt of
