@@ -28,7 +28,7 @@ import Streamly.Internal.Data.Parser (Parser)
 
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Parser as Parser
-import qualified Streamly.Internal.Unicode.Char.Parser as Parser
+import qualified Streamly.Internal.Unicode.Parser as Parser
 
 -------------------------------------------------------------------------------
 -- Parsing utils
