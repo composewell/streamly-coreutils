@@ -21,11 +21,11 @@ where
 import Data.Bifunctor (bimap)
 import Data.Function ((&))
 import Streamly.Coreutils.Common (Switch(..))
-import Streamly.Data.Stream (Stream)
+import Streamly.Data.Stream.Prelude (Stream)
 
-import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.Prelude as Stream (ahead)
-import qualified Streamly.Internal.Data.Stream as Stream (iterateMapLeftsWith)
+import qualified Streamly.Data.Stream.Prelude as Stream
+import qualified Streamly.Internal.Data.Stream.Concurrent as Concur (ahead2)
+import qualified Streamly.Internal.Data.Stream as Stream (concatIterateWith)
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
@@ -48,8 +48,9 @@ listDir dir =
 ls :: (Ls -> Ls) -> String -> Stream IO (Either String String)
 ls f dir = do
     let opt = f defaultConfig
+        mapper = either Dir.readEitherPaths (const Stream.nil)
     case lsRecursive opt of
         Off -> listDir dir
         On ->
             let start = Stream.fromPure (Left ".")
-              in Stream.iterateMapLeftsWith Stream.ahead listDir start
+              in Stream.concatIterateWith Concur.ahead2 mapper start
