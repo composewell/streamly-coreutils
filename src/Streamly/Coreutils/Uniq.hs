@@ -12,7 +12,6 @@ module Streamly.Coreutils.Uniq
 import Control.Monad.Catch (MonadThrow)
 import Data.Char (isSpace, toLower)
 import Streamly.Data.Stream (Stream)
-import Streamly.Internal.Data.Stream (catRights)
 
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
@@ -172,7 +171,7 @@ getRepetition ::
     -> Stream m String
     -> Stream m UniqResult
 getRepetition comparator =
-    catRights
+    Stream.catRights
         . Stream.parseMany
             (Parser.groupBy
                 comparator
