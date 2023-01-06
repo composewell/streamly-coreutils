@@ -43,7 +43,7 @@ let
                       "/core";
                   streamly-process = utils.composewell super
                       "streamly-process"
-                      "fb45eedcd1320d552fb49048e1d733cbf5d46711";
+                      "f91ff9d53fe33c2207b8be24b2506e10b1ac0992";
             });
       });
 
