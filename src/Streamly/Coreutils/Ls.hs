@@ -24,8 +24,6 @@ import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Data.Stream.Prelude (Stream)
 
 import qualified Streamly.Data.Stream.Prelude as Stream
-import qualified Streamly.Internal.Data.Stream.Concurrent as Concur (ahead2)
-import qualified Streamly.Internal.Data.Stream as Stream (concatIterateWith)
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
@@ -53,4 +51,4 @@ ls f dir = do
         Off -> listDir dir
         On ->
             let start = Stream.fromPure (Left ".")
-              in Stream.concatIterateWith Concur.ahead2 mapper start
+              in Stream.parConcatIterate id mapper start
