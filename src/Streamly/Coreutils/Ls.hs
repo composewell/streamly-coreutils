@@ -18,12 +18,12 @@ module Streamly.Coreutils.Ls
     )
 where
 
-import Data.Bifunctor (bimap)
-import Data.Function ((&))
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Data.Stream.Prelude (Stream)
 
 import qualified Streamly.Data.Stream.Prelude as Stream
+import qualified Streamly.Internal.Data.Stream as Stream
+import qualified Streamly.Internal.Data.Unfold as Unfold
 import qualified Streamly.Internal.FileSystem.Dir as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
@@ -34,21 +34,20 @@ defaultConfig = Ls Off
 recursive :: Switch -> Ls -> Ls
 recursive opt cfg = cfg {lsRecursive = opt}
 
-listDir :: String -> Stream IO (Either String String)
-listDir dir =
-      Dir.readEither dir
-    & fmap (bimap mkAbs mkAbs)
+ls :: (Ls -> Ls) -> String -> Stream IO (Either String String)
+ls f dir = do
+    case lsRecursive (f defaultConfig) of
+        Off -> Dir.readEitherPaths dir
+        On ->
+            -- Stream.unfoldIterateDfs unfoldOne
+            -- BFS avoids opening too many file descriptors but may accumulate
+            -- more data in memory.
+            Stream.unfoldIterateBfs unfoldOne
+                --  $ Stream.parConcatIterate id streamOne
+                --  $ Stream.parConcatIterate (Stream.ordered True) streamOne
+                $ Stream.fromPure (Left ".")
 
     where
 
-    mkAbs x = dir ++ "/" ++ x
-
-ls :: (Ls -> Ls) -> String -> Stream IO (Either String String)
-ls f dir = do
-    let opt = f defaultConfig
-        mapper = either Dir.readEitherPaths (const Stream.nil)
-    case lsRecursive opt of
-        Off -> listDir dir
-        On ->
-            let start = Stream.fromPure (Left ".")
-              in Stream.parConcatIterate id mapper start
+    unfoldOne = Unfold.either Dir.eitherReaderPaths Unfold.nil
+    -- streamOne = either Dir.readEitherPaths (const Stream.nil)
