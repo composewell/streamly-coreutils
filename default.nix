@@ -36,14 +36,14 @@ let
                       utils.local super "streamly-coreutils" ./. "--benchmark" inShell;
                   streamly = utils.composewell super
                       "streamly"
-                      "769538d8d1dac434fe95dc3d4883c9d05f8ecdef";
+                      "3c3ec6de4831a8667c415393e1dbc351ba508dbe";
                   streamly-core = utils.composewellDir super
                       "streamly"
-                      "769538d8d1dac434fe95dc3d4883c9d05f8ecdef"
+                      "3c3ec6de4831a8667c415393e1dbc351ba508dbe"
                       "/core";
                   streamly-process = utils.composewell super
                       "streamly-process"
-                      "fb45eedcd1320d552fb49048e1d733cbf5d46711";
+                      "9fec548b25a56c5496aaefdf34ddab3bc172bfa0";
             });
       });
 
