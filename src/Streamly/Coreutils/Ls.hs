@@ -45,7 +45,7 @@ ls f dir = do
             Stream.unfoldIterateBfs unfoldOne
                 --  $ Stream.parConcatIterate id streamOne
                 --  $ Stream.parConcatIterate (Stream.ordered True) streamOne
-                $ Stream.fromPure (Left ".")
+                $ Stream.fromPure (Left dir)
 
     where
 
