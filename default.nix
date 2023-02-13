@@ -36,10 +36,10 @@ let
                       utils.local super "streamly-coreutils" ./. "--benchmark" inShell;
                   streamly = utils.composewell super
                       "streamly"
-                      "3c3ec6de4831a8667c415393e1dbc351ba508dbe";
+                      "96d222e45cf3aee9b6847c0d14fde967a760fee8";
                   streamly-core = utils.composewellDir super
                       "streamly"
-                      "3c3ec6de4831a8667c415393e1dbc351ba508dbe"
+                      "96d222e45cf3aee9b6847c0d14fde967a760fee8"
                       "/core";
                   streamly-process = utils.composewell super
                       "streamly-process"
