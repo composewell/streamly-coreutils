@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                streamly-coreutils
-version:             0.1.0.0
+version:             0.1.0
 synopsis:            GNU Coreutils like API for Streamly
 description:
    Port useful commands from the GNU `coreutils` to Haskell functions using
