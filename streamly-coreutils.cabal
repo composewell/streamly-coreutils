@@ -51,6 +51,9 @@ common compile-options
 
     if os(windows)
       ghc-options:    -Wno-missing-kind-signatures
+                      -Wno-unused-top-binds
+                      -Wno-unused-imports
+
 
     ghc-options:      -Weverything
                       -Wno-implicit-prelude
