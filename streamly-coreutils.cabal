@@ -53,6 +53,8 @@ common compile-options
       ghc-options:    -Wno-missing-kind-signatures
                       -Wno-unused-top-binds
                       -Wno-unused-imports
+                      -Wno-incomplete-patterns
+
 
 
     ghc-options:      -Weverything
