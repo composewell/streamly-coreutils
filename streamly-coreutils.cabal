@@ -49,6 +49,9 @@ common compile-options
     if os(windows)
       cpp-options:    -DCABAL_OS_WINDOWS
 
+    if os(windows)
+      ghc-options:    -Wno-missing-kind-signatures
+
     ghc-options:      -Weverything
                       -Wno-implicit-prelude
                       -Wno-prepositive-qualified-module
