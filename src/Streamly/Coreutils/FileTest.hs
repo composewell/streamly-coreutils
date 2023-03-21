@@ -49,6 +49,10 @@ module Streamly.Coreutils.FileTest
 
     -- * Running Predicates
     , test
+    , isDir
+    , isFile
+    , isSymLink
+#if defined(CABAL_OS_LINUX)
     , testFD
 
     -- * Predicates
@@ -58,9 +62,7 @@ module Streamly.Coreutils.FileTest
     , isHardLinkOf
 
     -- ** File Type
-    , isDir
-    , isFile
-    , isSymLink
+
     , isCharDevice
     , isBlockDevice
     , isPipe
@@ -90,9 +92,10 @@ module Streamly.Coreutils.FileTest
     --, isOwnedByGid
 
     -- ** File size
-    -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
     , hasSize
     , cmpSize
+    -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
+
 
     -- ** File times
     -- XXX Need convenient time units and conversions (e.g. sec 5,
@@ -108,6 +111,7 @@ module Streamly.Coreutils.FileTest
 
     -- *** Compare timestamps with file
     , cmpModifyTime
+#endif
     )
 where
 
@@ -118,10 +122,17 @@ import Data.Int (Int64)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
+#if defined(CABAL_OS_LINUX)
 import System.Posix.Types (Fd, COff(..), FileMode)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.User as User
 import qualified System.Posix.Files as Files
+#endif
+
+#if defined(CABAL_OS_WINDOWS)
+import System.PosixCompat.Files (FileStatus)
+import qualified System.PosixCompat.Files as Files
+#endif
 
 import Prelude hiding (and, or)
 import Streamly.Internal.Data.Time.Clock
@@ -206,8 +217,10 @@ apply st (FileTest (Predicate f)) = f st
 
 -- XXX Use Handle instead
 -- | Like 'test' but uses a file descriptor instead of file path.
+#if defined(CABAL_OS_LINUX)
 testFD :: Fd -> FileTest -> IO Bool
 testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= f
+#endif
 
 -- | Convert a @FileStatus -> Bool@ type of function to a 'FileTest' predicate.
 predicate :: (FileStatus -> Bool) -> FileTest
@@ -305,8 +318,10 @@ isTerminalFD = undefined
 
 -- | True if the file has specified permission mode.
 --
+#if defined(CABAL_OS_LINUX)
 hasMode :: FileMode -> FileTest
 hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
+
 
 -- | True if the file has set user ID flag is set.
 --
@@ -333,6 +348,7 @@ hasSticky = undefined
 -- Like coreutil @test -O file@
 --
 -- /Unimplemented/
+
 isOwnedByEUID  :: FileTest
 isOwnedByEUID = predicateM $ \st ->
     (Files.fileOwner st ==) <$> User.getEffectiveUserID
@@ -475,6 +491,7 @@ hasAccessAge = compareAge Files.accessTimeHiRes
 
 hasModifyAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
 hasModifyAge = compareAge Files.modificationTimeHiRes
+#endif
 
 {-
 -- See https://unix.stackexchange.com/questions/91197/how-to-find-creation-date-of-file
@@ -484,8 +501,10 @@ hasCreateAge = undefined
 
 -- XXX Should use Int or Int64?
 
+#if !defined (CABAL_OS_WINDOWS)
 getSize :: FileStatus -> Int64
 getSize st = let COff size = Files.fileSize st in size
+
 
 -- | Compare the file size with the supplied size.
 --
@@ -500,3 +519,4 @@ cmpSize :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest
 cmpSize cmp path = predicateM $ \st -> do
     st1 <- Files.getFileStatus path
     apply st $ hasSize cmp (getSize st1)
+#endif

@@ -26,7 +26,7 @@ import Data.Function ((&))
 #if !defined (CABAL_OS_WINDOWS)
 import System.Posix.Files (createLink)
 #endif
-
+import qualified System.Directory as Directory
 import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
@@ -101,6 +101,7 @@ cpCopy method src dest =
 
 -- | Determine whether source should be copied to destination based on the
 -- specified overwrite behavior option.
+#if !defined (CABAL_OS_WINDOWS)
 cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =
     case option of
@@ -119,3 +120,7 @@ cp f src dest = do
     let options = f defaultOptions
     r <- cpShouldOverwrite (optOverwrite options) src dest
     when r $ cpCopy (optCopyMethod options) src dest
+#else
+cp :: FilePath -> FilePath -> IO ()
+cp oldPath newPath = Directory.copyFile oldPath newPath
+#endif

@@ -12,6 +12,7 @@ module Streamly.Coreutils.Rm
     ( rm
 
     -- * Options
+
     , Rm
     , RmForce(..)
     , force
@@ -20,11 +21,17 @@ module Streamly.Coreutils.Rm
 where
 
 import Streamly.Coreutils.Common (Switch(..))
+#if !defined (CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
+#else
+import Streamly.Coreutils.FileTest (test, isDir)
+#endif
+
 import System.Directory
     ( removeFile
     , removeDirectoryRecursive
     , removePathForcibly
+    , doesFileExist
     )
 import Control.Monad (when)
 
@@ -67,10 +74,12 @@ force val cfg = cfg {rmForce = val}
 recursive :: Switch -> Rm -> Rm
 recursive sw cfg = cfg {rmRecursive = sw}
 
+
 rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
 rmFileWith rmfile options path = do
     case rmForce options of
         None -> do
+#if !defined (CABAL_OS_WINDOWS)
             writable <- test path isWritable
             if writable
             then rmfile path
@@ -78,6 +87,9 @@ rmFileWith rmfile options path = do
                 error
                     $ "rm: cannot remove "
                     ++ path ++ ": write-protected regular file"
+#else
+            rmfile path
+#endif
         _ -> rmfile path
 
 rmWith :: (FilePath -> IO ()) -> (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
@@ -93,12 +105,17 @@ rmWith rmdir rmfile options path = do
     -- might provide different error messages.
     else rmFileWith rmfile options path
 
+
 rm :: (Rm -> Rm) -> FilePath -> IO ()
 rm f path = do
     let options = f defaultConfig
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
+#if !defined (CABAL_OS_WINDOWS)
     found <- test path isExisting
+#else
+    found <- doesFileExist path
+#endif
     case rmForce options of
         Nuke ->
             when found
@@ -111,3 +128,4 @@ rm f path = do
             then rmWith removeDirectoryRecursive removeFile options path
             else error $ "rm: cannot remove " ++ path
                        ++ ": no such file or directory"
+

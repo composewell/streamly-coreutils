@@ -9,8 +9,7 @@
 -- create a link to TARGET with the given name
 
 module Streamly.Coreutils.Ln
-    (
-      ln
+    ( ln
 
     -- * Options
     , Ln
@@ -21,9 +20,16 @@ where
 
 import Control.Monad (when)
 import Streamly.Coreutils.Common (Switch(..))
+import qualified System.Directory as Directory
+#if !defined (CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest (test, isExisting)
+#else
+import Streamly.Coreutils.FileTest (test)
+#endif
 
+#if !defined (CABAL_OS_WINDOWS)
 import qualified System.Posix.Files as Posix
+#endif
 
 data Ln = Ln
     { lnForce :: Switch
@@ -39,6 +45,7 @@ force opt cfg = cfg {lnForce = opt}
 symbolic :: Switch -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
+#if !defined (CABAL_OS_WINDOWS)
 ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
@@ -52,3 +59,12 @@ ln f src tgt = do
     where
 
     msg = "ln: Link target exists, use force to create anyway"
+#else
+ln :: FilePath -> FilePath -> IO ()
+ln  src tgt = do
+    isDir <- Directory.doesDirectoryExist src
+    if isDir
+    then
+        Directory.createDirectoryLink src tgt
+    else Directory.createFileLink src tgt
+#endif
