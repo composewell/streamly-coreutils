@@ -22,7 +22,6 @@ where
 import Control.Monad (unless)
 import Streamly.Coreutils.Common (Switch(..))
 #if !defined (CABAL_OS_WINDOWS)
-import Streamly.Coreutils.FileTest (test, isExisting)
 import qualified System.Posix.Files as Posix
 #else
 import qualified System.Win32 as Win32

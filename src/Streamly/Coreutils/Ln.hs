@@ -20,15 +20,12 @@ where
 
 import Control.Monad (when)
 import Streamly.Coreutils.Common (Switch(..))
-import qualified System.Directory as Directory
 #if !defined (CABAL_OS_WINDOWS)
+import qualified System.Posix.Files as Posix
 import Streamly.Coreutils.FileTest (test, isExisting)
 #else
 import Streamly.Coreutils.FileTest (test)
-#endif
-
-#if !defined (CABAL_OS_WINDOWS)
-import qualified System.Posix.Files as Posix
+import qualified System.Directory as Directory
 #endif
 
 data Ln = Ln

@@ -25,8 +25,9 @@ import Control.Monad (when)
 import Data.Function ((&))
 #if !defined (CABAL_OS_WINDOWS)
 import System.Posix.Files (createLink)
-#endif
+#else
 import qualified System.Directory as Directory
+#endif
 import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
