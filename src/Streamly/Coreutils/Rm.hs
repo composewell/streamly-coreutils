@@ -25,13 +25,13 @@ import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
 #else
 import Streamly.Coreutils.FileTest (test, isDir)
+import System.Directory ( doesFileExist)
 #endif
 
 import System.Directory
     ( removeFile
     , removeDirectoryRecursive
     , removePathForcibly
-    , doesFileExist
     )
 import Control.Monad (when)
 
