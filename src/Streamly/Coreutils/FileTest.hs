@@ -52,7 +52,7 @@ module Streamly.Coreutils.FileTest
     , isDir
     , isFile
     , isSymLink
-#if defined(CABAL_OS_LINUX)
+#if !defined(CABAL_OS_WINDOWS)
     , testFD
 
     -- * Predicates
@@ -122,7 +122,7 @@ import Data.Int (Int64)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
-#if defined(CABAL_OS_LINUX)
+#if !defined(CABAL_OS_WINDOWS)
 import System.Posix.Types (Fd, COff(..), FileMode)
 import System.Posix.Files (FileStatus)
 import qualified System.Posix.User as User
@@ -217,7 +217,7 @@ apply st (FileTest (Predicate f)) = f st
 
 -- XXX Use Handle instead
 -- | Like 'test' but uses a file descriptor instead of file path.
-#if defined(CABAL_OS_LINUX)
+#if !defined(CABAL_OS_WINDOWS)
 testFD :: Fd -> FileTest -> IO Bool
 testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= f
 #endif
@@ -318,7 +318,7 @@ isTerminalFD = undefined
 
 -- | True if the file has specified permission mode.
 --
-#if defined(CABAL_OS_LINUX)
+#if !defined(CABAL_OS_WINDOWS)
 hasMode :: FileMode -> FileTest
 hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
 

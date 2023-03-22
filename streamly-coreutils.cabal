@@ -55,8 +55,6 @@ common compile-options
                       -Wno-unused-imports
                       -Wno-incomplete-patterns
 
-
-
     ghc-options:      -Weverything
                       -Wno-implicit-prelude
                       -Wno-prepositive-qualified-module
