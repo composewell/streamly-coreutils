@@ -55,8 +55,11 @@ module Streamly.Coreutils.FileTest
     , isFile
     , isSymLink
     , isExisting
-    , cmpModifyTime
     , isWritable
+
+    -- *** Compare timestamps with file
+    , cmpModifyTime
+
     -- TODO: Some of the following predicates can be made portable using the
     -- unix-compat package. The ones that cannot be made portable can be moved
     -- to a separate module - Streamly.Coreutils.FileTest.Posix.
@@ -113,9 +116,6 @@ module Streamly.Coreutils.FileTest
 
     -- *** File timestamp
     , hasModifyTime
-
-    -- *** Compare timestamps with file
-
 #endif
     )
 where
