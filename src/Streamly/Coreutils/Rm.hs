@@ -12,7 +12,6 @@ module Streamly.Coreutils.Rm
     ( rm
 
     -- * Options
-
     , Rm
     , RmForce(..)
     , force
@@ -74,7 +73,6 @@ force val cfg = cfg {rmForce = val}
 recursive :: Switch -> Rm -> Rm
 recursive sw cfg = cfg {rmRecursive = sw}
 
-
 rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
 rmFileWith rmfile options path = do
     case rmForce options of
@@ -105,7 +103,6 @@ rmWith rmdir rmfile options path = do
     -- might provide different error messages.
     else rmFileWith rmfile options path
 
-
 rm :: (Rm -> Rm) -> FilePath -> IO ()
 rm f path = do
     let options = f defaultConfig
@@ -128,4 +125,3 @@ rm f path = do
             then rmWith removeDirectoryRecursive removeFile options path
             else error $ "rm: cannot remove " ++ path
                        ++ ": no such file or directory"
-

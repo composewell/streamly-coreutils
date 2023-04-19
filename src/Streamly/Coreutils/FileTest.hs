@@ -6,16 +6,18 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- A predicate DSL to filter files based on their properties.
+-- A predicate DSL to filter files based on their properties. This module is
+-- portable across Linux, macOS and Windows platforms. For Posix specific
+-- APIs please see "Streamly.Coreutils.FileTest.Posix".
 --
--- Combine predicates for the same file and test those in one go for good
--- performance.
+-- For good performance, combine multiple predicates for the same file and test
+-- those in one go.
 --
--- This is just a convenience wrapper on top of the POSIX functions.  It covers
--- the functionality provided by the GNU coreutils @test@ utility.  String
--- testing is not provided as it can be trivially done using built-in Haskell
--- functionality. That leaves only file test routines. The routines provided in
--- this module have a one to one correspondence with the @test@ utility.
+-- This module covers a subset of the functionality provided by the GNU
+-- coreutils @test@ utility.  String testing is not provided as it can be
+-- trivially done using built-in Haskell functionality. That leaves only file
+-- test routines. The routines provided in this module have a one to one
+-- correspondence with the @test@ utility.
 
 -- Design Notes:
 --
@@ -121,16 +123,15 @@ import Data.Int (Int64)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
-#if !defined(CABAL_OS_WINDOWS)
-import System.Posix.Types (Fd, COff(..), FileMode)
-import System.Posix.Files (FileStatus)
-import qualified System.Posix.User as User
-import qualified System.Posix.Files as Files
-#endif
 
 #if defined(CABAL_OS_WINDOWS)
 import System.PosixCompat.Files (FileStatus)
 import qualified System.PosixCompat.Files as Files
+#else
+import System.Posix.Types (Fd, COff(..), FileMode)
+import System.Posix.Files (FileStatus)
+import qualified System.Posix.User as User
+import qualified System.Posix.Files as Files
 #endif
 
 import Prelude hiding (and, or)
