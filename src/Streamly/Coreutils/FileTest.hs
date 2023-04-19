@@ -92,10 +92,9 @@ module Streamly.Coreutils.FileTest
     --, isOwnedByGid
 
     -- ** File size
+    -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
     , hasSize
     , cmpSize
-    -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
-
 
     -- ** File times
     -- XXX Need convenient time units and conversions (e.g. sec 5,

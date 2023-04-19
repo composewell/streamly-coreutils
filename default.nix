@@ -40,6 +40,10 @@ let
                           ver = "0.1.0";
                           sha256 = "hoSV6Q2+X5a7hFnJAArqNPjcMaCVyX9Vz4FcxeJ+jgI=";
                         } {};
+                  #streamly-core = utils.composewellDir super
+                  #    "streamly"
+                  #    "9596aea3ab33d3c2fa513247fcfe8604bd7ff454"
+                  #    "/core";
                   streamly =
                       super.callHackageDirect
                         { pkg = "streamly";
@@ -49,10 +53,6 @@ let
                   #streamly = utils.composewell super
                   #    "streamly"
                   #    "9596aea3ab33d3c2fa513247fcfe8604bd7ff454";
-                  #streamly-core = utils.composewellDir super
-                  #    "streamly"
-                  #    "9596aea3ab33d3c2fa513247fcfe8604bd7ff454"
-                  #    "/core";
                   streamly-process = utils.composewell super
                       "streamly-process"
                       "d80b860d9d8ea98e4f7f63390442b3155c34dd08";
