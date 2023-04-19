@@ -35,8 +35,15 @@ module Streamly.Coreutils.FileTest
     -- * File Test Predicate Type
       FileTest
 
+    -- * Primitives
+    , predicate
+    , true
+    , false
+
     -- * Predicate Combinators
-    , neg
+    , not_
+    , and_
+    , or_
     , and
     , or
 
@@ -45,7 +52,6 @@ module Streamly.Coreutils.FileTest
     , testFD
 
     -- * Predicates
-    , predicate
 
     -- ** General
     , isExisting
@@ -124,62 +130,51 @@ import Streamly.Internal.Data.Time.Units
 newtype Predicate m a =
     Predicate (a -> m Bool)
 
-instance Applicative m => Semigroup (Predicate m a) where
-    Predicate p1 <> Predicate p2 =
-        Predicate $ \a -> (&&) <$> p1 a <*> p2 a
-
-instance Applicative m => Monoid (Predicate m a) where
-    mempty = Predicate $ \_ -> pure True
-    mappend = (<>)
-
 -- $setup
 -- >>> import Prelude hiding (or, and)
 
 -- Naming Notes: Named FileTest rather than "Test" to be more explicit and
 -- specific. The command can also be named fileTest or testFile.
+--
+-- We do not provide a Semigroup instance for the `and` operation because then
+-- we either do not have a similar op for `or` operation, or we need a newtype
+-- for that. So we just do not have it.
 
 -- | A predicate type for testing boolean statements about a file.
 --
--- The 'Semigroup' instance acts as boolean @&&@. The 'Monoid' instance uses
--- 'True' as 'mempty'.
---
 newtype FileTest =
-    FileTest (Predicate IO FileStatus) deriving (Semigroup, Monoid)
+    FileTest (Predicate IO FileStatus)
 
--- XXX Rename to or_, and_, not_?
--- XXX Make these work on a list rather than binary?
-
--- | A boolean @or@ function for 'FileTest' predicates.
+-- | A boolean @and@ function for combining two 'FileTest' predicates.
 --
-or :: FileTest -> FileTest -> FileTest
-or (FileTest (Predicate p)) (FileTest (Predicate q)) =
+and_ :: FileTest -> FileTest -> FileTest
+and_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
+    FileTest (Predicate $ \a -> (&&) <$> p a <*> q a)
+
+-- | A boolean @or@ function for combining two 'FileTest' predicates.
+--
+or_ :: FileTest -> FileTest -> FileTest
+or_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
     FileTest (Predicate $ \a -> (||) <$> p a <*> q a)
 
--- | A boolean @and@ function for 'FileTest' predicates.
+-- | A boolean @and@ for combining a list of 'FileTest' predicates.
 --
--- >>> and = (<>)
+-- >>> and = foldl and_ true
 --
-and :: FileTest -> FileTest -> FileTest
-and = (<>)
+and :: [FileTest] -> FileTest
+and = foldl and_ true
 
--- Naming notes: I would prefer to use "not" instead of "neg" but this has to
--- be used unqualified to remain short for common use and prelude "not" is also
--- very common so we do not want to conflict with that.
+-- | A boolean @and@ for combining a list of 'FileTest' predicates.
 --
--- XXX Should we have an IsBool type class in Data.Bool so that the boolean
--- operations (&&, ||, not) can be overloaded.
+-- >>> or = foldl or_ false
 --
--- class IsBool a where
---  not :: a -> a
---    (&&) :: a -> a -> a -- and
---    (||) :: a -> a -> a -- or
+or :: [FileTest] -> FileTest
+or = foldl or_ false
 
--- | A boolean @not@ function for 'FileTest' predicates.
+-- | A boolean @not@ function for combining two 'FileTest' predicates.
 --
--- >>> and = (<>)
---
-neg :: FileTest -> FileTest
-neg (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
+not_ :: FileTest -> FileTest
+not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 
 -- XXX Use a byte array instead of string filepath.
 --
@@ -222,6 +217,20 @@ predicate p = FileTest (Predicate (pure . p))
 -- predicate.
 predicateM :: (FileStatus -> IO Bool) -> FileTest
 predicateM p = FileTest (Predicate p)
+
+-- | A predicate which is always 'True'.
+--
+-- >>> true = predicate (const True)
+--
+true :: FileTest
+true = predicate (const True)
+
+-- | A predicate which is always 'False'.
+--
+-- >>> false = predicate (const False)
+--
+false :: FileTest
+false = predicate (const False)
 
 --------------------
 -- Global properties
