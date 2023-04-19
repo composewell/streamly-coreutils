@@ -9,12 +9,16 @@
 --
 -- change file mode bits.
 
+-- XXX Rename to "Permissions" or "AccessControl"
+
 module Streamly.Coreutils.StringQ
     (
-      perm
-    , UserType(..)
+      Role(..)
     , Permissions(..)
-    , UserTypePerm(..)
+    , setReadable
+    , setWritable
+    , setExecutable
+    , reset
     )
 where
 
@@ -31,9 +35,63 @@ import Streamly.Internal.Data.Parser (Parser)
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Parser as Parser
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
-import qualified Streamly.Internal.Unicode.Char.Parser as Parser
+import qualified Streamly.Internal.Unicode.Parser as Parser
 
-strParser :: MonadCatch m => Parser m Char String
+-------------------------------------------------------------------------------
+-- Permissions
+-------------------------------------------------------------------------------
+
+-- | Permissions for access control
+data Permissions = Permissions
+  { readable :: Bool
+  , writable :: Bool
+  , executable :: Bool
+  -- , searchable :: Bool -- for portability, keep it separate
+  } deriving (Eq, Ord, Read, Show, Data)
+
+{-
+defaultPermissions =
+    Permissions
+    { readable = False
+    , writable = False
+    , executable = False
+    }
+-}
+
+-- | Enable @read@ permission.
+setReadable :: Bool -> Permissions -> Permissions
+setReadable x perms = perms { readable = x }
+
+-- | Enable @write@ permission.
+setWritable :: Bool -> Permissions -> Permissions
+setWritable x perms = perms { writable = x }
+
+-- | Enable @execute@ permission.
+setExecutable :: Bool -> Permissions -> Permissions
+setExecutable x perms = perms { executable = x }
+
+-- | Disable all permissions.
+reset :: Permissions -> Permissions
+reset = setReadable False . setWritable False . setExecutable False
+
+-------------------------------------------------------------------------------
+-- Roles
+-------------------------------------------------------------------------------
+
+-- | Roles to whom access is granted.
+data Role =
+      Owner
+    | Group
+    | Others
+    | All
+        deriving (Eq, Ord, Read, Show, Data)
+
+-------------------------------------------------------------------------------
+-- Mode parser
+-------------------------------------------------------------------------------
+
+{-
+strParser :: MonadCatch m => Parser Char m String
 strParser =
     let ut = Parser.char 'u'
             <|> Parser.char 'g'
@@ -57,33 +115,7 @@ expandVars ln =
         Left _ -> fail "Parsing of perm quoted string failed."
         Right _ -> return ()
 
-data Permissions = Permissions
-  { readable :: Bool
-  , writable :: Bool
-  , executable :: Bool
-  } deriving (Eq, Ord, Read, Show, Data)
-
-data UserType =
-      Owner
-    | Group
-    | Others
-    | All
-        deriving (Eq, Ord, Read, Show, Data)
-
-data UserTypePerm =
-    UserTypePerm
-    { utype :: UserType
-    , permssions :: Permissions
-    } deriving (Eq, Ord, Read, Show, Data)
-
-instance Default Permissions where
-    def = Permissions
-        { readable = False
-        , writable = False
-        , executable = False
-        }
-
-parseExpr :: MonadIO m => String -> m UserTypePerm
+parseExpr :: MonadIO m => String -> m [(Role, Permissions)]
 parseExpr s = do
     liftIO $ expandVars s
     let ut = head s
@@ -119,15 +151,35 @@ quoteExprPat s = do
     expr <- parseExpr s
     dataToPatQ (const Nothing) expr
 
-perm :: QuasiQuoter
-perm =
+-- TODO: perms can have a single letter from the set ugo, in that case the
+-- existing permissions are copied from that role.
+
+-- When we get a "=" use 'reset', when we get a '+' use an operation with
+-- argument True, else use False.
+
+-- | The format of a symbolic mode is [roles][-+=][perms...], where roles is
+-- either zero or more letters from the set ugoa. perms is either zero or more
+-- letters from the set rwxXst. Multiple symbolic modes can be given, separated
+-- by commas.
+--
+-- Examples:
+--
+-- @
+-- -
+-- -rwx
+-- g-rx
+-- g-x+r
+-- go-x+rw
+-- go-x+rw,u+r
+-- @
+--
+-- If the role is omitted it is assumed to be 'a'.
+mode :: QuasiQuoter
+mode =
     QuasiQuoter
         { quoteExp = quoteExprExp
         , quotePat = quoteExprPat
-        , quoteType = notSupported
-        , quoteDec = notSupported
+        , quoteType = error "mode: quoteType not supported."
+        , quoteDec = error "mode: quoteDec not supported."
         }
-
-    where
-
-    notSupported = error "perm: Not supported."
+-}

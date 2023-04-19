@@ -51,7 +51,19 @@
 -- the owner? But we cannot do the same on windows.
 
 module Streamly.Coreutils.Chmod
-    ( chmod
+    (
+    -- * Roles
+      Role (..)
+
+    -- * Permissions
+    , Permissions
+    , setReadable
+    , setWritable
+    , setExecutable
+    , reset
+
+    -- * Chmod
+    , chmod
     )
 where
 
@@ -63,7 +75,7 @@ modifyBit :: Bool -> Posix.FileMode -> Posix.FileMode -> Posix.FileMode
 modifyBit False b m = m .&. complement b
 modifyBit True  b m = m .|. b
 
-chmodWith :: UserType -> Permissions -> FilePath -> IO ()
+chmodWith :: Role -> Permissions -> FilePath -> IO ()
 chmodWith utype (Permissions r w e) path = do
     case utype of
         Owner -> setOwnerPermissions
@@ -108,8 +120,16 @@ chmodWith utype (Permissions r w e) path = do
             setGroupPermissions
             setOthersPermissions
 
--- | Supports only override permissions bits
--- >> chmod [perm|a=rwx|] "a.txt"
+-- | Change the file permission modes for specified roles using the specified
+-- permission modifier functions.
 --
-chmod :: UserTypePerm -> FilePath -> IO ()
-chmod pat = chmodWith (utype pat) (permssions pat)
+-- You can use the @mode@ quasiquoter to build the mode conveniently, for
+-- example:
+--
+-- >> chmod [mode|a=rwx|] "a.txt"
+--
+chmod :: [(Role, Permissions -> Permissions)] -> FilePath -> IO ()
+-- To implement this, get the file mode. Transform the FileMode using the roles
+-- and permissions, and then use a single setFileMode call to set the mode in
+-- the end.
+chmod pat = undefined
