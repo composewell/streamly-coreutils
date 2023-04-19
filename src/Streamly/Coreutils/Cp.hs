@@ -102,6 +102,8 @@ cpCopy method src dest =
 
 -- | Determine whether source should be copied to destination based on the
 -- specified overwrite behavior option.
+-- TODO: if we make isExisting and cmpModifyTime portable then this code should
+-- become portable.
 #if !defined (CABAL_OS_WINDOWS)
 cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =

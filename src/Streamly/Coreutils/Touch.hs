@@ -66,12 +66,15 @@ touch f path = do
     let opt = f defaultConfig
     if (createNew opt == On && deRef opt == On)
     then do
+        -- TODO make isExisting portable instead.
         found <- Directory.doesFileExist path
         unless found $ openFile path WriteMode >>= hClose
     else
         case deRef opt of
 #if !defined (CABAL_OS_WINDOWS)
+            -- TODO: touchFile is available in unix-compat.
             On -> Posix.touchFile path
+            -- TODO: in case of windows this could be just touchFile
             Off -> Posix.touchSymbolicLink path
 #else
             _x -> do

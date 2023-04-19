@@ -54,6 +54,9 @@ module Streamly.Coreutils.FileTest
     , isDir
     , isFile
     , isSymLink
+    -- TODO: Some of the following predicates can be made portable using the
+    -- unix-compat package. The ones that cannot be made portable can be moved
+    -- to a separate module - Streamly.Coreutils.FileTest.Posix.
 #if !defined(CABAL_OS_WINDOWS)
     , testFD
 

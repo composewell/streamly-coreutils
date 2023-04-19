@@ -43,6 +43,8 @@ symbolic :: Switch -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
 #if !defined (CABAL_OS_WINDOWS)
+-- TODO we only need to make isExisting portable.
+-- and thn this code should work using unix-compat.
 ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig

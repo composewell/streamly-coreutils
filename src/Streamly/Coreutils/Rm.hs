@@ -78,6 +78,8 @@ rmFileWith rmfile options path = do
     case rmForce options of
         None -> do
 #if !defined (CABAL_OS_WINDOWS)
+        -- TODO: make isWritable portable, and this code should work for
+        -- windows as well.
             writable <- test path isWritable
             if writable
             then rmfile path
@@ -109,6 +111,7 @@ rm f path = do
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
 #if !defined (CABAL_OS_WINDOWS)
+    -- TODO make isExisting portable and remove windows specific code here.
     found <- test path isExisting
 #else
     found <- doesFileExist path
