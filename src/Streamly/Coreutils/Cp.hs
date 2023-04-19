@@ -25,8 +25,6 @@ import Control.Monad (when)
 import Data.Function ((&))
 #if !defined (CABAL_OS_WINDOWS)
 import System.Posix.Files (createLink)
-#else
-import qualified System.Directory as Directory
 #endif
 import qualified Streamly.Internal.FileSystem.File as File
 
@@ -96,6 +94,8 @@ cpCopy method src dest =
 #if !defined (CABAL_OS_WINDOWS)
         HardLink ->
             createLink src dest
+#else
+        HardLink -> error "Unimplemented"
 #endif
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
@@ -104,7 +104,7 @@ cpCopy method src dest =
 -- specified overwrite behavior option.
 -- TODO: if we make isExisting and cmpModifyTime portable then this code should
 -- become portable.
-#if !defined (CABAL_OS_WINDOWS)
+
 cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =
     case option of
@@ -123,7 +123,3 @@ cp f src dest = do
     let options = f defaultOptions
     r <- cpShouldOverwrite (optOverwrite options) src dest
     when r $ cpCopy (optCopyMethod options) src dest
-#else
-cp :: FilePath -> FilePath -> IO ()
-cp oldPath newPath = Directory.copyFile oldPath newPath
-#endif

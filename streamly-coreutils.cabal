@@ -111,8 +111,7 @@ library
       build-depends:  unix >= 2.7.0 && < 2.8
   else
       build-depends:  unix-compat >= 0.5.4  && < 0.8
-                    , Win32 >=2.5.0.0       && < 2.16.0
-
+                    
   hs-source-dirs:      src
   exposed-modules:
       Streamly.Coreutils

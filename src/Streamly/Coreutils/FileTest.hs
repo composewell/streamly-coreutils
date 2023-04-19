@@ -54,6 +54,9 @@ module Streamly.Coreutils.FileTest
     , isDir
     , isFile
     , isSymLink
+    , isExisting
+    , cmpModifyTime
+    , isWritable
     -- TODO: Some of the following predicates can be made portable using the
     -- unix-compat package. The ones that cannot be made portable can be moved
     -- to a separate module - Streamly.Coreutils.FileTest.Posix.
@@ -63,7 +66,6 @@ module Streamly.Coreutils.FileTest
     -- * Predicates
 
     -- ** General
-    , isExisting
     , isHardLinkOf
 
     -- ** File Type
@@ -77,7 +79,6 @@ module Streamly.Coreutils.FileTest
     -- ** File Permissions
     -- *** For current user
     , isReadable
-    , isWritable
     , isExecutable
 
     -- *** Mode check
@@ -114,15 +115,14 @@ module Streamly.Coreutils.FileTest
     , hasModifyTime
 
     -- *** Compare timestamps with file
-    , cmpModifyTime
+
 #endif
     )
 where
 
 import Control.Exception (catch, throwIO)
-import Control.Monad (when)
-import Data.Bits ((.&.))
-import Data.Int (Int64)
+
+
 import Data.Time.Clock.POSIX (POSIXTime)
 import Foreign.C.Error (Errno(..), eNOENT)
 import GHC.IO.Exception (IOException(..), IOErrorType(..))
@@ -130,16 +130,22 @@ import GHC.IO.Exception (IOException(..), IOErrorType(..))
 #if defined(CABAL_OS_WINDOWS)
 import System.PosixCompat.Files (FileStatus)
 import qualified System.PosixCompat.Files as Files
+--import qualified System.Directory as Directory
 #else
+import Control.Monad (when)
+import Data.Bits ((.&.))
+import Data.Int (Int64)
 import System.Posix.Types (Fd, COff(..), FileMode)
 import System.Posix.Files (FileStatus)
+import Streamly.Internal.Data.Time.Clock
+import Streamly.Internal.Data.Time.Units
 import qualified System.Posix.User as User
 import qualified System.Posix.Files as Files
+
 #endif
 
 import Prelude hiding (and, or)
-import Streamly.Internal.Data.Time.Clock
-import Streamly.Internal.Data.Time.Units
+
 
 newtype Predicate m a =
     Predicate (a -> m Bool)
@@ -260,6 +266,27 @@ false = predicate (const False)
 isExisting :: FileTest
 isExisting = predicate (const True)
 
+compareTime ::
+       (FileStatus -> POSIXTime)
+    -> (POSIXTime -> POSIXTime -> Bool)
+    -> POSIXTime
+    -> FileTest
+compareTime getFileTime cmp t = predicate (\st -> getFileTime st `cmp` t)
+
+compareTimeWith ::
+       (FileStatus -> POSIXTime)
+    -> (POSIXTime -> POSIXTime -> Bool)
+    -> FilePath
+    -> FileTest
+compareTimeWith getFileTime cmp path = predicateM $ \st -> do
+    st1 <- Files.getFileStatus path
+    apply st $ compareTime getFileTime cmp (getFileTime st1)
+
+-- | Compare the modification time of the file with the modification time of
+-- another file.
+cmpModifyTime ::
+    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
+cmpModifyTime = compareTimeWith Files.modificationTimeHiRes
 ---------------
 -- Type of file
 ---------------
@@ -281,6 +308,8 @@ isFile = predicate Files.isRegularFile
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest
 isSymLink = predicate Files.isSymbolicLink
+
+#if !defined(CABAL_OS_WINDOWS)
 
 -- | True if file is a block special file.
 --
@@ -314,6 +343,29 @@ isSocket = predicate Files.isSocket
 -- /Unimplemented/
 isTerminalFD :: FileTest
 isTerminalFD = undefined
+
+#endif
+
+-- | True if the file is writable for the current user.
+--
+-- Note that the file is not writable on a read-only file system even if this
+-- test indicates true.
+--
+-- Like coreutil @test -w file@
+--
+-- /Pre-release/
+isWritable :: FileTest
+isWritable =
+#if !defined(CABAL_OS_WINDOWS)
+    hasPermissions
+        (
+          Files.ownerWriteMode
+        , Files.groupWriteMode
+        , Files.otherWriteMode
+        )
+#else
+    predicateM $ \_ -> return True
+#endif
 
 ---------------
 -- Permissions
@@ -392,22 +444,7 @@ isReadable =
         , Files.otherReadMode
         )
 
--- | True if the file is writable for the current user.
---
--- Note that the file is not writable on a read-only file system even if this
--- test indicates true.
---
--- Like coreutil @test -w file@
---
--- /Pre-release/
-isWritable :: FileTest
-isWritable =
-    hasPermissions
-        (
-          Files.ownerWriteMode
-        , Files.groupWriteMode
-        , Files.otherWriteMode
-        )
+
 
 -- | True if the file is executable for the current user.
 --
@@ -427,32 +464,16 @@ isExecutable =
 -- Comparing with other files
 ------------------------------
 
-compareTime ::
-       (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
-    -> POSIXTime
-    -> FileTest
-compareTime getFileTime cmp t = predicate (\st -> getFileTime st `cmp` t)
+
 
 -- | Compare the modification time of the file with a timestamp.
 hasModifyTime ::
     (POSIXTime -> POSIXTime -> Bool) -> POSIXTime -> FileTest
 hasModifyTime = compareTime Files.modificationTimeHiRes
 
-compareTimeWith ::
-       (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
-    -> FilePath
-    -> FileTest
-compareTimeWith getFileTime cmp path = predicateM $ \st -> do
-    st1 <- Files.getFileStatus path
-    apply st $ compareTime getFileTime cmp (getFileTime st1)
 
--- | Compare the modification time of the file with the modification time of
--- another file.
-cmpModifyTime ::
-    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
-cmpModifyTime = compareTimeWith Files.modificationTimeHiRes
+
+
 
 -- | True if file1 and file2 exist and have the same device id and inode.
 --

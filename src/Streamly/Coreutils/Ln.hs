@@ -20,12 +20,11 @@ where
 
 import Control.Monad (when)
 import Streamly.Coreutils.Common (Switch(..))
+import Streamly.Coreutils.FileTest (test, isExisting)
 #if !defined (CABAL_OS_WINDOWS)
 import qualified System.Posix.Files as Posix
-import Streamly.Coreutils.FileTest (test, isExisting)
 #else
-import Streamly.Coreutils.FileTest (test)
-import qualified System.Directory as Directory
+import qualified System.PosixCompat.Files as Posix
 #endif
 
 data Ln = Ln
@@ -42,7 +41,6 @@ force opt cfg = cfg {lnForce = opt}
 symbolic :: Switch -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
-#if !defined (CABAL_OS_WINDOWS)
 -- TODO we only need to make isExisting portable.
 -- and thn this code should work using unix-compat.
 ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
@@ -58,12 +56,3 @@ ln f src tgt = do
     where
 
     msg = "ln: Link target exists, use force to create anyway"
-#else
-ln :: FilePath -> FilePath -> IO ()
-ln  src tgt = do
-    isDir <- Directory.doesDirectoryExist src
-    if isDir
-    then
-        Directory.createDirectoryLink src tgt
-    else Directory.createFileLink src tgt
-#endif

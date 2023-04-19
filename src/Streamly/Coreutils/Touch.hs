@@ -24,7 +24,7 @@ import Streamly.Coreutils.Common (Switch(..))
 #if !defined (CABAL_OS_WINDOWS)
 import qualified System.Posix.Files as Posix
 #else
-import qualified System.Win32 as Win32
+import qualified System.PosixCompat.Files as Posix
 #endif
 import System.IO (openFile, IOMode(WriteMode), hClose)
 import qualified System.Directory as Directory
@@ -71,22 +71,12 @@ touch f path = do
         unless found $ openFile path WriteMode >>= hClose
     else
         case deRef opt of
-#if !defined (CABAL_OS_WINDOWS)
+
             -- TODO: touchFile is available in unix-compat.
             On -> Posix.touchFile path
             -- TODO: in case of windows this could be just touchFile
+#if !defined (CABAL_OS_WINDOWS)
             Off -> Posix.touchSymbolicLink path
 #else
-            _x -> do
-                handle <- Win32.createFile
-                    path
-                    Win32.gENERIC_WRITE
-                    Win32.fILE_SHARE_NONE
-                    Nothing
-                    Win32.oPEN_EXISTING
-                    Win32.fILE_ATTRIBUTE_NORMAL
-                    Nothing
-                (creationTime, _, _) <- Win32.getFileTime handle
-                systemTime <- Win32.getSystemTimeAsFileTime
-                Win32.setFileTime handle (Just creationTime) (Just systemTime) (Just systemTime)
+            Off -> Posix.touchFile path
 #endif

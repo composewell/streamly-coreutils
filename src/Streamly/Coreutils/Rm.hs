@@ -20,12 +20,7 @@ module Streamly.Coreutils.Rm
 where
 
 import Streamly.Coreutils.Common (Switch(..))
-#if !defined (CABAL_OS_WINDOWS)
-import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
-#else
-import Streamly.Coreutils.FileTest (test, isDir)
-import System.Directory ( doesFileExist)
-#endif
+import Streamly.Coreutils.FileTest (test, isExisting, isDir, isWritable)
 
 import System.Directory
     ( removeFile
@@ -77,7 +72,6 @@ rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
 rmFileWith rmfile options path = do
     case rmForce options of
         None -> do
-#if !defined (CABAL_OS_WINDOWS)
         -- TODO: make isWritable portable, and this code should work for
         -- windows as well.
             writable <- test path isWritable
@@ -87,9 +81,6 @@ rmFileWith rmfile options path = do
                 error
                     $ "rm: cannot remove "
                     ++ path ++ ": write-protected regular file"
-#else
-            rmfile path
-#endif
         _ -> rmfile path
 
 rmWith :: (FilePath -> IO ()) -> (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
@@ -110,12 +101,9 @@ rm f path = do
     let options = f defaultConfig
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
-#if !defined (CABAL_OS_WINDOWS)
+
     -- TODO make isExisting portable and remove windows specific code here.
     found <- test path isExisting
-#else
-    found <- doesFileExist path
-#endif
     case rmForce options of
         Nuke ->
             when found
