@@ -83,7 +83,6 @@ data Role =
       Owner
     | Group
     | Others
-    | All
         deriving (Eq, Ord, Read, Show, Data)
 
 -------------------------------------------------------------------------------
