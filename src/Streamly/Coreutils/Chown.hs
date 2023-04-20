@@ -10,11 +10,11 @@
 
 module Streamly.Coreutils.Chown
     (
-      setOwnerAndGroup
+      chown
 
     -- * Options
     , Chown
-    , followLink
+    , followLinks
     ) where
 
 import qualified System.Posix.Files as Posix
@@ -27,11 +27,11 @@ newtype Chown = Chown{deRef :: Switch}
 defaultConfig :: Chown
 defaultConfig = Chown Off
 
-followLink :: Switch -> Chown -> Chown
-followLink opt cfg = cfg {deRef = opt}
+followLinks :: Switch -> Chown -> Chown
+followLinks opt cfg = cfg {deRef = opt}
 
-setOwnerAndGroup :: (Chown -> Chown) -> FilePath -> Word32 -> Word32 -> IO ()
-setOwnerAndGroup f path uid gid = do
+chown :: (Chown -> Chown) -> FilePath -> Word32 -> Word32 -> IO ()
+chown f path uid gid = do
     let opt = f defaultConfig
     case deRef opt of
         Off -> Posix.setSymbolicLinkOwnerAndGroup path (CUid uid) (CGid gid)
