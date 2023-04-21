@@ -348,6 +348,7 @@ isSocket = predicate Files.isSocket
 isTerminalFD :: FileTest
 isTerminalFD = undefined
 -}
+#endif
 
 ---------------
 -- Permissions
@@ -358,6 +359,7 @@ isTerminalFD = undefined
 hasMode :: FileMode -> FileTest
 hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
 
+#if !defined(CABAL_OS_WINDOWS)
 -- | True if the file has set user ID flag is set.
 --
 -- Like coreutil @test -u file@
