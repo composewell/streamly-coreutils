@@ -73,7 +73,7 @@ jobs:
             cabal-version: 3.8.1.0
             cabal_project: cabal.project.user
 
-          - name: 9.2.2
+          - name: 9.2.2+Werror
             ghc_version: 9.2.2
             build: cabal-v2
             runner: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
             cabal-version: 3.2
             cabal_project: cabal.project.user
 
-          - name: 8.10.7+Werror
+          - name: 8.10.7
             ghc_version: 8.10.7
             build: cabal-v2
             cabal_project: cabal.project.user
