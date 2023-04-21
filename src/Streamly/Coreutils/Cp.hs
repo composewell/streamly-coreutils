@@ -23,9 +23,7 @@ where
 
 import Control.Monad (when)
 import Data.Function ((&))
-#if !defined (CABAL_OS_WINDOWS)
-import System.Posix.Files (createLink)
-#endif
+import System.PosixCompat.Files (createLink)
 import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
@@ -91,20 +89,12 @@ cpCopy :: CpMethod -> FilePath -> FilePath -> IO ()
 cpCopy method src dest =
     case method of
         CopyContents -> File.readChunks src & File.fromChunks dest
-#if !defined (CABAL_OS_WINDOWS)
-        HardLink ->
-            createLink src dest
-#else
-        HardLink -> error "Unimplemented"
-#endif
+        HardLink -> createLink src dest
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
 
 -- | Determine whether source should be copied to destination based on the
 -- specified overwrite behavior option.
--- TODO: if we make isExisting and cmpModifyTime portable then this code should
--- become portable.
-
 cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =
     case option of

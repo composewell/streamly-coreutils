@@ -20,8 +20,7 @@ module Streamly.Coreutils.Rm
 where
 
 import Streamly.Coreutils.Common (Switch(..))
-import Streamly.Coreutils.FileTest (test, isExisting, isDir, isWritable)
-
+import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
 import System.Directory
     ( removeFile
     , removeDirectoryRecursive
@@ -72,8 +71,6 @@ rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
 rmFileWith rmfile options path = do
     case rmForce options of
         None -> do
-        -- TODO: make isWritable portable, and this code should work for
-        -- windows as well.
             writable <- test path isWritable
             if writable
             then rmfile path
@@ -101,8 +98,6 @@ rm f path = do
     let options = f defaultConfig
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
-
-    -- TODO make isExisting portable and remove windows specific code here.
     found <- test path isExisting
     case rmForce options of
         Nuke ->

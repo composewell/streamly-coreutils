@@ -21,11 +21,8 @@ where
 import Control.Monad (when)
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
-#if !defined (CABAL_OS_WINDOWS)
-import qualified System.Posix.Files as Posix
-#else
+
 import qualified System.PosixCompat.Files as Posix
-#endif
 
 data Ln = Ln
     { lnForce :: Switch
@@ -41,8 +38,6 @@ force opt cfg = cfg {lnForce = opt}
 symbolic :: Switch -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
--- TODO we only need to make isExisting portable.
--- and thn this code should work using unix-compat.
 ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig

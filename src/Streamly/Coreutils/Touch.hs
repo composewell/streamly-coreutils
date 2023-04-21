@@ -21,13 +21,13 @@ where
 
 import Control.Monad (unless)
 import Streamly.Coreutils.Common (Switch(..))
-#if !defined (CABAL_OS_WINDOWS)
-import qualified System.Posix.Files as Posix
-#else
-import qualified System.PosixCompat.Files as Posix
-#endif
+import Streamly.Coreutils.FileTest (test, isExisting)
 import System.IO (openFile, IOMode(WriteMode), hClose)
-import qualified System.Directory as Directory
+
+#if !defined (CABAL_OS_WINDOWS)
+import qualified System.Posix.Files as Posix (touchSymbolicLink)
+#endif
+import qualified System.PosixCompat.Files as Posix
 
 data Touch = Touch
     {
@@ -66,17 +66,14 @@ touch f path = do
     let opt = f defaultConfig
     if (createNew opt == On && deRef opt == On)
     then do
-        -- TODO make isExisting portable instead.
-        found <- Directory.doesFileExist path
+        found <- test path isExisting
         unless found $ openFile path WriteMode >>= hClose
     else
         case deRef opt of
-
-            -- TODO: touchFile is available in unix-compat.
             On -> Posix.touchFile path
-            -- TODO: in case of windows this could be just touchFile
 #if !defined (CABAL_OS_WINDOWS)
             Off -> Posix.touchSymbolicLink path
 #else
-            Off -> Posix.touchFile path
+            -- XXX Is it possible to support this on Windows?
+            Off -> error "touch: followLinks=Off not supported on Windows"
 #endif

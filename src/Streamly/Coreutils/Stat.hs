@@ -22,13 +22,9 @@ module Streamly.Coreutils.Stat
 
 
 import Streamly.Coreutils.Common (Switch(..))
-#if !defined (CABAL_OS_WINDOWS)
-import System.Posix.Files (FileStatus)
-import qualified System.Posix.Files as Files
-#else
 import System.PosixCompat.Files (FileStatus)
+
 import qualified System.PosixCompat.Files as Files
-#endif
 
 newtype  Stat = Stat {deRef :: Switch}
 
