@@ -284,12 +284,12 @@ false = predicate (const False)
 
 -- | True if file exists.
 --
+-- Note: This is do-nothing predicate. 'test' always fails if the file does not
+-- exist.
+--
 -- Like coreutil @test -e file@
 isExisting :: FileTest
-isExisting =
-    -- "test" would fail by default if the file does not exist, no other test
-    -- is required.
-    predicate (const True)
+isExisting = true
 
 ---------------
 -- Type of file
@@ -395,7 +395,7 @@ isOwnedByEUID = predicateM $ \st ->
 #if !defined(CABAL_OS_WINDOWS)
     (Files.fileOwner st ==) <$> User.getEffectiveUserID
 #else
-    predicate (const True)
+    true
 #endif
 
 -- XXX rename this to isOwnedByCurrentGroup
@@ -413,7 +413,7 @@ isOwnedByEGID = predicateM $ \st ->
 #if !defined(CABAL_OS_WINDOWS)
     (Files.fileGroup st ==) <$> User.getEffectiveGroupID
 #else
-    predicate (const False)
+    false
 #endif
 
 -- On Widnows we will have to use
