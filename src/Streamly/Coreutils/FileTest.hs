@@ -154,10 +154,11 @@ import GHC.IO.Exception (IOException(..), IOErrorType(..))
 
 -- XXX Remove the dependency on unix-compat and directory
 import System.PosixCompat.Files (FileStatus)
+import System.Posix.Types (COff(..), FileMode)
 import qualified System.PosixCompat.Files as Files
 
 #if !defined(CABAL_OS_WINDOWS)
-import System.Posix.Types (Fd, COff(..), FileMode)
+import System.Posix.Types (Fd)
 import qualified System.Posix.User as User
 #endif
 
