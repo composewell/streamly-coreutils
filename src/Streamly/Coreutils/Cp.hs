@@ -23,10 +23,7 @@ where
 
 import Control.Monad (when)
 import Data.Function ((&))
-#if !defined (CABAL_OS_WINDOWS)
-import System.Posix.Files (createLink)
-#endif
-
+import System.PosixCompat.Files (createLink)
 import qualified Streamly.Internal.FileSystem.File as File
 
 import Streamly.Coreutils.FileTest
@@ -92,10 +89,7 @@ cpCopy :: CpMethod -> FilePath -> FilePath -> IO ()
 cpCopy method src dest =
     case method of
         CopyContents -> File.readChunks src & File.fromChunks dest
-#if !defined (CABAL_OS_WINDOWS)
-        HardLink ->
-            createLink src dest
-#endif
+        HardLink -> createLink src dest
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
 

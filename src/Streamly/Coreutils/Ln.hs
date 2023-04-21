@@ -9,8 +9,7 @@
 -- create a link to TARGET with the given name
 
 module Streamly.Coreutils.Ln
-    (
-      ln
+    ( ln
 
     -- * Options
     , Ln
@@ -23,7 +22,7 @@ import Control.Monad (when)
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
 
-import qualified System.Posix.Files as Posix
+import qualified System.PosixCompat.Files as Posix
 
 data Ln = Ln
     { lnForce :: Switch

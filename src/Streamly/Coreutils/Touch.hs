@@ -24,7 +24,10 @@ import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
 import System.IO (openFile, IOMode(WriteMode), hClose)
 
-import qualified System.Posix.Files as Posix
+#if !defined (CABAL_OS_WINDOWS)
+import qualified System.Posix.Files as Posix (touchSymbolicLink)
+#endif
+import qualified System.PosixCompat.Files as Posix
 
 data Touch = Touch
     {
@@ -68,4 +71,9 @@ touch f path = do
     else
         case deRef opt of
             On -> Posix.touchFile path
+#if !defined (CABAL_OS_WINDOWS)
             Off -> Posix.touchSymbolicLink path
+#else
+            -- XXX Is it possible to support this on Windows?
+            Off -> error "touch: followLinks=Off not supported on Windows"
+#endif
