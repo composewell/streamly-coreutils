@@ -391,9 +391,9 @@ hasSticky = undefined
 --
 -- /Unimplemented/
 isOwnedByEUID  :: FileTest
-isOwnedByEUID = predicateM $ \st ->
+isOwnedByEUID =
 #if !defined(CABAL_OS_WINDOWS)
-    (Files.fileOwner st ==) <$> User.getEffectiveUserID
+    predicateM $ \st -> (Files.fileOwner st ==) <$> User.getEffectiveUserID
 #else
     true
 #endif
@@ -409,9 +409,9 @@ isOwnedByEUID = predicateM $ \st ->
 --
 -- /Unimplemented/
 isOwnedByEGID :: FileTest
-isOwnedByEGID = predicateM $ \st ->
+isOwnedByEGID =
 #if !defined(CABAL_OS_WINDOWS)
-    (Files.fileGroup st ==) <$> User.getEffectiveGroupID
+    predicateM $ \st -> (Files.fileGroup st ==) <$> User.getEffectiveGroupID
 #else
     false
 #endif
