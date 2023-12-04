@@ -2,8 +2,9 @@
 stack.yaml
 .github/workflows/haskell.yml
 .gitignore
-cabal.project
-cabal.project.user
-cabal.project.Werror
 default.nix
 hie.yaml
+cabal.project.d/master
+cabal.project.d/master-Werror
+cabal.project.d/streamly-0.9.0
+cabal.project.d/streamly-0.10.0
