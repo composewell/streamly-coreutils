@@ -1,7 +1,4 @@
-packages: streamly-coreutils.cabal
-
-package streamly-coreutils
-  ghc-options: -Werror
+packages: .
 
 source-repository-package
    type: git
@@ -13,3 +10,5 @@ source-repository-package
   location: https://github.com/composewell/streamly.git
   tag: master
   subdir: core
+
+jobs: 1
