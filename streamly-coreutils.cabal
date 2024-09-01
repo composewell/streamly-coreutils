@@ -104,11 +104,11 @@ library
       base >= 4.8 && < 5
     , exceptions >= 0.8  && < 0.11
     -- We use internal modules of streamly.
-    , streamly >= 0.9 && < 0.11
-    , streamly-core >= 0.1 && < 0.3
-    , time >= 1.9 && < 1.14
+    , streamly >= 0.9 && < 0.12
+    , streamly-core >= 0.3 && < 0.4
+    , time >= 1.9 && < 1.15
     , directory >= 1.2.2 && < 1.4
-    , filepath >= 1.4 && < 1.5
+    , filepath >= 1.4 && < 1.6
     , unix-compat >= 0.5.4  && < 0.8
   if !os(windows)
       build-depends:  unix >= 2.7.0 && < 2.9

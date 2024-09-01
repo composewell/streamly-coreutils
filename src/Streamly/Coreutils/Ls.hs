@@ -20,11 +20,12 @@ where
 
 import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Data.Stream.Prelude (Stream)
+import Streamly.FileSystem.Path (Path)
 
 import qualified Streamly.Data.Stream.Prelude as Stream
 import qualified Streamly.Internal.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
-import qualified Streamly.Internal.FileSystem.Dir as Dir
+import qualified Streamly.Internal.FileSystem.DirIO as Dir
 
 newtype Ls = Ls {lsRecursive :: Switch}
 
@@ -34,7 +35,7 @@ defaultConfig = Ls Off
 recursive :: Switch -> Ls -> Ls
 recursive opt cfg = cfg {lsRecursive = opt}
 
-ls :: (Ls -> Ls) -> String -> Stream IO (Either String String)
+ls :: (Ls -> Ls) -> Path -> Stream IO (Either Path Path)
 ls f dir = do
     case lsRecursive (f defaultConfig) of
         Off -> Dir.readEitherPaths dir
