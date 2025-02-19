@@ -7,9 +7,9 @@ packages:
 
 extra-deps:
 - github: composewell/streamly
-  commit: "dbf921bb13bd4801588c3803261a78b012b760d7"
+  commit: "4e2fccbe2a6a4c168801fffcdb17aaec1466f838"
 - github: composewell/streamly
-  commit: "dbf921bb13bd4801588c3803261a78b012b760d7"
+  commit: "4e2fccbe2a6a4c168801fffcdb17aaec1466f838"
   subdirs:
     - core
 
