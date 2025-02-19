@@ -27,6 +27,8 @@ import qualified Streamly.Internal.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
 import qualified Streamly.Internal.FileSystem.DirIO as Dir
 
+-- Note: We can also have options to follow symlinks and other dir traversal
+-- options once we decide on a good Configuration API.
 newtype Ls = Ls {lsRecursive :: Switch}
 
 defaultConfig :: Ls
@@ -38,7 +40,7 @@ recursive opt cfg = cfg {lsRecursive = opt}
 ls :: (Ls -> Ls) -> Path -> Stream IO (Either Path Path)
 ls f dir = do
     case lsRecursive (f defaultConfig) of
-        Off -> Dir.readEitherPaths dir
+        Off -> Dir.readEitherPaths id dir
         On ->
             -- Stream.unfoldIterateDfs unfoldOne
             -- BFS avoids opening too many file descriptors but may accumulate
@@ -50,5 +52,5 @@ ls f dir = do
 
     where
 
-    unfoldOne = Unfold.either Dir.eitherReaderPaths Unfold.nil
+    unfoldOne = Unfold.either (Dir.eitherReaderPaths id) Unfold.nil
     -- streamOne = either Dir.readEitherPaths (const Stream.nil)
