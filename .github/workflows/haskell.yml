@@ -72,19 +72,12 @@ jobs:
             cabal-version: 3.10.1.0
             cabal_project: cabal.project.d/master
 
-          - name: 9.4.4-streamly-0.9.0
+          - name: 9.4.4
             ghc_version: 9.4.4
             build: cabal-v2
             runner: ubuntu-latest
             cabal-version: 3.8.1.0
-            cabal_project: cabal.project.d/streamly-0.9.0
-
-          - name: 9.4.4-streamly-0.10.0
-            ghc_version: 9.4.4
-            build: cabal-v2
-            runner: ubuntu-latest
-            cabal-version: 3.8.1.0
-            cabal_project: cabal.project.d/streamly-0.10.0
+            cabal_project: cabal.project.d/master
 
           - name: 9.2.7+fusion-plugin
             ghc_version: 9.2.7

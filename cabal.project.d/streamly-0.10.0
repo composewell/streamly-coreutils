@@ -1,5 +1,0 @@
-packages: .
-
-constraints:
-    streamly == 0.10.0.*
-  , streamly-core == 0.2.0.*
