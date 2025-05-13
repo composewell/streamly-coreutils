@@ -132,7 +132,7 @@ jobs:
       with:
         ghc-version: ${{ matrix.ghc_version }}
 
-    - uses: actions/cache@v1
+    - uses: actions/cache@v4
       name: Restore cache ~/.cabal, ~/.stack, .stack-work, ~/.ghc, ~/.local
       with:
         path: |
