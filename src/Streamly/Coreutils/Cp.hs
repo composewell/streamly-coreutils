@@ -24,7 +24,8 @@ where
 import Control.Monad (when)
 import Data.Function ((&))
 import System.PosixCompat.Files (createLink)
-import qualified Streamly.Internal.FileSystem.File as File
+import qualified Streamly.Internal.FileSystem.FileIO as File
+import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.FileTest
 
@@ -39,6 +40,15 @@ import Streamly.Coreutils.FileTest
 --
 -- Ideally, cp should not hard link as we have ln for hard linking, but it can
 -- be useful when we need to hard link recursively.
+
+-- Path vs FilePath:
+--
+-- Ideally, we want to use "Path" instead of "FilePath" in this module. However,
+-- this change isn't very straightforward at the moment due to the dependence on
+-- System.PosixCompat.Files.
+--
+-- Streamly.Coreutils.FileTest relies on System.PosixCompat.Files for most of
+-- its APIs.
 
 -- | Specify the overwrite behavior of copy.
 data CpOverwrite =
@@ -88,7 +98,10 @@ cpMethod opt options = options { optCopyMethod = opt }
 cpCopy :: CpMethod -> FilePath -> FilePath -> IO ()
 cpCopy method src dest =
     case method of
-        CopyContents -> File.readChunks src & File.fromChunks dest
+        CopyContents -> do
+            srcP <- Path.fromString src
+            destP <- Path.fromString dest
+            File.readChunks srcP & File.fromChunks destP
         HardLink -> createLink src dest
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
