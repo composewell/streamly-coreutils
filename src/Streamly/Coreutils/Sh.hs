@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 -- |
--- Module      : Streamly.System.Sh
+-- Module      : Streamly.Coreutils.Sh
 -- Copyright   : (c) 2021 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -21,7 +21,7 @@
 -- HELLO
 --
 
-module Streamly.System.Sh
+module Streamly.Coreutils.Sh
     (
     -- * Generation
       toBytes
@@ -47,17 +47,12 @@ module Streamly.System.Sh
 where
 
 import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Catch (MonadThrow)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Data.Word (Word8)
 import Streamly.Data.Array (Array)
 import Streamly.Data.Fold (Fold)
-import Streamly.Data.Stream (Stream)
+import Streamly.Data.Stream.Prelude (Stream, MonadAsync)
 
 import qualified Streamly.Internal.System.Process as Process
-
-type MonadAsync m = (MonadIO m, MonadBaseControl IO m, MonadThrow m)
 
 -- The APIs are named/designed such that we can replace the sh module with
 -- another module for bash or any other shells without requiring API name
@@ -73,7 +68,7 @@ type MonadAsync m = (MonadIO m, MonadBaseControl IO m, MonadThrow m)
 -- >>> import qualified Streamly.Data.Fold as Fold
 -- >>> import qualified Streamly.Data.Stream as Stream
 -- >>> import qualified Streamly.Internal.System.Process as Process
--- >>> import qualified Streamly.System.Sh as Sh
+-- >>> import qualified Streamly.Coreutils.Sh as Sh
 -- >>> import qualified Streamly.Unicode.Stream as Unicode
 
 -- | A modifier for stream generation APIs in "Streamly.System.Process" to
