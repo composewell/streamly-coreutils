@@ -45,7 +45,7 @@ ls f dir = do
             -- Stream.unfoldIterateDfs unfoldOne
             -- BFS avoids opening too many file descriptors but may accumulate
             -- more data in memory.
-            Stream.unfoldIterateBfs unfoldOne
+            Stream.bfsUnfoldIterate unfoldOne
                 --  $ Stream.parConcatIterate id streamOne
                 --  $ Stream.parConcatIterate (Stream.ordered True) streamOne
                 $ Stream.fromPure (Left dir)
