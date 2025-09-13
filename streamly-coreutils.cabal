@@ -133,6 +133,7 @@ library
     , Streamly.Coreutils.Sleep
     , Streamly.Coreutils.Stat
     , Streamly.Coreutils.String
+    , Streamly.Coreutils.Tail
     , Streamly.Coreutils.Touch
     , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
