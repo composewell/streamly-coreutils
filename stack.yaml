@@ -1,17 +1,18 @@
 resolver: lts-22.33
 packages:
 - '.'
-#extra-deps:
-#  - streamly-core-0.3.0
-#  - streamly-0.11.0
-
 extra-deps:
-- github: composewell/streamly
-  commit: "e57585dfac5d9d1b57c52d8f3a69ed3809a6ae63"
-- github: composewell/streamly
-  commit: "e57585dfac5d9d1b57c52d8f3a69ed3809a6ae63"
-  subdirs:
-    - core
+  - streamly-core-0.3.0
+  - streamly-0.11.0
+  - streamly-process-0.4.0
+
+#extra-deps:
+#- github: composewell/streamly
+#  commit: "e57585dfac5d9d1b57c52d8f3a69ed3809a6ae63"
+#- github: composewell/streamly
+#  commit: "e57585dfac5d9d1b57c52d8f3a69ed3809a6ae63"
+#  subdirs:
+#    - core
 
 # Look at https://stackoverflow.com/questions/70045586/could-not-find-module-system-console-mintty-win32-when-compiling-test-framework
 flags:
