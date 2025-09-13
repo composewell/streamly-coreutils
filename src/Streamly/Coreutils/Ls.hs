@@ -28,6 +28,11 @@ import qualified Streamly.Internal.FileSystem.DirIO as Dir
 
 -- Note: We can also have options to follow symlinks and other dir traversal
 -- options once we decide on a good Configuration API.
+--
+-- XXX ls is more of a printing to console tool. We can return chunked arrays
+-- with newlines and short or long info in this API which are directly
+-- printable. In the "find" API we can return Path and structured Stat data
+-- instead for programmatic control.
 newtype Ls = Ls {lsRecursive :: Bool}
 
 defaultConfig :: Ls
