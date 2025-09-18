@@ -129,7 +129,6 @@ library
     , Streamly.Coreutils.ReadLink
     , Streamly.Coreutils.Rm
     , Streamly.Coreutils.Sh
-    , Streamly.Coreutils.ShellWords
     , Streamly.Coreutils.Sleep
     , Streamly.Coreutils.Stat
     , Streamly.Coreutils.String
