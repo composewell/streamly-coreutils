@@ -123,6 +123,7 @@ library
     , Streamly.Coreutils.Dirname
     , Streamly.Coreutils.FileTest
     , Streamly.Coreutils.Ln
+    , Streamly.Coreutils.Cut
     , Streamly.Coreutils.Ls
     , Streamly.Coreutils.Mkdir
     , Streamly.Coreutils.Mv
