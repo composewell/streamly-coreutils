@@ -87,7 +87,7 @@ stripLatin1 = Array.dropAround (isSpace . chr. fromIntegral)
 makeIndexMask :: [Int] -> [Bool]
 makeIndexMask indices =
     -- Sort would be O(n) if pre-sorted
-    let xs1 = List.sort $ filter (>= 0) indices
+    let xs1 = fmap List.head $ List.group $ List.sort $ filter (>= 0) indices
      in go 0 xs1 id
 
     where
@@ -95,8 +95,8 @@ makeIndexMask indices =
     go _ [] ys = ys []
     go i old@(x:xs) ys =
         if i == x
-        then go (i + 1) xs ((True :) . ys)
-        else go (i + 1) old ((False :) . ys)
+        then go (i + 1) xs (ys . (True :))
+        else go (i + 1) old (ys . (False :))
 
 -- | Zip the input stream with the supplied mask and keep only those elements
 -- which are True in the mask stream.
