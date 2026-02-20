@@ -6,444 +6,326 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- A predicate DSL to filter files based on their properties. This module is
--- portable across Linux, macOS and Windows platforms. For Posix specific
--- APIs please see "Streamly.Coreutils.FileTest.Posix".
+-- A composable predicate DSL for testing file properties, inspired by the
+-- GNU @test@ utility. This module is portable across Linux, macOS, and
+-- Windows platforms.
 --
--- For good performance, combine multiple predicates for the same file and test
--- those in one go.
+-- Predicates can be combined using boolean operators. Multiple composed
+-- predicates are evaluated using a single file status query, minimizing
+-- system calls and providing better performance than performing each test
+-- independently.
 --
--- This module covers a subset of the functionality provided by the GNU
--- coreutils @test@ utility.  String testing is not provided as it can be
--- trivially done using built-in Haskell functionality. That leaves only file
--- test routines. The routines provided in this module have a one to one
--- correspondence with the @test@ utility.
-
--- Design Notes:
+-- === GNU @test@ Utility Mapping
 --
--- "unix" package provides accessor functions for FileStatus.  Why not get the
--- FileStatus and use those directly for testing properties of a file?
--- Predicates are easier to understand and can wrap high level logic e.g.
--- compare the file size with the size of another file. Predicates are easy to
--- combine efficiently without worrying about passing around the FileStatus
--- structure or accessing it multiple times.  It is easier to make predicates
--- OS independent.
+-- This module provides Haskell equivalents for the file-related functionality
+-- of the GNU coreutils @test@ utility and the standard POSIX shell
+-- style tests such as:
 --
--- XXX This is for POSIX but some of it could be applicable to Windows as well.
--- Should we create a platform independent abstraction too?
+-- > [ -d path ]
+-- > [ -r path ]
 --
--- XXX Need tests for Windows. Especially for file access permissions. How do
--- ACLs affect it? Also file times.
+-- It offers greater composability and improved performance by allowing
+-- multiple predicates to share a single file status query.
 --
--- Files supported by windows:
+-- String comparison tests provided by GNU @test@ are intentionally omitted,
+-- as they can be expressed directly using standard Haskell operators.
 --
--- Regular files
--- Directory files
--- Symbolic links: .symlink, .lnk
--- Hard links
--- Named pipes: .pipe
--- Device files: .sys, .dll
--- Mount point files: .mount, .vhd, .vhdx, .iso, .img
+-- The mapping below makes it straightforward to translate shell scripts
+-- using @test@ or @[ ... ]@ file predicates directly into Haskell code.
 --
--- See FileType in Win32 package.
+-- The following table shows the correspondence between common GNU @test@
+-- file predicates and the predicates provided by this module.
 --
--- File Permissions:
+-- > test -b file        -> isBlockDevice
+-- > test -c file        -> isCharDevice
+-- > test -d file        -> isDir
+-- > test -e file        -> doesExist
+-- > test -f file        -> isFile
+-- > test -g file        -> hasSetGid
+-- > test -G file        -> isOwnedByCurrentGroup
+-- > test -h file        -> isSymLink
+-- > test -k file        -> hasStickyBit
+-- > test -L file        -> isSymLink
+-- > test -N file        -> modifiedAfterRead (not implemented yet)
+-- > test -O file        -> isOwnedByCurrentUser
+-- > test -p file        -> isPipe
+-- > test -r file        -> isReadable
+-- > test -s file        -> size (> 0)
+-- > test -S file        -> isSocket
+-- > test -t fd          -> isTerminalFd (not implemented)
+-- > test -u file        -> hasSetUid
+-- > test -w file        -> isWritable
+-- > test -x file        -> isExecutable
 --
--- See AccessMode and ShareMode in the Win32 package
+-- > test file1 -nt file2  -> modifyTimeComparedTo (>) file2
+-- > test file1 -ot file2  -> modifyTimeComparedTo (<) file2
+-- > test file1 -ef file2  -> isHardLinkOf file (not implemented)
+--
+-- Example:
+--
+-- > test path doesExist
+-- > test path isReadable
+-- > test path (size (> 4096))
+-- > test path (modifyTimeComparedTo (>) "reference.txt")
 
 module Streamly.Coreutils.FileTest
     (
     -- * File Test Predicate Type
       FileTest
 
-    -- * Primitives
-    , predicate
-    , true
-    , false
+    -- * Running Predicates
+    , test
+    , testl
 
-    -- * Predicate Combinators
+    -- * Boolean Predicate Combinators
     , not_
     , and_
     , or_
+
     , and
     , or
 
-    -- * Running Predicates
-    , test
-    -- TODO: Create Streamly.Coreutils.FileTest.Posix for Posix specific
-    -- functions.
-#if !defined(CABAL_OS_WINDOWS)
-    , testFD
-#endif
-
     -- * Predicates
 
+    -- -- ** Primitives
+    -- , predicate -- exposes FileStatus
+    -- , true
+    -- , false
+
     -- ** General
-    , isExisting
-#if !defined(CABAL_OS_WINDOWS)
-    , isHardLinkOf
-#endif
+    , doesExist
 
     -- ** File Type
     , isDir
     , isFile
     , isSymLink
-#if !defined(CABAL_OS_WINDOWS)
     , isCharDevice
     , isBlockDevice
     , isPipe
     , isSocket
-    -- , isTerminalFD
-#endif
 
-    -- ** File Permissions
-    -- *** For current user
+    -- ** File Mode
+    -- | We can define convenience operations by combining multiple elementary
+    -- checks, for example:
+    --
+    -- @
+    -- hasOwnerRWX = and [hasOwnerRead, hasOwnerWrite, hasOwnerExec]
+    -- @
+    --
+    -- === Portability Notes
+    --
+    -- On POSIX systems, this checks the standard Unix permission bits.
+    --
+    -- On Windows, only one or two predicates make sense:
+    --
+    -- * 'hasOwnerWrite' - returns false if the file is marked read only via attributes.
+    -- * 'hasOwnerExec' - returns true based on the file extension: @.bat@, @.cmd@,
+    -- @.com@, @.exe@.
+    -- * 'hasOwnerRead' - always returns true.
+    -- * Group, and Other predicates are same as owner predicates.
+
+    , hasOwnerRead
+    , hasOwnerWrite
+    , hasOwnerExec
+
+    , hasGroupRead
+    , hasGroupWrite
+    , hasGroupExec
+
+    , hasOtherRead
+    , hasOtherWrite
+    , hasOtherExec
+
+    , hasSetUid
+    , hasSetGid
+    , hasStickyBit
+
+    -- ** File Access (Current User)
+
+    {-
+    -- XXX currently not working fully well, hasPermissions need to be fixed
+    -- for checking acess via all groups.
+
+    -- *** Mode based
+    -- | These have limited use on Windows as windows uses mostly ACLs, only
+    -- read only bit is used in modes.
+    --
+    -- These APIs perform only the mode check, actual readability, writability
+    -- or executability may depend many other factors like filesystem mount
+    -- permissions, access control lists (ACLs) etc. For deep checks see:
+    -- 'isReadable', 'isWritable', 'isExecutable'.
+    --
+    , isReadableByMode
+    , isWritableByMode
+    , isExecutableByMode
+    -}
+
+    -- -- *** ACL based
     , isReadable
     , isWritable
     , isExecutable
 
-#if !defined(CABAL_OS_WINDOWS)
-    -- *** Mode check
-    -- , mkMode -- quasiquoters?
-    -- , hasMode
-    , hasSticky
-    , hasSetUID
-    , hasSetGID
-#endif
+    {-
+    -- *** Lock based
+    -- | These do not make much sense on posix as posix does not use mandatory
+    -- locks.
+    , isReadableNow
+    , isWritableNow
+    , isExecutableNow
+    -}
 
-    -- ** File Ownership
-    , isOwnedByEUID
-#if !defined(CABAL_OS_WINDOWS)
-    , isOwnedByEGID
-#endif
-
-    --, isOwnedByUser
-    --, isOwnedByUid
-    --, isOwnedByGroup
-    --, isOwnedByGid
+    -- ** File Ownership (Current User)
+    {-
+    , isOwnedByUserId
+    , isOwnedByGroupId
+    , isOwnedByUserName
+    , isOwnedByGroupName
+    -}
+    , isOwnedByCurrentUser
+    , isOwnedByCurrentGroup
 
     -- ** File size
     -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
-    , hasSize
-    , cmpSize
+    , size
+    , sizeComparedTo
 
     -- ** File times
-    -- XXX Need convenient time units and conversions (e.g. sec 5,
-    -- "2022-01-01")
+    -- *** Time units
+    , seconds
+    , minutes
+    , hours
+    , days
 
     -- *** File age
-    , hasAccessAge
-    , hasModifyAge
-    -- , hasCreateAge
+    , modifyAge
+    , accessAge
+    -- , createAge
 
     -- *** File timestamp
-    , hasModifyTime
+    , modifyTime
 
     -- *** Compare timestamps with file
-    , cmpModifyTime
+    , modifyTimeComparedTo
+    , accessTimeComparedTo
+
+    -- * Deprecated
+    , isExisting
     )
 where
 
-import Control.Exception (catch, throwIO)
-import Control.Monad (when)
-import Data.Bits ((.&.))
-import Data.Int (Int64)
-import Data.Time.Clock.POSIX (POSIXTime)
-import Foreign.C.Error (Errno(..), eNOENT)
-import GHC.IO.Exception (IOException(..), IOErrorType(..))
+import System.Posix.Types (FileMode)
 
--- XXX Remove the dependency on unix-compat and directory
-import System.PosixCompat.Files (FileStatus)
-import System.Posix.Types (COff(..), FileMode)
 import qualified System.PosixCompat.Files as Files
 
 #if !defined(CABAL_OS_WINDOWS)
-import System.Posix.Types (Fd)
-import qualified System.Posix.User as User
+import qualified Streamly.Coreutils.FileTest.Posix as FileTest
+#else
+import qualified Streamly.Coreutils.FileTest.Windows as FileTest
+import System.Win32.Types
 #endif
 
+import Streamly.Coreutils.FileTest.Common
 import Prelude hiding (and, or)
-import Streamly.Internal.Data.Time.Clock
-import Streamly.Internal.Data.Time.Units
 
-newtype Predicate m a =
-    Predicate (a -> m Bool)
+-------------------------------------------------------------------------------
+-- User and group ownerships
+-------------------------------------------------------------------------------
 
--- $setup
--- >>> import Prelude hiding (or, and)
+isOwnedByUserId :: FileTest.Uid -> FileTest
+isOwnedByUserId = FileTest.isOwnedByUserId
 
--- Naming Notes: Named FileTest rather than "Test" to be more explicit and
--- specific. The command can also be named fileTest or testFile.
+isOwnedByGroupId :: FileTest.Gid -> FileTest
+isOwnedByGroupId = FileTest.isOwnedByGroupId
+
+-- | Unimplemented
+isOwnedByUserName :: String -> FileTest
+isOwnedByUserName = undefined
+
+-- | Unimplemented
+isOwnedByGroupName :: String -> FileTest
+isOwnedByGroupName = undefined
+
+-- | True if the file owner matches the effective user id of the current
+-- process.
 --
--- We do not provide a Semigroup instance for the `and` operation because then
--- we either do not have a similar op for `or` operation, or we need a newtype
--- for that. So we just do not have it.
-
--- | A predicate type for testing boolean statements about a file.
---
-newtype FileTest =
-    FileTest (Predicate IO FileStatus)
-
--- | A boolean @and@ function for combining two 'FileTest' predicates.
---
-and_ :: FileTest -> FileTest -> FileTest
-and_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
-    FileTest (Predicate $ \a -> (&&) <$> p a <*> q a)
-
--- | A boolean @or@ function for combining two 'FileTest' predicates.
---
-or_ :: FileTest -> FileTest -> FileTest
-or_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
-    FileTest (Predicate $ \a -> (||) <$> p a <*> q a)
-
--- | A boolean @and@ for combining a list of 'FileTest' predicates.
---
--- >>> and = foldl and_ true
---
-and :: [FileTest] -> FileTest
-and = foldl and_ true
-
--- | A boolean @and@ for combining a list of 'FileTest' predicates.
---
--- >>> or = foldl or_ false
---
-or :: [FileTest] -> FileTest
-or = foldl or_ false
-
--- | A boolean @not@ function for combining two 'FileTest' predicates.
---
-not_ :: FileTest -> FileTest
-not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
-
--- XXX Use a byte array instead of string filepath.
-
--- | Apply a predicate to a 'FilePath'.
---
--- * Returns 'True' if the file exists and the predicate is 'True'
--- * Returns 'False' if the file does not exist or the predicate is 'False'
--- * Fails with an IO exception if the path to the file is not accessible due
--- to lack of permissions. The exception type can be used to determine the
--- reason for failure.
---
-test :: FilePath -> FileTest -> IO Bool
-test path (FileTest (Predicate f)) =
-    (Files.getFileStatus path >>= f) `catch` eatENOENT
-
-    where
-
-    isENOENT e =
-        case e of
-            IOError
-                { ioe_type = NoSuchThing
-                , ioe_errno = Just ioe
-                } -> Errno ioe == eNOENT
-            _ -> False
-
-    eatENOENT e = if isENOENT e then return False else throwIO e
-
--- | Apply a predicate to 'FileStatus'.
-apply :: FileStatus -> FileTest -> IO Bool
-apply st (FileTest (Predicate f)) = f st
-
--- XXX Use Handle instead
--- | Like 'test' but uses a file descriptor instead of file path.
-#if !defined(CABAL_OS_WINDOWS)
-testFD :: Fd -> FileTest -> IO Bool
-testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= f
-#endif
-
--- | Convert a @FileStatus -> Bool@ type of function to a 'FileTest' predicate.
-predicate :: (FileStatus -> Bool) -> FileTest
-predicate p = FileTest (Predicate (pure . p))
-
--- | Convert a @FileStatus -> IO Bool@ type of function to a 'FileTest'
--- predicate.
-predicateM :: (FileStatus -> IO Bool) -> FileTest
-predicateM p = FileTest (Predicate p)
-
--- | A predicate which is always 'True'.
---
--- >>> true = predicate (const True)
---
-true :: FileTest
-true = predicate (const True)
-
--- | A predicate which is always 'False'.
---
--- >>> false = predicate (const False)
---
-false :: FileTest
-false = predicate (const False)
-
---------------------
--- Global properties
---------------------
-
--- Note: these are all boolean predicates, therefore, named with "is", "has",
--- "cmp" prefix.
-
--- | True if file exists.
---
--- Note: This is do-nothing predicate. 'test' always fails if the file does not
--- exist.
---
--- Like coreutil @test -e file@
-isExisting :: FileTest
-isExisting = true
-
----------------
--- Type of file
----------------
-
--- | True if file is a directory.
---
--- Like @test -d file@
-isDir :: FileTest
-isDir = predicate Files.isDirectory
-
--- | True if file is a regular file.
---
--- Like coreutil @test -f file@
-isFile :: FileTest
-isFile = predicate Files.isRegularFile
-
--- | True if file is a symbolic link.
---
--- Like coreutil @test -h/-L file@
-isSymLink :: FileTest
-isSymLink = predicate Files.isSymbolicLink
-
-#if !defined(CABAL_OS_WINDOWS)
--- | True if file is a block special file.
---
--- Like the coreutil @test -b file@.
-isBlockDevice :: FileTest
-isBlockDevice = predicate Files.isBlockDevice
-
--- | True if is a character special file.
---
--- Like @test -c file:
-isCharDevice :: FileTest
-isCharDevice = predicate Files.isCharacterDevice
-
--- | True if file is a named pipe (FIFO).
---
--- Like coreutil @test  -p file@
-isPipe :: FileTest
-isPipe = predicate Files.isNamedPipe
-
--- | True if file is a socket.
---
--- Like coreutil @test -S file@
-isSocket :: FileTest
-isSocket = predicate Files.isSocket
-
-{-
--- | True if the file whose file descriptor number is
--- file_descriptor is open and is associated with a terminal.
---
--- Like coreutil @test -t file_descriptor@
---
--- /Unimplemented/
-isTerminalFD :: FileTest
-isTerminalFD = undefined
--}
-#endif
-
----------------
--- Permissions
----------------
-
--- | True if the file has specified permission mode.
---
-hasMode :: FileMode -> FileTest
-hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
-
-#if !defined(CABAL_OS_WINDOWS)
--- | True if the file has set user ID flag is set.
---
--- Like coreutil @test -u file@
-hasSetUID :: FileTest
-hasSetUID = hasMode Files.setUserIDMode
-
--- | True if the file has set group ID flag is set.
---
--- Like coreutil @test -g file@
-hasSetGID :: FileTest
-hasSetGID = hasMode Files.setGroupIDMode
-
--- | True if file has sticky bit is set.
---
--- Like coreutil @test -k file@
---
--- /Unimplemented/
-hasSticky :: FileTest
-hasSticky = undefined
-#endif
-
--- XXX This can be done for windows as well using GetSecurityInfo. Should we
--- use that when getting FileStatus in unix-compat?
--- See getFileSecurity in System/Win32/Security.hsc .
---
--- XXX rename this to isOwnedByCurrentUser to make it portable.
-
--- | True if the file owner matches the effective user id of this process.
+-- On Windows, effective user id means effective SID.
 --
 -- Like coreutil @test -O file@
---
--- /Unimplemented/
-isOwnedByEUID  :: FileTest
-isOwnedByEUID =
-#if !defined(CABAL_OS_WINDOWS)
-    predicateM $ \st -> (Files.fileOwner st ==) <$> User.getEffectiveUserID
-#else
-    true
-#endif
+isOwnedByCurrentUser :: FileTest
+isOwnedByCurrentUser = FileTest.isOwnedByCurrentUser
 
--- XXX rename this to isOwnedByCurrentGroup
--- XXX This applies only to POSIX because windows does not have a notion of
--- current group.
+-- Unix files have a GID and group permission bits. A process has an effective
+-- GID (egid) and a list of supplementary groups stored in its credentials.
+-- These supplementary groups are typically initialized at login from the
+-- user's group memberships and inherited by child processes; they can be
+-- changed via setgroups(2), setgid(2), newgrp, or in user namespaces.
+--
+-- The egid and supplementary groups are used for:
+--
+-- * Permission checks: if a file's GID matches the egid or any supplementary
+--   group, the group permission bits apply. Certain IPC and kernel security
+--   checks based on group ownership.
+-- * Default group ownership of newly created files (unless overridden by
+--   a setgid bit on a directory).
+-- * Execution of setgid binaries, which set the process's egid to the
+--   file's group. For directories, setgid changes group inheritance semantics.
+--
+-- Windows files have an associated "group" SID, and process tokens contain
+-- a primary group plus a list of group SIDs.
+--
+--  * file's gSID is not used in access checks; only ACLS determines access.
+--  * process token’s primary gSID is used as gSID for new files.
+--  * there is no setgid concept or equivalent.
+--
+-- The group SID in Windows exists mainly for POSIX/NFS interoperability, where
+-- a file must have a GID for Unix permission semantics.
+
+-- XXX On Windows we can match against the primary group SID of the process
+-- token, though it won't mean much in terms of actual implications. But it can
+-- still be used for Posix based semantics. But since there are no group based
+-- permission bits even returning False is effectively equivalent.
 
 -- | True if file exists and its group matches the effective
--- group id of this process.
+-- group id of the current process.
 --
--- Like coreutil @test -G file@
+-- Like coreutil @test -G file@.
 --
--- /Unimplemented/
-isOwnedByEGID :: FileTest
-isOwnedByEGID =
-#if !defined(CABAL_OS_WINDOWS)
-    predicateM $ \st -> (Files.fileGroup st ==) <$> User.getEffectiveGroupID
-#else
-    false
-#endif
+-- On Windows effective group id means the primary group SID.
+--
+isOwnedByCurrentGroup :: FileTest
+isOwnedByCurrentGroup = FileTest.isOwnedByCurrentGroup
 
--- On Widnows we will have to use
--- GetSecurityInfo/GetNamedSecurityInfo/GetEffectiveRightsFromAcl to check
--- permissions properly.
---
--- Also, how to handle CIFS shares. On windows, check ShareMode? On Linux, are
--- the file permissions enough for CIFS?
+-------------------------------------------------------------------------------
+-- Mode based access
+-------------------------------------------------------------------------------
 
 hasPermissions :: (FileMode, FileMode, FileMode) -> FileTest
 hasPermissions (user, group, other) = predicateM $ \st -> do
-    isOwner <- apply st isOwnedByEUID
+    isOwner <- apply st isOwnedByCurrentUser
     let checkMode = apply st . hasMode
     if isOwner
     then checkMode user
+#if !defined(CABAL_OS_WINDOWS)
     else do
-        isGroup <- apply st isOwnedByEGID
+        -- XXX need to check access via other group memberships as well
+        isGroup <- apply st isOwnedByCurrentGroup
         if isGroup
         then checkMode group
         else checkMode other
+#else
+    else return False
+#endif
 
--- | True if the file is readable for the current user.
+-- | True if the file mode bits allow the file to be read by the current
+-- effective user id.
 --
--- Like coreutil @test -r file@
+-- On Windows this is always true.
 --
--- /Pre-release/
-isReadable :: FileTest
-isReadable =
+-- This does not check the ACLs and other conditions that can make the file
+-- unreadable, see 'isReadable' for that.
+--
+isReadableByMode :: FileTest
+isReadableByMode =
     hasPermissions
         (
           Files.ownerReadMode
@@ -451,26 +333,14 @@ isReadable =
         , Files.otherReadMode
         )
 
--- XXX What does "isWritable" mean on windows? Windows has separate write and
--- modify permissions. We can use two separate functions, isWritableData (or
--- just isWritable), isWritableMeta. On unix both will have the same underlying
--- permission.
+-- | True if the file mode bits make it writable for the current user.
 --
--- We may also need to check if the filesystem/mount is writable, or on windows
--- check the drive type. Or do we need a separate stricter checking API for
--- that? Or do we encode that in a separate mount/drive level API to be checked
--- by the programmer separately.
-
--- | True if the file is writable for the current user.
+-- On Windows this returns false if the read only flag is set on the file.
 --
--- Note that the file is not writable on a read-only file system even if this
--- test indicates true.
+-- This does not check the ACLs, see 'isWritable' for that.
 --
--- Like coreutil @test -w file@
---
--- /Pre-release/
-isWritable :: FileTest
-isWritable =
+isWritableByMode :: FileTest
+isWritableByMode =
     hasPermissions
         (
           Files.ownerWriteMode
@@ -478,24 +348,15 @@ isWritable =
         , Files.otherWriteMode
         )
 
--- XXX What does "isExecutable" mean on windows? For files, unix-compat
--- determines executable on windows based on the file type, which does not
--- sound right, why not use the execute permission? On unix, directories
--- executable mean searchable. On Windows there is a separate attribute for
--- that.
+-- | True if the file mode bits make it executable for the current user.
 --
--- We should have a separate isSearchable test for directories. And make
--- isExecutable not-applicable/False for directories. But utilities like chmod
--- may still need to use +x for executable. But we can use "+X" or "+S" to mean
--- searchable.
-
--- | True if the file is executable for the current user.
+-- On Windows this returns true if it is a directory or if it is a file with an
+-- executable extension @.bat@, @.cmd@, @.com@, or @.exe@.
 --
--- Like coreutil @test -x file@
+-- This does not check the ACLs, see isExecutable for that.
 --
--- /Pre-release/
-isExecutable :: FileTest
-isExecutable =
+isExecutableByMode :: FileTest
+isExecutableByMode =
     hasPermissions
         (
           Files.ownerExecuteMode
@@ -503,101 +364,53 @@ isExecutable =
         , Files.otherExecuteMode
         )
 
-------------------------------
--- Comparing with other files
-------------------------------
+-------------------------------------------------------------------------------
+-- General access, excluding locks
+-------------------------------------------------------------------------------
 
-compareTime ::
-       (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
-    -> POSIXTime
-    -> FileTest
-compareTime getFileTime cmp t = predicate (\st -> getFileTime st `cmp` t)
-
--- | Compare the modification time of the file with a timestamp.
-hasModifyTime ::
-    (POSIXTime -> POSIXTime -> Bool) -> POSIXTime -> FileTest
-hasModifyTime = compareTime Files.modificationTimeHiRes
-
-compareTimeWith ::
-       (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
-    -> FilePath
-    -> FileTest
-compareTimeWith getFileTime cmp path = predicateM $ \st -> do
-    st1 <- Files.getFileStatus path
-    apply st $ compareTime getFileTime cmp (getFileTime st1)
-
--- | Compare the modification time of the file with the modification time of
--- another file.
-cmpModifyTime ::
-    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
-cmpModifyTime = compareTimeWith Files.modificationTimeHiRes
-
--- | True if file1 and file2 exist and have the same device id and inode.
+-- | True if the file is readable by the current process.
 --
--- Like coreutil @test file1 -ef file2@.
+-- This is a dynamic check and determines the readability of the file at this
+-- moment based on the permission checks applied by the kernel (e.g. dynamic
+-- group membership based permissions, effective user id, acls).
 --
--- /Unimplemented/
-isHardLinkOf :: FilePath -> FileTest
-isHardLinkOf = undefined
-
-getLocalTime :: IO TimeSpec
-getLocalTime = fromAbsTime <$> getTime Realtime
-
-compareAge ::
-       (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
-    -> Double
-    -> FileTest
-compareAge getFileTime cmp ageSec = predicateM $ \st -> do
-    when (ageSec < 0) $ error "compareAge: age cannot be negative"
-
-    ts <- getLocalTime
-    let now = timespecToPosixTime ts
-        age = doubleToPosixTime ageSec
-    apply st $ compareTime getFileTime (flip cmp) (now - age)
-
-    where
-
-    timespecToPosixTime (TimeSpec s ns) =
-        fromIntegral s + fromIntegral ns * 1E-9
-
-    -- XXX handle negative double value?
-    doubleToPosixTime :: Double -> POSIXTime
-    doubleToPosixTime sec =
-        let s = floor sec
-            ns = round $ (sec - fromIntegral s) * 1E9
-         in timespecToPosixTime (TimeSpec s ns)
-
--- XXX Use a -> a -> Bool instead
-hasAccessAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
-hasAccessAge = compareAge Files.accessTimeHiRes
-
-hasModifyAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
-hasModifyAge = compareAge Files.modificationTimeHiRes
-
-{-
--- See https://unix.stackexchange.com/questions/91197/how-to-find-creation-date-of-file
-hasCreateAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
-hasCreateAge = undefined
--}
-
--- XXX Should use Int or Int64?
-
-getSize :: FileStatus -> Int64
-getSize st = let COff size = Files.fileSize st in size
-
--- | Compare the file size with the supplied size.
+-- Does not consider advisory or mandatory locks.
 --
--- Coreutil @test -s file@ would be @hasSize (/=) 0@
+-- Like coreutil @test -r file@
 --
-hasSize :: (Int64 -> Int64 -> Bool) -> Int64 -> FileTest
-hasSize cmp n = predicate (\st -> getSize st `cmp` n)
+isReadable :: FileTest
+isReadable = FileTest.isReadable
 
--- | Compare the file size with the size of another file.
+-- XXX What does "isWritable" mean on windows? Windows has separate write and
+-- modify permissions. We can use two separate functions, isWritableData (or
+-- just isWritable), isWritableMeta. On unix both will have the same underlying
+-- permission.
+
+-- | True if the file is writable by the current process.
 --
-cmpSize :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest
-cmpSize cmp path = predicateM $ \st -> do
-    st1 <- Files.getFileStatus path
-    apply st $ hasSize cmp (getSize st1)
+-- This is a dynamic check and determines the writability of the file at this
+-- moment based on the permission checks applied by the kernel (e.g. mount
+-- options, dynamic group membership based permissions, effective user id,
+-- acls).
+--
+-- Does not consider advisory or mandatory locks.
+--
+-- Like coreutil @test -w file@
+--
+isWritable :: FileTest
+isWritable = FileTest.isWritable
+
+-- NOTE: On POSIX: You do NOT need directory read (r) permission to access a
+-- known file. You DO need directory execute (x) permission. On Windows, the
+-- (r) equivalent is "List Folder" and (x) equivalent is "Traverse Folder". By
+-- default, almost all users have: SeChangeNotifyPrivilege ("Bypass traverse
+-- checking"), it is a fast path to grant the access compared to giving
+-- traverse folder access to everyone and checking it on each directory in the
+-- path.
+
+-- | True if the file is executable for the current user.
+--
+-- Like coreutil @test -x file@ .
+--
+isExecutable :: FileTest
+isExecutable = FileTest.isExecutable

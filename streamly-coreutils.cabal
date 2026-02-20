@@ -103,6 +103,8 @@ library
     , unix-compat >= 0.5.4  && < 0.8
   if !os(windows)
       build-depends:  unix >= 2.7.0 && < 2.9
+  else
+      build-depends:  Win32
 
   hs-source-dirs:      src
   exposed-modules:
@@ -125,6 +127,13 @@ library
     , Streamly.Coreutils.Tail
     , Streamly.Coreutils.Touch
     , Streamly.Coreutils.Which
+    , Streamly.Coreutils.FileTest.Common
+  if os(windows)
+      exposed-modules:
+          Streamly.Coreutils.FileTest.Windows
+  else
+      exposed-modules:
+          Streamly.Coreutils.FileTest.Posix
   other-modules:
       Streamly.Coreutils.String
     , Streamly.Coreutils.Uniq
