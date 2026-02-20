@@ -18,20 +18,19 @@ module Streamly.Coreutils.Mkdir
     )
 where
 
-import Streamly.Coreutils.Common (Switch(..))
 import System.Directory (createDirectory, createDirectoryIfMissing)
 
-newtype Mkdir = Mkdir {mdParents :: Switch}
+newtype Mkdir = Mkdir {mdParents :: Bool}
 
 defaultConfig :: Mkdir
-defaultConfig = Mkdir Off
+defaultConfig = Mkdir False
 
-parents :: Switch -> Mkdir -> Mkdir
+parents :: Bool -> Mkdir -> Mkdir
 parents opt cfg = cfg {mdParents = opt}
 
 mkdir :: (Mkdir -> Mkdir) -> FilePath -> IO ()
 mkdir f = do
   let opt = f defaultConfig
   case mdParents opt of
-      Off -> createDirectory
-      On -> createDirectoryIfMissing True
+      False -> createDirectory
+      True -> createDirectoryIfMissing True

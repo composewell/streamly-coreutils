@@ -18,23 +18,22 @@ module Streamly.Coreutils.Mv
     )
 where
 
-import Streamly.Coreutils.Common (Switch(..))
 import System.Directory (doesPathExist, renamePath)
 
-newtype Mv = Mv {mvForce :: Switch}
+newtype Mv = Mv {mvForce :: Bool}
 
 defaultConfig :: Mv
-defaultConfig = Mv Off
+defaultConfig = Mv False
 
-force :: Switch -> Mv -> Mv
+force :: Bool -> Mv -> Mv
 force opt cfg = cfg {mvForce = opt}
 
 mv :: (Mv -> Mv) -> FilePath -> FilePath -> IO ()
 mv f old new = do
     let opt = f defaultConfig
     case mvForce opt of
-        On -> renamePath old new
-        Off -> do
+        True -> renamePath old new
+        False -> do
             exists <- doesPathExist new
             if exists
             then error msg

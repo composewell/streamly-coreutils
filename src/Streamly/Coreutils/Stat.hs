@@ -21,22 +21,21 @@ module Streamly.Coreutils.Stat
     ) where
 
 
-import Streamly.Coreutils.Common (Switch(..))
 import System.PosixCompat.Files (FileStatus)
 
 import qualified System.PosixCompat.Files as Files
 
-newtype  Stat = Stat {deRef :: Switch}
+newtype  Stat = Stat {deRef :: Bool}
 
 defaultConfig :: Stat
-defaultConfig = Stat On
+defaultConfig = Stat True
 
-followLinks :: Switch -> Stat -> Stat
+followLinks :: Bool -> Stat -> Stat
 followLinks opt cfg = cfg {deRef = opt}
 
 stat :: (Stat -> Stat) -> FilePath -> IO FileStatus
 stat f = do
     let opt = f defaultConfig
     case deRef opt of
-        Off -> Files.getSymbolicLinkStatus
-        On -> Files.getFileStatus
+        False -> Files.getSymbolicLinkStatus
+        True -> Files.getFileStatus

@@ -19,34 +19,33 @@ module Streamly.Coreutils.Ln
 where
 
 import Control.Monad (when)
-import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
 
 import qualified System.PosixCompat.Files as Posix
 
 data Ln = Ln
-    { lnForce :: Switch
-    , lnSymbolic :: Switch
+    { lnForce :: Bool
+    , lnSymbolic :: Bool
     }
 
 defaultConfig :: Ln
-defaultConfig = Ln Off Off
+defaultConfig = Ln False False
 
-force :: Switch -> Ln -> Ln
+force :: Bool -> Ln -> Ln
 force opt cfg = cfg {lnForce = opt}
 
-symbolic :: Switch -> Ln -> Ln
+symbolic :: Bool -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
 ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
-    when (lnForce opt == Off) $ do
+    when (lnForce opt == False) $ do
         found <- test tgt isExisting
         when found $ error msg
     case lnSymbolic opt of
-        Off -> Posix.createLink src tgt
-        On -> Posix.createSymbolicLink src tgt
+        False -> Posix.createLink src tgt
+        True -> Posix.createSymbolicLink src tgt
 
     where
 

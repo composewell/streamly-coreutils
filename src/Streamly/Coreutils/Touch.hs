@@ -20,7 +20,6 @@ module Streamly.Coreutils.Touch
 where
 
 import Control.Monad (unless)
-import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (test, isExisting)
 import System.IO (openFile, IOMode(WriteMode), hClose)
 
@@ -31,26 +30,26 @@ import qualified System.PosixCompat.Files as Posix
 
 data Touch = Touch
     {
-      createNew :: Switch
-    , deRef :: Switch   -- touch the referenced file for symbolic link
+      createNew :: Bool
+    , deRef :: Bool   -- touch the referenced file for symbolic link
     }
 
 defaultConfig :: Touch
-defaultConfig = Touch On On
+defaultConfig = Touch True True
 
--- | Default is 'On'.
-followLinks :: Switch -> Touch -> Touch
+-- | Default is 'True'.
+followLinks :: Bool -> Touch -> Touch
 followLinks opt cfg = cfg {deRef = opt}
 
--- | Default is 'On'.
-create :: Switch -> Touch -> Touch
+-- | Default is 'True'.
+create :: Bool -> Touch -> Touch
 create opt cfg = cfg {createNew = opt}
 
 -- | If the file does not exist create it only if both followLinks and create
--- are set to 'On'.
+-- are set to 'True'.
 --
 -- If the file or symbolic link exists then update the access and modification
--- times. If 'followLinks' is 'On' then the link target is updated otherwise
+-- times. If 'followLinks' is 'True' then the link target is updated otherwise
 -- the symbolic link itself is updated.
 --
 -- Fails if the parent directories in the path do not exist or if there is no
@@ -58,22 +57,22 @@ create opt cfg = cfg {createNew = opt}
 --
 -- Defaults:
 --
--- * create On
--- * followLinks On
+-- * create True
+-- * followLinks True
 --
 touch :: (Touch -> Touch) -> FilePath -> IO ()
 touch f path = do
     let opt = f defaultConfig
-    if (createNew opt == On && deRef opt == On)
+    if (createNew opt == True && deRef opt == True)
     then do
         found <- test path isExisting
         unless found $ openFile path WriteMode >>= hClose
     else
         case deRef opt of
-            On -> Posix.touchFile path
+            True -> Posix.touchFile path
 #if !defined (CABAL_OS_WINDOWS)
-            Off -> Posix.touchSymbolicLink path
+            False -> Posix.touchSymbolicLink path
 #else
             -- XXX Is it possible to support this on Windows?
-            Off -> error "touch: followLinks=Off not supported on Windows"
+            False -> error "touch: followLinks=False not supported on Windows"
 #endif

@@ -19,7 +19,6 @@ module Streamly.Coreutils.Rm
     )
 where
 
-import Streamly.Coreutils.Common (Switch(..))
 import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
 import System.Directory
     ( removeFile
@@ -44,13 +43,13 @@ data RmForce =
 data Rm = Rm
     {
       rmForce :: RmForce
-    , rmRecursive :: Switch
+    , rmRecursive :: Bool
     }
 
 defaultConfig :: Rm
 defaultConfig = Rm
     { rmForce = None
-    , rmRecursive = Off
+    , rmRecursive = False
     }
 
 -- | Specify the force behavior. See 'RmForce'.
@@ -62,9 +61,9 @@ force val cfg = cfg {rmForce = val}
 
 -- | Remove recursively when the path is a directory.
 --
--- Default is 'Off'.
+-- Default is 'False'.
 --
-recursive :: Switch -> Rm -> Rm
+recursive :: Bool -> Rm -> Rm
 recursive sw cfg = cfg {rmRecursive = sw}
 
 rmFileWith :: (FilePath -> IO ()) -> Rm -> FilePath -> IO ()
@@ -86,8 +85,8 @@ rmWith rmdir rmfile options path = do
     if dir
     then
         case rmRecursive options of
-            Off -> error $ "rm: cannot remove '" ++ path ++ "': is a directory"
-            On -> rmdir path
+            False -> error $ "rm: cannot remove '" ++ path ++ "': is a directory"
+            True -> rmdir path
     -- XXX Recursive case needs to do the same checks for each file, but in
     -- that case we rely on the recursive directory removal function which
     -- might provide different error messages.
