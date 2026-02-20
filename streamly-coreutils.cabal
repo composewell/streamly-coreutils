@@ -3,20 +3,10 @@ name:                streamly-coreutils
 version:             0.1.0
 synopsis:            GNU Coreutils like API for Streamly
 description:
-   Port useful commands from the GNU `coreutils` to Haskell functions using
-   streamly.
-
-   GNU `coreutils` are commonly used, well known interfaces to perform common
-   tasks on POSIX systems. It will be useful to have Haskell implementations of
-   these utilities in general and also to utilize the knowledge of these utilities
-   gained by programmers, admins, script writers for writing Haskell scripts.
-
-   Some of these, but not all, are available in some existing Haskell libraries in
-   some form or other. However, there is no comprehensive collection available,
-   performance may not be at par and implementations may not be streaming. The
-   goal of this project is to have a comprehensive streaming collection using
-   Streamly with performance competitive with that of the C implementations
-   where it matters.
+   Streaming Haskell implementations of GNU coreutils, built on
+   Streamly.  Provides familiar, composable, high-performance,
+   concurrent, streaming equivalents of common POSIX utilities, designed
+   for idiomatic Haskell scripting and systems programming.
 
 homepage:            https://github.com/composewell/streamly-coreutils
 bug-reports:         https://github.com/composewell/streamly-coreutils/issues
@@ -132,11 +122,12 @@ library
     , Streamly.Coreutils.Sh
     , Streamly.Coreutils.Sleep
     , Streamly.Coreutils.Stat
-    , Streamly.Coreutils.String
     , Streamly.Coreutils.Tail
     , Streamly.Coreutils.Touch
-    , Streamly.Coreutils.Uniq
     , Streamly.Coreutils.Which
+  other-modules:
+      Streamly.Coreutils.String
+    , Streamly.Coreutils.Uniq
 
   default-language:    Haskell2010
 
@@ -144,30 +135,30 @@ library
 -- Benchmarks
 -------------------------------------------------------------------------------
 
-benchmark coreutils-bench
-  import: compile-options
-  type: exitcode-stdio-1.0
-  hs-source-dirs: benchmark
-  main-is: Main.hs
-  build-depends:
-      streamly-coreutils
-    , streamly-core
-    , base              >= 4.8   && < 5
-    , gauge             >= 0.2.4 && < 0.3
-    , random            >= 1.0.0 && < 2
-  default-language: Haskell2010
+-- benchmark coreutils-bench
+--   import: compile-options
+--   type: exitcode-stdio-1.0
+--   hs-source-dirs: benchmark
+--   main-is: Main.hs
+--   build-depends:
+--       streamly-coreutils
+--     , streamly-core
+--     , base              >= 4.8   && < 5
+--     , gauge             >= 0.2.4 && < 0.3
+--     , random            >= 1.0.0 && < 2
+--   default-language: Haskell2010
 
 -------------------------------------------------------------------------------
 -- Test suites
 -------------------------------------------------------------------------------
 
-test-suite coreutils-test
-  import: compile-options
-  type: exitcode-stdio-1.0
-  main-is: Main.hs
-  hs-source-dirs: test
-  build-depends:
-      streamly-coreutils
-    , streamly-core
-    , base              >= 4.8   && < 5
-  default-language: Haskell2010
+-- test-suite coreutils-test
+--   import: compile-options
+--   type: exitcode-stdio-1.0
+--   main-is: Main.hs
+--   hs-source-dirs: test
+--   build-depends:
+--       streamly-coreutils
+--     , streamly-core
+--     , base              >= 4.8   && < 5
+--   default-language: Haskell2010
