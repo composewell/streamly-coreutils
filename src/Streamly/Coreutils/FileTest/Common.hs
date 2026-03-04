@@ -21,8 +21,25 @@
 -- (for example, comparing file sizes or timestamps) while ensuring that
 -- multiple checks share a single underlying file status query.
 --
--- XXX Need tests for Windows. Especially for file access permissions. How do
--- ACLs affect it? Also file times.
+-- 'FileTest' predicates operate on 'FileState', which carries:
+--
+--   * The 'FilePath' that was supplied to the runner ('test' / 'testl').
+--   * A lazily-populated 'IORef' that caches the 'FileStatus' after the
+--     first predicate that needs it fetches it.
+--   * The OS stat action to use ('getFileStatus' for 'test',
+--     'getSymbolicLinkStatus' for 'testl').  Storing it in 'FileState' means
+--     every predicate automatically uses the right variant without needing to
+--     know how it was invoked.
+--
+-- The cache guarantee: no matter how many predicates are composed with 'and_'
+-- / 'or_', at most one @stat@ system call is issued per 'test' / 'testl'
+-- invocation.  Predicates that are short-circuited away pay no stat cost.
+--
+-- We could use a more restricted StatusTest predicates which consume only the
+-- file status argument. StatusTest can then be lifted into a FileTest which
+-- passes a FilePath argument as well and maybe some others. StatusTest
+-- predicates can be moved into a separate module. But does it buy us anything
+-- worthwhile?
 --
 -- Files supported by windows:
 --
@@ -40,14 +57,26 @@
 --
 -- See AccessMode and ShareMode in the Win32 package
 
+-- Testing TODO:
+-- XXX Need tests for Windows. Especially for file access permissions. How do
+-- ACLs affect it? Also file times.
+
 module Streamly.Coreutils.FileTest.Common
     (
     -- * File Test Predicate Type
-      FileTest
+      FileTest (..)
+    , Predicate (..)
+    , mkFileState
 
     -- * Primitives
     , predicate
     , predicateM
+    , generalPredicateM
+    , generalPredicate
+    , statusPredicateM
+    , statusPredicate
+    , pathPredicateM
+    , pathPredicate
     , true
     , false
 
@@ -62,10 +91,6 @@ module Streamly.Coreutils.FileTest.Common
     , test
     , testl
     , apply
-#if !defined(CABAL_OS_WINDOWS)
-    , testFD
-    , testHandle
-#endif
 
     -- * Predicates
 
@@ -164,6 +189,7 @@ where
 import Control.Exception (catch, throwIO)
 import Data.Bits ((.&.))
 import Data.Int (Int64)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Data.Time.Clock (NominalDiffTime)
 import Foreign.C.Error (Errno(..), eNOENT)
@@ -174,20 +200,90 @@ import System.PosixCompat.Files (FileStatus)
 import System.Posix.Types (COff(..), FileMode)
 import qualified System.PosixCompat.Files as Files
 
-#if !defined(CABAL_OS_WINDOWS)
-import System.IO (Handle)
-import System.Posix.Types (Fd)
-#endif
-
 import Prelude hiding (and, or)
 import Streamly.Internal.Data.Time.Clock
 import Streamly.Internal.Data.Time.Units
 
+-- $setup
+-- >>> import Prelude hiding (or, and)
+
 newtype Predicate m a =
     Predicate (a -> m Bool)
 
--- $setup
--- >>> import Prelude hiding (or, and)
+------------------------------------------------------------------------------
+-- FileState
+------------------------------------------------------------------------------
+
+-- | Carries all the information a 'FileTest' predicate needs to evaluate.
+--
+-- [@filepath@] The path supplied to the runner ('test' \/ 'testl').  Available
+-- to any predicate that needs the path in addition to the status (e.g. for a
+-- second stat call on a related file).
+--
+-- [@fileStatus@] A write-once lazy cache.  Starts as 'Nothing'.  The first
+-- predicate that needs the 'FileStatus' calls 'requireStatus', which invokes
+-- 'fetchStatus' and stores the result.  Every subsequent predicate in the same
+-- composed expression reuses the cached value, so at most one @stat@ system
+-- call is ever issued per runner invocation.
+--
+-- [@fetchStatus@] The OS stat action to use when the cache is empty.  Set by
+-- the runner: 'test' supplies 'Files.getFileStatus' (follows symlinks);
+-- 'testl' supplies 'Files.getSymbolicLinkStatus' (examines the link itself).
+-- Storing the action here keeps the choice invisible to individual predicates.
+data FileState = FileState
+    { filepath    :: FilePath
+      -- ^ The path supplied to 'test' \/ 'testl'.
+    , fileStatus  :: IORef (Maybe FileStatus)
+      -- ^ Lazily-populated 'FileStatus' cache.
+    , fetchStatus :: IO FileStatus
+      -- ^ OS stat action; called at most once, on cache miss.
+    }
+
+-- | Obtain the cached 'FileStatus', fetching and caching it on first call.
+--
+-- This is the single point through which all leaf predicates access the
+-- 'FileStatus'. It guarantees the "at most one @stat@ call" invariant.
+requireStatus :: FileState -> IO FileStatus
+requireStatus fs = do
+    cached <- readIORef (fileStatus fs)
+    case cached of
+        Just st -> pure st
+        Nothing -> do
+            st <- fetchStatus fs
+            writeIORef (fileStatus fs) (Just st)
+            pure st
+
+-- | Construct a fresh 'FileState' with an empty (unfetched) status cache.
+--
+-- @fetchFn@ is the OS stat action predicates will use. Pass
+-- 'Files.getFileStatus' for symlink-following behaviour, or
+-- 'Files.getSymbolicLinkStatus' to examine the link itself.
+newFileState :: FilePath -> IO FileStatus -> IO FileState
+newFileState path fetchFn = do
+    ref <- newIORef Nothing
+    pure $ FileState
+        { filepath    = path
+        , fileStatus  = ref
+        , fetchStatus = fetchFn
+        }
+
+-- | Constructs a 'FileState' whose cache is pre-populated with the supplied
+-- 'FileStatus', so no additional @stat@ call is ever issued.  The 'filepath'
+-- is left empty because no path is available at this call site; 'fetchStatus'
+-- is set to an error thunk since it must never be called when the cache is
+-- already populated.
+mkFileState :: String -> FileStatus -> IO FileState
+mkFileState tag st = do
+    ref <- newIORef (Just st)
+    return $ FileState
+        { filepath    = error $ tag ++ ": filepath cannot be used"
+        , fileStatus  = ref
+        , fetchStatus = error $ tag ++ ": fetchStatus cannot be used"
+        }
+
+------------------------------------------------------------------------------
+-- FileTest
+------------------------------------------------------------------------------
 
 -- Naming Notes: Named FileTest rather than "Test" to be more explicit and
 -- specific. The command can also be named fileTest or testFile.
@@ -197,12 +293,14 @@ newtype Predicate m a =
 -- the "or" operation. Also, the generic foldMap or mconcat provided by Monoids
 -- are of limited use in this case.
 
--- XXX Supply the FilePath as well.
+-- Predicates receive a 'FileState' rather than a raw 'FileStatus'.  This
+-- gives them access to the file path and lets them share the lazily-cached
+-- 'FileStatus' without issuing redundant @stat@ calls.
 
 -- | A predicate type for testing boolean statements about a file.
 --
 newtype FileTest =
-    FileTest (Predicate IO FileStatus)
+    FileTest (Predicate IO FileState)
 
 -- | A boolean @and@ function for combining two 'FileTest' predicates.
 --
@@ -228,7 +326,7 @@ and_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
 
 -- | A boolean @or@ function for combining two 'FileTest' predicates.
 --
--- Note that 'or_ uses a single @stat@ system call for both the tests,
+-- Note that 'or_' uses a single @stat@ system call for both the tests,
 -- even if you combine many tests using a combination of 'and_' and 'or_'.
 --
 -- It short circuits i.e. if the first predicate evaluates to true it does not
@@ -252,32 +350,46 @@ or_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
 infixr 3 `and_`
 infixr 2 `or_`
 
+-- Naming note: usually we would import this module qualified. If unqualified
+-- use of and/or is needed we can rename them anded, ored. Alternatively andL,
+-- orL.
+
 -- | A boolean @and@ for combining a list of 'FileTest' predicates.
 --
--- >>> and = foldl and_ true
+-- >>> and = foldl' and_ true
 --
 and :: [FileTest] -> FileTest
 and = foldl' and_ true
 
--- | A boolean @and@ for combining a list of 'FileTest' predicates.
+-- | A boolean @or@ for combining a list of 'FileTest' predicates.
 --
--- >>> or = foldl or_ false
+-- >>> or = foldl' or_ false
 --
 or :: [FileTest] -> FileTest
 or = foldl' or_ false
 
--- | A boolean @not@ function for combining two 'FileTest' predicates.
+-- | A boolean @not@ function for negating a 'FileTest' predicate.
 --
 not_ :: FileTest -> FileTest
 not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 
 -- XXX Use Path instead of filepath.
---
--- XXX We should make the system calls only once and only if needed, and pass
--- the results to the subsequent tests. File status is always required and we
--- can fetch it at the beginning but things like process uid should be fetched
--- only if the predicate needs it and then pass it around for any other
--- predicates that may need it. But that will require monadic composition.
+
+applyCatchENOENT :: (t -> IO Bool) -> t -> IO Bool
+applyCatchENOENT f fs =
+    f fs `catch` eatENOENT
+
+    where
+
+    isENOENT e =
+        case e of
+            IOError
+                { ioe_type = NoSuchThing
+                , ioe_errno = Just ioe
+                } -> Errno ioe == eNOENT
+            _ -> False
+
+    eatENOENT e = if isENOENT e then return False else throwIO e
 
 -- | Apply a predicate to a 'FilePath', if the path is a symlink uses the link
 -- target and not the link itself. See 'testl' for testing the link itself.
@@ -287,32 +399,19 @@ not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 -- * Fails with an IO exception if the path to the file is not accessible due
 -- to lack of permissions. The exception type can be used to determine the
 -- reason for failure.
---  * test 'isSymlink' always returns false.
+--  * test 'isSymLink' always returns false.
 --  * test 'doesExist' returns false if the path is symlink but it does not
 --  point to an existing file.
 --
 test :: FilePath -> FileTest -> IO Bool
-test path (FileTest (Predicate f)) =
-    -- See unix-compat package for the meaning of unix fields on windows.
-    -- Note: getFileStatus dereferences symlinks.
-    (Files.getFileStatus path >>= f) `catch` eatENOENT
-
-    where
-
-    isENOENT e =
-        case e of
-            IOError
-                { ioe_type = NoSuchThing
-                , ioe_errno = Just ioe
-                } -> Errno ioe == eNOENT
-            _ -> False
-
-    eatENOENT e = if isENOENT e then return False else throwIO e
+test path (FileTest (Predicate f)) = do
+    -- 'Files.getFileStatus' dereferences symlinks.
+    newFileState path (Files.getFileStatus path) >>= applyCatchENOENT f
 
 -- | Like 'test' but uses the path and not the link target if the path is a
 -- symlink.
 --
---  * 'isSymlink' returns true if path is a symlink, false otherwise.
+--  * 'isSymLink' returns true if path is a symlink, false otherwise.
 --  * 'doesExist' returns true if the link exists irrespective of whether it
 --  points to an existing file.
 --  * Predicates related to file permission mode bits are meaningless, and
@@ -321,53 +420,55 @@ test path (FileTest (Predicate f)) =
 --
 testl :: FilePath -> FileTest -> IO Bool
 testl path (FileTest (Predicate f)) =
-    (Files.getSymbolicLinkStatus path >>= f) `catch` eatENOENT
+    newFileState path (Files.getSymbolicLinkStatus path) >>= applyCatchENOENT f
 
-    where
+-- XXX rename to testStatus?
+-- XXX pass filepath as well
 
-    isENOENT e =
-        case e of
-            IOError
-                { ioe_type = NoSuchThing
-                , ioe_errno = Just ioe
-                } -> Errno ioe == eNOENT
-            _ -> False
-
-    eatENOENT e = if isENOENT e then return False else throwIO e
-
--- XXX rename to testStat?
-
--- | Apply a predicate to 'FileStatus'.
+-- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
+-- predicates that require filepath when using apply.
 apply :: FileStatus -> FileTest -> IO Bool
-apply st (FileTest (Predicate f)) = f st
+apply st (FileTest (Predicate f)) = mkFileState "FileTest.apply" st >>= f
 
--- XXX rename to testFd
-
-#if !defined(CABAL_OS_WINDOWS)
--- | Like 'test' but uses a file descriptor instead of file path.
-testFD :: Fd -> FileTest -> IO Bool
--- getFdStatus is not implemented for Windows in unix-compat.
-testFD fd (FileTest (Predicate f)) = Files.getFdStatus fd >>= f
-
-testHandle :: Handle -> FileTest -> IO Bool
-testHandle = undefined
-#endif
-
--- | Convert a @FileStatus -> Bool@ type of function to a 'FileTest' predicate.
-predicate :: (FileStatus -> Bool) -> FileTest
-predicate p = FileTest (Predicate (pure . p))
-
--- | Convert a @FileStatus -> IO Bool@ type of function to a 'FileTest'
--- predicate.
 predicateM :: (FileStatus -> IO Bool) -> FileTest
-predicateM p = FileTest (Predicate p)
+predicateM = statusPredicateM
 
--- | A predicate which is always 'True'.
+predicate :: (FileStatus -> Bool) -> FileTest
+predicate = statusPredicate
+
+-- XXX remove predicateM and rename this to predicateM
+
+-- | Like 'generalPredicate' but the supplied function may perform IO.
+generalPredicateM :: (FilePath -> FileStatus -> IO Bool) -> FileTest
+generalPredicateM p =
+    FileTest $ Predicate $ \fs -> requireStatus fs >>= p (filepath fs)
+
+-- XXX remove predicate and rename this to predicate
+
+-- | Convert a @FilePath -> FileStatus -> Bool@ function into a 'FileTest' predicate.
+generalPredicate :: (FilePath -> FileStatus -> Bool) -> FileTest
+generalPredicate p = generalPredicateM (\fp fs -> pure $ p fp fs)
+
+-- | Like 'statusPredicate' but the supplied function may perform IO.
+statusPredicateM :: (FileStatus -> IO Bool) -> FileTest
+statusPredicateM p = FileTest $ Predicate $ \fs -> requireStatus fs >>= p
+
+-- | Convert a @FileStatus -> Bool@ function into a 'FileTest' predicate.
+statusPredicate :: (FileStatus -> Bool) -> FileTest
+statusPredicate p = statusPredicateM (pure . p)
+
+pathPredicateM :: (FilePath -> IO Bool) -> FileTest
+pathPredicateM p = FileTest $ Predicate $ \fs -> p (filepath fs)
+
+pathPredicate :: (FilePath -> Bool) -> FileTest
+pathPredicate p = pathPredicateM (pure . p)
+
+-- | A predicate which is always 'True'. Identity of 'and' style folds.
 --
 true :: FileTest
 true = predicate (const True)
 
--- | A predicate which is always 'False'.
+-- | A predicate which is always 'False'. Identity of 'or' style folds.
 --
 false :: FileTest
 false = predicate (const False)
@@ -381,7 +482,7 @@ false = predicate (const False)
 
 -- NOTE: This could be (Path -> IO Bool) type as we will never combine this
 -- with anything else. But as a FileTest the same predicate can be used with
--- either "test" or "testl".
+-- either "test" or "testl" to execute the predicate.
 
 -- >>> doesExist = true
 
@@ -574,6 +675,15 @@ isHardLinkTo = undefined
 -- Time
 -----------------------------------
 
+-- NOTES: NominalDiffTime is actually time duration in seconds possibly
+-- fractional. In contrast to DiffTime it ignores the leap seconds, so it is
+-- the actual elapsed time duration. A more specific and intuitive name for
+-- this would be NominalDiffSeconds or Duration or simply Seconds.
+--
+-- We could use (Integer -> NominalDiffTime) in the APIs below and that would
+-- disallow nesting of units e.g. (seconds (minutes 5)). But that is unlikely
+-- error and NominalDiffTime allows fractional seconds which is a good thing.
+
 -- | Time duration in seconds.
 --
 -- >>> modifiedOlderThan (seconds 30)
@@ -705,6 +815,10 @@ accessedWithin dt = accessAge (< dt)
 accessedOlderThan :: NominalDiffTime -> FileTest
 accessedOlderThan dt = accessAge (> dt)
 
+-- | True if modify age satisfies the predicate.
+--
+-- >>> modifyAge (> minutes 10)
+--
 modifyAge :: (NominalDiffTime -> Bool) -> FileTest
 modifyAge = ageSatisfiesWith Files.modificationTimeHiRes
 
@@ -773,7 +887,7 @@ nonEmpty = size (> 0)
 -- size of the file being tested and the second argument is the size of the
 -- file in the argument.
 --
--- >> sizeComparedTo (>) "/x"
+-- >>> sizeComparedTo (>) "abc.txt"
 --
 -- If the supplied file path is a symlink dereferences it.
 sizeComparedTo :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest

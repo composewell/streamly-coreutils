@@ -82,17 +82,16 @@ module Streamly.Coreutils.FileTest
     , and_
     , or_
 
+    -- * Folding Predicates
+    , true
+    , false
     , and
     , or
 
     -- * Predicates
 
-    -- -- ** Primitives
-    -- , predicate -- exposes FileStatus
-    -- , true
-    -- , false
-
     -- ** General
+    -- , predicate -- exposes FileStatus
     , doesExist
 
     -- ** File Type
@@ -190,6 +189,19 @@ module Streamly.Coreutils.FileTest
     , sizeComparedTo
 
     -- ** File times
+    -- | 'NominalDiffTime' is time duration specified in seconds possibly
+    -- fractional. It has a Num instance so you can specify literals and cast
+    -- common types as follows:
+    --
+    -- >>> 0.5 :: NominalDiffTime
+    -- >>> fromIntegral :: Int -> NominalDiffTime
+    -- >>> realToFrac :: Double -> NominalDiffTime
+    -- >>> fromInteger :: Integer -> NominalDiffTime
+    --
+    -- Unit helpers are convenient to specify time durations:
+    --
+    -- >>> modifiedOlderThan (days 1 + hours 5 + minutes 10 + seconds 20)
+
     -- *** Time units
     , seconds
     , minutes

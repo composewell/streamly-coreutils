@@ -11,7 +11,9 @@
 -- "Streamly.Coreutils.FileTest" with some additional posix specific functions.
 
 module Streamly.Coreutils.FileTest.Posix
-    ( isReadable
+    ( testFd
+    , testHandle
+    , isReadable
     , isWritable
     , isExecutable
     , isOwnedByCurrentUser
@@ -23,12 +25,29 @@ module Streamly.Coreutils.FileTest.Posix
     )
 where
 
-import System.Posix.Types (GroupID, UserID)
+import System.IO (Handle)
+import System.Posix.Types (Fd, GroupID, UserID)
 import qualified System.Posix.Files as Posix
 import qualified System.PosixCompat.Files as Files
 import qualified System.Posix.User as User
 
 import Streamly.Coreutils.FileTest.Common
+
+-- XXX 'getFdStatus' is not implemented for Windows in unix-compat.
+
+-- XXX The 'FileStatus' is fetched eagerly before constructing the 'FileState'
+-- because the file descriptor may be closed by the time a lazy fetch would
+-- occur. Instead we can wrap this in an exception handler.
+
+-- | Like 'test' but uses a file descriptor instead of a file path.
+--
+--
+testFd :: Fd -> FileTest -> IO Bool
+testFd fd (FileTest (Predicate f)) =
+    Files.getFdStatus fd >>= mkFileState "FileTest.testFd" >>= f
+
+testHandle :: Handle -> FileTest -> IO Bool
+testHandle = undefined
 
 -- XXX large Int may get truncated to some valid id.
 -- XXX Need a protable "Uid" (unix CUid or windows SID) to expose hasUid.
