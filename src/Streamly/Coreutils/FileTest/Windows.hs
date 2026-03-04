@@ -28,10 +28,10 @@ newtype Uid = Uid SID
 newtype Gid = Gid SID
 
 isOwnedByUserId :: Uid -> FileTest
-isOwnedByUserId (Uid uid) = predicate $ \st -> undefined
+isOwnedByUserId (Uid uid) = withPathM $ \fp -> undefined
 
 isOwnedByGroupId :: Gid -> FileTest
-isOwnedByGroupId (Gid gid) = predicate $ \st -> undefined
+isOwnedByGroupId (Gid gid) = withPathM $ \fp -> undefined
 
 --------------------------------------------------------------------------------
 -- withFileOwnerSID
@@ -117,27 +117,26 @@ withEffectiveUserSID action = do
 foreign import WINDOWS_CCONV unsafe "windows.h EqualSid"
     c_EqualSid :: PSID -> PSID -> IO BOOL
 
-pathHasCurrentUser :: FilePath -> IO Bool
-pathHasCurrentUser path =
+isPathOwnedByCurrentUser :: FilePath -> IO Bool
+isPathOwnedByCurrentUser path =
     withFileOwnerSID path $ \fileSid ->
         withEffectiveUserSID $ \userSid ->
             (/= 0) <$> c_EqualSid fileSid userSid
 
 isOwnedByCurrentUser :: FileTest
-isOwnedByCurrentUser =
-    predicateM $ \st -> undefined
+isOwnedByCurrentUser = withPathM isPathOwnedByCurrentUser
 
-{-
-pathHasCurrentGroup :: FilePath -> IO Bool
-pathHasCurrentGroup path =
+withFilePrimaryGroupSID = undefined
+withEffectiveGroupSID = undefined
+
+isPathOwnedByCurrentGroup :: FilePath -> IO Bool
+isPathOwnedByCurrentGroup path =
     withFilePrimaryGroupSID path $ \fileSid ->
         withEffectiveGroupSID $ \userSid ->
             (/= 0) <$> c_EqualSid fileSid userSid
--}
 
 isOwnedByCurrentGroup :: FileTest
-isOwnedByCurrentGroup =
-    predicateM $ \st -> undefined
+isOwnedByCurrentGroup = withPathM isPathOwnedByCurrentGroup
 
 --------------------------------------------------------------------------------
 -- File Access including locks
@@ -155,8 +154,8 @@ isOwnedByCurrentGroup =
 --
 -- Returns false if the file locked and not shared for reading.
 --
-isReadableNow :: FilePath -> IO Bool
-isReadableNow path =
+isPathReadableNow :: FilePath -> IO Bool
+isPathReadableNow path =
     (do
         let desiredAccess = Win32.fILE_READ_DATA
 
@@ -183,12 +182,15 @@ isReadableNow path =
     )
     `catch` \(_ :: IOException) -> return False
 
+isReadableNow :: FileTest
+isReadableNow = withPathM isPathReadableNow
+
 -- | True if the file is writable by the current process.
 --
 -- Returns false if the file locked and not shared for writing.
 --
-isWritableNow :: FilePath -> FileStatus -> IO Bool
-isWritableNow path st = do
+isFileWritableNow :: FilePath -> FileStatus -> IO Bool
+isFileWritableNow path st = do
     isDirectory <- apply st isDir
     -- On Windows, hasMode ownerWriteMode = READONLY attribute not set.
     writable <- apply st (hasMode ownerWriteMode)
@@ -224,10 +226,13 @@ isWritableNow path st = do
          >>= Win32.closeHandle >> return True)
         `catch` (\(_ :: IOException) -> return False)
 
+isWritableNow :: FileTest
+isWritableNow = withStateM isFileWritableNow
+
 -- | Returns true if file is executable. Returns false if the file is locked
 -- and not shared for execution.
-isExecutableNow :: FilePath -> IO Bool
-isExecutableNow path =
+isPathExecutableNow :: FilePath -> IO Bool
+isPathExecutableNow path =
     (do
         let desiredAccess = Win32.fILE_EXECUTE
 
@@ -253,3 +258,6 @@ isExecutableNow path =
         return True
     )
     `catch` \(_ :: IOException) -> return False
+
+isExecutableNow :: FileTest
+isExecutableNow = withPathM isPathExecutableNow

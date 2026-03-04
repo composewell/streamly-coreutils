@@ -82,16 +82,16 @@ pathIsReadable :: FilePath -> IO Bool
 pathIsReadable path = Posix.fileAccess path True False False
 
 isReadable :: FileTest
-isReadable = withStatusM $ \st -> pathIsReadable undefined
+isReadable = withPathM pathIsReadable
 
 pathIsWritable :: FilePath -> IO Bool
 pathIsWritable path = Posix.fileAccess path False True False
 
 isWritable :: FileTest
-isWritable = withStatusM $ \st -> pathIsWritable undefined
+isWritable = withPathM pathIsWritable
 
 pathIsExecutable :: FilePath -> IO Bool
 pathIsExecutable path = Posix.fileAccess path False False True
 
 isExecutable :: FileTest
-isExecutable = withStatusM $ \st -> pathIsExecutable undefined
+isExecutable = withPathM pathIsExecutable
