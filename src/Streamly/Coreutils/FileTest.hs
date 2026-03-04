@@ -312,15 +312,15 @@ isOwnedByCurrentGroup = FileTest.isOwnedByCurrentGroup
 -------------------------------------------------------------------------------
 
 hasPermissions :: (FileMode, FileMode, FileMode) -> FileTest
-hasPermissions (user, group, other) = predicateM $ \st -> do
-    isOwner <- apply st isOwnedByCurrentUser
-    let checkMode = apply st . hasMode
+hasPermissions (user, group, other) = generalPredicateM $ \fp st -> do
+    isOwner <- testGeneral fp st isOwnedByCurrentUser
+    let checkMode = testGeneral fp st . hasMode
     if isOwner
     then checkMode user
 #if !defined(CABAL_OS_WINDOWS)
     else do
         -- XXX need to check access via other group memberships as well
-        isGroup <- apply st isOwnedByCurrentGroup
+        isGroup <- testGeneral fp st isOwnedByCurrentGroup
         if isGroup
         then checkMode group
         else checkMode other

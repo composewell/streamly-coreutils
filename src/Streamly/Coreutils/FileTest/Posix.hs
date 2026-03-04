@@ -41,10 +41,11 @@ import Streamly.Coreutils.FileTest.Common
 
 -- | Like 'test' but uses a file descriptor instead of a file path.
 --
---
 testFd :: Fd -> FileTest -> IO Bool
 testFd fd (FileTest (Predicate f)) =
-    Files.getFdStatus fd >>= mkFileState "FileTest.testFd" >>= f
+    -- XXX We should pass "Either Fd FilePath" in state.
+    let fp = error $ "FileTest.testFd: filepath cannot be used"
+     in Files.getFdStatus fd >>= mkFileState "FileTest.testFd" fp >>= f
 
 testHandle :: Handle -> FileTest -> IO Bool
 testHandle = undefined

@@ -90,7 +90,7 @@ module Streamly.Coreutils.FileTest.Common
     -- * Running Predicates
     , test
     , testl
-    , apply
+    , testGeneral
 
     -- * Predicates
 
@@ -234,6 +234,7 @@ data FileState = FileState
     { filepath    :: FilePath
       -- ^ The path supplied to 'test' \/ 'testl'.
     , fileStatus  :: IORef (Maybe FileStatus)
+      -- XXX store it in IORef using Either type.
       -- ^ Lazily-populated 'FileStatus' cache.
     , fetchStatus :: IO FileStatus
       -- ^ OS stat action; called at most once, on cache miss.
@@ -272,13 +273,13 @@ newFileState path fetchFn = do
 -- is left empty because no path is available at this call site; 'fetchStatus'
 -- is set to an error thunk since it must never be called when the cache is
 -- already populated.
-mkFileState :: String -> FileStatus -> IO FileState
-mkFileState tag st = do
+mkFileState :: String -> FilePath -> FileStatus -> IO FileState
+mkFileState tag fp st = do
     ref <- newIORef (Just st)
     return $ FileState
-        { filepath    = error $ tag ++ ": filepath cannot be used"
+        { filepath    = fp
         , fileStatus  = ref
-        , fetchStatus = error $ tag ++ ": fetchStatus cannot be used"
+        , fetchStatus = error $ tag ++ ": BUG. fetchStatus cannot be used here"
         }
 
 ------------------------------------------------------------------------------
@@ -422,13 +423,11 @@ testl :: FilePath -> FileTest -> IO Bool
 testl path (FileTest (Predicate f)) =
     newFileState path (Files.getSymbolicLinkStatus path) >>= applyCatchENOENT f
 
--- XXX rename to testStatus?
--- XXX pass filepath as well
-
 -- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
 -- predicates that require filepath when using apply.
-apply :: FileStatus -> FileTest -> IO Bool
-apply st (FileTest (Predicate f)) = mkFileState "FileTest.apply" st >>= f
+testGeneral :: FilePath -> FileStatus -> FileTest -> IO Bool
+testGeneral fp st (FileTest (Predicate f)) =
+    mkFileState "FileTest.apply" fp st >>= f
 
 predicateM :: (FileStatus -> IO Bool) -> FileTest
 predicateM = statusPredicateM
