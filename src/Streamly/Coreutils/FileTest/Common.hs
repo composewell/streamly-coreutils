@@ -35,11 +35,18 @@
 -- / 'or_', at most one @stat@ system call is issued per 'test' / 'testl'
 -- invocation.  Predicates that are short-circuited away pay no stat cost.
 --
+-- FileTest is essentially a Reader. TODO: We can replace Predicate with
+-- ReaderT FileState IO
+--
 -- We could use a more restricted StatusTest predicates which consume only the
 -- file status argument. StatusTest can then be lifted into a FileTest which
 -- passes a FilePath argument as well and maybe some others. StatusTest
 -- predicates can be moved into a separate module. But does it buy us anything
 -- worthwhile?
+--
+-- Naming: unary predicates are either isSomething or hasSomething. Binary
+-- predicates are nouns. Predicates are named so that they read well on the
+-- call site e.g. "test path doesExist" or "test path isReadable".
 --
 -- Files supported by windows:
 --
@@ -64,26 +71,26 @@
 module Streamly.Coreutils.FileTest.Common
     (
     -- * File Test Predicate Type
-      FileTest (..)
-    , Predicate (..)
+      Predicate (..)
     , mkFileState
+    , FileTest (..)
 
-    -- * Primitives
-    , predicate
-    , predicateM
-    , generalPredicateM
-    , generalPredicate
-    , statusPredicateM
-    , statusPredicate
-    , pathPredicateM
-    , pathPredicate
-    , true
-    , false
+    -- * Creating FileTest Predicates
+    , withState
+    , withStateM
+    , withStatusM
+    , withStatus
+    , withPathM
+    , withPath
 
     -- * Predicate Combinators
     , not_
     , and_
     , or_
+
+    -- * Folds
+    , true
+    , false
     , and
     , or
 
@@ -347,27 +354,34 @@ or_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
         then pure True
         else q a
 
--- We can also use &&_, ||_ operators but probably not worth it.
+-- NOTE: We can also use &&_, ||_ operators but probably not worth it.
+-- For && we can provide a Semigroup instance and <> can be used, it can be
+-- useful as it is auto imported by Prelude. But then we do not have a similar
+-- solution for or. The operator will have to be imported explicitly from this
+-- module.
 infixr 3 `and_`
 infixr 2 `or_`
 
 -- Naming note: usually we would import this module qualified. If unqualified
--- use of and/or is needed we can rename them anded, ored. Alternatively andL,
--- orL.
+-- use of and/or is needed we can rename them anded/ored, andL/orL,
+-- conjunction/disjunction, andB/orB (boolean).
+
+-- NOTE: Use foldr instead of foldl' as it allows short circuiting and infinite
+-- containers.
 
 -- | A boolean @and@ for combining a list of 'FileTest' predicates.
 --
--- >>> and = foldl' and_ true
+-- >>> and = foldr and_ true
 --
 and :: [FileTest] -> FileTest
-and = foldl' and_ true
+and = foldr and_ true
 
 -- | A boolean @or@ for combining a list of 'FileTest' predicates.
 --
--- >>> or = foldl' or_ false
+-- >>> or = foldr or_ false
 --
 or :: [FileTest] -> FileTest
-or = foldl' or_ false
+or = foldr or_ false
 
 -- | A boolean @not@ function for negating a 'FileTest' predicate.
 --
@@ -429,55 +443,48 @@ testGeneral :: FilePath -> FileStatus -> FileTest -> IO Bool
 testGeneral fp st (FileTest (Predicate f)) =
     mkFileState "FileTest.apply" fp st >>= f
 
-predicateM :: (FileStatus -> IO Bool) -> FileTest
-predicateM = statusPredicateM
-
-predicate :: (FileStatus -> Bool) -> FileTest
-predicate = statusPredicate
-
--- XXX remove predicateM and rename this to predicateM
-
--- | Like 'generalPredicate' but the supplied function may perform IO.
-generalPredicateM :: (FilePath -> FileStatus -> IO Bool) -> FileTest
-generalPredicateM p =
+-- | Like 'withState' but the supplied function may perform IO.
+withStateM :: (FilePath -> FileStatus -> IO Bool) -> FileTest
+withStateM p =
     FileTest $ Predicate $ \fs -> requireStatus fs >>= p (filepath fs)
 
--- XXX remove predicate and rename this to predicate
+-- | Convert a @FilePath -> FileStatus -> Bool@ function into a 'FileTest'
+-- predicate.
+withState :: (FilePath -> FileStatus -> Bool) -> FileTest
+withState p = withStateM (\fp fs -> pure $ p fp fs)
 
--- | Convert a @FilePath -> FileStatus -> Bool@ function into a 'FileTest' predicate.
-generalPredicate :: (FilePath -> FileStatus -> Bool) -> FileTest
-generalPredicate p = generalPredicateM (\fp fs -> pure $ p fp fs)
-
--- | Like 'statusPredicate' but the supplied function may perform IO.
-statusPredicateM :: (FileStatus -> IO Bool) -> FileTest
-statusPredicateM p = FileTest $ Predicate $ \fs -> requireStatus fs >>= p
+-- | Like 'withStatus' but the supplied function may perform IO.
+withStatusM :: (FileStatus -> IO Bool) -> FileTest
+withStatusM p = FileTest $ Predicate $ \fs -> requireStatus fs >>= p
 
 -- | Convert a @FileStatus -> Bool@ function into a 'FileTest' predicate.
-statusPredicate :: (FileStatus -> Bool) -> FileTest
-statusPredicate p = statusPredicateM (pure . p)
+withStatus :: (FileStatus -> Bool) -> FileTest
+withStatus p = withStatusM (pure . p)
 
-pathPredicateM :: (FilePath -> IO Bool) -> FileTest
-pathPredicateM p = FileTest $ Predicate $ \fs -> p (filepath fs)
+-- | Like 'withPath' but the supplied function may perform IO.
+withPathM :: (FilePath -> IO Bool) -> FileTest
+withPathM p = FileTest $ Predicate $ \fs -> p (filepath fs)
 
-pathPredicate :: (FilePath -> Bool) -> FileTest
-pathPredicate p = pathPredicateM (pure . p)
+-- | Convert a @FilePath -> Bool@ function into a 'FileTest' predicate.
+withPath :: (FilePath -> Bool) -> FileTest
+withPath p = withPathM (pure . p)
 
 -- | A predicate which is always 'True'. Identity of 'and' style folds.
 --
 true :: FileTest
-true = predicate (const True)
+true = FileTest $ Predicate $ const (pure True)
 
 -- | A predicate which is always 'False'. Identity of 'or' style folds.
 --
 false :: FileTest
-false = predicate (const False)
+false = FileTest $ Predicate $ const (pure False)
 
 --------------------
 -- Global properties
 --------------------
 
 -- Note: these are all boolean predicates, therefore, named with "is", "has",
--- "cmp" prefix.
+-- prefix.
 
 -- NOTE: This could be (Path -> IO Bool) type as we will never combine this
 -- with anything else. But as a FileTest the same predicate can be used with
@@ -508,13 +515,13 @@ isExisting = doesExist
 --
 -- Like @test -d file@
 isDir :: FileTest
-isDir = predicate Files.isDirectory
+isDir = withStatus Files.isDirectory
 
 -- | True if file is a regular file.
 --
 -- Like coreutil @test -f file@
 isFile :: FileTest
-isFile = predicate Files.isRegularFile
+isFile = withStatus Files.isRegularFile
 
 -- NOTE: On Windows true if FILE_ATTRIBUTE_REPARSE_POINT is set.
 
@@ -523,7 +530,7 @@ isFile = predicate Files.isRegularFile
 --
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest
-isSymLink = predicate Files.isSymbolicLink
+isSymLink = withStatus Files.isSymbolicLink
 
 -- Note: Device files are supported in Windows/NTFS.
 
@@ -534,7 +541,7 @@ isSymLink = predicate Files.isSymbolicLink
 -- Always false on Windows.
 --
 isBlockDevice :: FileTest
-isBlockDevice = predicate Files.isBlockDevice
+isBlockDevice = withStatus Files.isBlockDevice
 
 -- | True if is a character special file.
 --
@@ -543,7 +550,7 @@ isBlockDevice = predicate Files.isBlockDevice
 -- Always false on Windows.
 --
 isCharDevice :: FileTest
-isCharDevice = predicate Files.isCharacterDevice
+isCharDevice = withStatus Files.isCharacterDevice
 
 -- Note: Named pipes are supported in Windows/NTFS.
 
@@ -554,7 +561,7 @@ isCharDevice = predicate Files.isCharacterDevice
 -- Always false on Windows.
 --
 isPipe :: FileTest
-isPipe = predicate Files.isNamedPipe
+isPipe = withStatus Files.isNamedPipe
 
 -- | True if file is a socket.
 --
@@ -563,7 +570,7 @@ isPipe = predicate Files.isNamedPipe
 -- Always false on Windows.
 --
 isSocket :: FileTest
-isSocket = predicate Files.isSocket
+isSocket = withStatus Files.isSocket
 
 {-
 -- | True if the file whose file descriptor number is
@@ -584,7 +591,7 @@ isTerminalFD = undefined
 --
 {-# INLINE hasMode #-}
 hasMode :: FileMode -> FileTest
-hasMode mode = predicate (\st -> (Files.fileMode st .&. mode) == mode)
+hasMode mode = withStatus (\st -> (Files.fileMode st .&. mode) == mode)
 
 -- | True if the owner (u) has read (r) permission.
 --
@@ -713,7 +720,7 @@ days n = n * 86400
 -----------------------------------
 
 timeSatisfiesWith :: (FileStatus -> POSIXTime) -> (POSIXTime -> Bool) -> FileTest
-timeSatisfiesWith getFileTime p = predicate (p . getFileTime)
+timeSatisfiesWith getFileTime p = withStatus (p . getFileTime)
 
 -- | True if the modification time satisfies the supplied predicate.
 --
@@ -738,7 +745,7 @@ timeComparedToWith ::
     -> FilePath
     -> FileTest
 timeComparedToWith getFileTime cmp path =
-  predicateM $ \st -> do
+  withStatusM $ \st -> do
     st1 <- Files.getFileStatus path
     pure $ cmp (getFileTime st) (getFileTime st1)
 
@@ -799,7 +806,7 @@ ageSatisfiesWith
   -> (NominalDiffTime -> Bool)
   -> FileTest
 ageSatisfiesWith getFileTime p =
-  predicateM $ \st -> p <$> ageOfWith getFileTime st
+  withStatusM $ \st -> p <$> ageOfWith getFileTime st
 
 -- | True if access age satisfies the predicate.
 --
@@ -853,7 +860,7 @@ getSize st = let COff sz = Files.fileSize st in sz
 -- >>> size (> 1024)
 --
 size :: (Int64 -> Bool) -> FileTest
-size cmp = predicate (\st -> cmp (getSize st))
+size cmp = withStatus (\st -> cmp (getSize st))
 
 -- | True if file size is greater than the given size in bytes.
 --
@@ -891,7 +898,7 @@ nonEmpty = size (> 0)
 -- If the supplied file path is a symlink dereferences it.
 sizeComparedTo :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest
 sizeComparedTo rel path =
-  predicateM $ \st -> do
+  withStatusM $ \st -> do
     st1 <- Files.getFileStatus path
     pure $ rel (getSize st) (getSize st1)
 

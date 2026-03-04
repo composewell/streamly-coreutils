@@ -312,7 +312,7 @@ isOwnedByCurrentGroup = FileTest.isOwnedByCurrentGroup
 -------------------------------------------------------------------------------
 
 hasPermissions :: (FileMode, FileMode, FileMode) -> FileTest
-hasPermissions (user, group, other) = generalPredicateM $ \fp st -> do
+hasPermissions (user, group, other) = withStateM $ \fp st -> do
     isOwner <- testGeneral fp st isOwnedByCurrentUser
     let checkMode = testGeneral fp st . hasMode
     if isOwner

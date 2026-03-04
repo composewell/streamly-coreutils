@@ -57,18 +57,18 @@ newtype Uid = Uid UserID
 newtype Gid = Gid GroupID
 
 isOwnedByUserId :: Uid -> FileTest
-isOwnedByUserId (Uid uid) = predicate $ \st -> Files.fileOwner st == uid
+isOwnedByUserId (Uid uid) = withStatus $ \st -> Files.fileOwner st == uid
 
 isOwnedByGroupId :: Gid -> FileTest
-isOwnedByGroupId (Gid gid) = predicate $ \st -> Files.fileGroup st == gid
+isOwnedByGroupId (Gid gid) = withStatus $ \st -> Files.fileGroup st == gid
 
 isOwnedByCurrentUser :: FileTest
 isOwnedByCurrentUser =
-    predicateM $ \st -> (Files.fileOwner st ==) <$> User.getEffectiveUserID
+    withStatusM $ \st -> (Files.fileOwner st ==) <$> User.getEffectiveUserID
 
 isOwnedByCurrentGroup :: FileTest
 isOwnedByCurrentGroup =
-    predicateM $ \st -> (Files.fileGroup st ==) <$> User.getEffectiveGroupID
+    withStatusM $ \st -> (Files.fileGroup st ==) <$> User.getEffectiveGroupID
 
 -- The coreutil "test" utility checks for acls as well.
 --
@@ -82,16 +82,16 @@ pathIsReadable :: FilePath -> IO Bool
 pathIsReadable path = Posix.fileAccess path True False False
 
 isReadable :: FileTest
-isReadable = predicateM $ \st -> pathIsReadable undefined
+isReadable = withStatusM $ \st -> pathIsReadable undefined
 
 pathIsWritable :: FilePath -> IO Bool
 pathIsWritable path = Posix.fileAccess path False True False
 
 isWritable :: FileTest
-isWritable = predicateM $ \st -> pathIsWritable undefined
+isWritable = withStatusM $ \st -> pathIsWritable undefined
 
 pathIsExecutable :: FilePath -> IO Bool
 pathIsExecutable path = Posix.fileAccess path False False True
 
 isExecutable :: FileTest
-isExecutable = predicateM $ \st -> pathIsExecutable undefined
+isExecutable = withStatusM $ \st -> pathIsExecutable undefined
