@@ -141,25 +141,25 @@ module Streamly.Coreutils.FileTest
 
     -- ** File Access (Current User)
 
-    {-
     -- XXX currently not working fully well, hasPermissions need to be fixed
     -- for checking acess via all groups.
-
-    -- *** Mode based
-    -- | These have limited use on Windows as windows uses mostly ACLs, only
-    -- read only bit is used in modes.
     --
-    -- These APIs perform only the mode check, actual readability, writability
-    -- or executability may depend many other factors like filesystem mount
-    -- permissions, access control lists (ACLs) etc. For deep checks see:
-    -- 'isReadable', 'isWritable', 'isExecutable'.
+    -- These have limited use on Windows as windows uses mostly ACLs, only
+    -- read only bit is used in modes.
+
+    -- *** Mode based access
+    -- | These APIs perform only the file permission mode checks, actual
+    -- readability, writability or executability may depend many other factors
+    -- like filesystem mount permissions, access control lists (ACLs) etc. For
+    -- deeper checks see: 'isReadable', 'isWritable', 'isExecutable'.
     --
     , isReadableByMode
     , isWritableByMode
     , isExecutableByMode
-    -}
 
-    -- -- *** ACL based
+    -- *** Real Access
+    -- | These tests determine whether the file is actually accessible at this
+    -- time including file permission mode, ACLs, mount permissions.
     , isReadable
     , isWritable
     , isExecutable
@@ -243,19 +243,19 @@ import Prelude hiding (and, or)
 -- User and group ownerships
 -------------------------------------------------------------------------------
 
-isOwnedByUserId :: FileTest.Uid -> FileTest
-isOwnedByUserId = FileTest.isOwnedByUserId
+_isOwnedByUserId :: FileTest.Uid -> FileTest
+_isOwnedByUserId = FileTest.isOwnedByUserId
 
-isOwnedByGroupId :: FileTest.Gid -> FileTest
-isOwnedByGroupId = FileTest.isOwnedByGroupId
-
--- | Unimplemented
-isOwnedByUserName :: String -> FileTest
-isOwnedByUserName = undefined
+_isOwnedByGroupId :: FileTest.Gid -> FileTest
+_isOwnedByGroupId = FileTest.isOwnedByGroupId
 
 -- | Unimplemented
-isOwnedByGroupName :: String -> FileTest
-isOwnedByGroupName = undefined
+_isOwnedByUserName :: String -> FileTest
+_isOwnedByUserName = undefined
+
+-- | Unimplemented
+_isOwnedByGroupName :: String -> FileTest
+_isOwnedByGroupName = undefined
 
 -- | True if the file owner matches the effective user id of the current
 -- process.
