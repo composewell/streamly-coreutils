@@ -731,10 +731,10 @@ modifiedAfter t = modifyTime (> t)
 -- XXX no dereference option for symlinks?
 timeComparedToWith ::
        (FileStatus -> POSIXTime)
-    -> (POSIXTime -> POSIXTime -> Bool)
     -> FilePath
+    -> (POSIXTime -> POSIXTime -> Bool)
     -> FileTest
-timeComparedToWith getFileTime cmp path =
+timeComparedToWith getFileTime path cmp =
   withStatusM $ \st -> do
     st1 <- Files.getFileStatus path
     pure $ cmp (getFileTime st) (getFileTime st1)
@@ -747,7 +747,7 @@ timeComparedToWith getFileTime cmp path =
 --
 -- If the file path is a symlink dereferences it.
 modifyTimeComparedTo ::
-    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
+    FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 
 -- | Compare modification time with another file.
@@ -755,25 +755,25 @@ modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 -- >>> modifiedBeforeFile "ref.txt"
 --
 modifiedBeforeFile :: FilePath -> FileTest
-modifiedBeforeFile = modifyTimeComparedTo (<)
+modifiedBeforeFile path = modifyTimeComparedTo path (<)
 
 modifiedAfterFile  :: FilePath -> FileTest
-modifiedAfterFile = modifyTimeComparedTo (>)
+modifiedAfterFile path = modifyTimeComparedTo path (>)
 
 -- | Compare the access time of the file with the access time of
 -- another file.
 --
 -- If the file path is a symlink dereferences it.
 accessTimeComparedTo ::
-    (POSIXTime -> POSIXTime -> Bool) -> FilePath -> FileTest
+    FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 accessTimeComparedTo = timeComparedToWith Files.accessTimeHiRes
 
 -- | Compare access time with another file.
 accessedBeforeFile :: FilePath -> FileTest
-accessedBeforeFile = accessTimeComparedTo (<)
+accessedBeforeFile path = accessTimeComparedTo path (<)
 
 accessedAfterFile  :: FilePath -> FileTest
-accessedAfterFile = accessTimeComparedTo (>)
+accessedAfterFile path = accessTimeComparedTo path (>)
 
 -----------------------------------
 -- Comparing age with other files
@@ -886,17 +886,17 @@ nonEmpty = size (> 0)
 -- >>> sizeComparedTo (>) "abc.txt"
 --
 -- If the supplied file path is a symlink dereferences it.
-sizeComparedTo :: (Int64 -> Int64 -> Bool) -> FilePath -> FileTest
-sizeComparedTo rel path =
+sizeComparedTo :: FilePath -> (Int64 -> Int64 -> Bool) -> FileTest
+sizeComparedTo path rel =
   withStatusM $ \st -> do
     st1 <- Files.getFileStatus path
     pure $ rel (getSize st) (getSize st1)
 
 largerThanFile :: FilePath -> FileTest
-largerThanFile = sizeComparedTo (>)
+largerThanFile path = sizeComparedTo path (>)
 
 smallerThanFile :: FilePath -> FileTest
-smallerThanFile = sizeComparedTo (<)
+smallerThanFile path = sizeComparedTo path (<)
 
 sameSizeAs :: FilePath -> FileTest
-sameSizeAs = sizeComparedTo (==)
+sameSizeAs path = sizeComparedTo path (==)
