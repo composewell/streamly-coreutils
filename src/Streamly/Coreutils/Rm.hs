@@ -19,7 +19,7 @@ module Streamly.Coreutils.Rm
     )
 where
 
-import Streamly.Coreutils.FileTest (isExisting, test, isDir, isWritable)
+import Streamly.Coreutils.FileTest (doesExist, test, isDir, isWritable)
 import System.Directory
     ( removeFile
     , removeDirectoryRecursive
@@ -97,7 +97,7 @@ rm f path = do
     let options = f defaultConfig
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
-    found <- test path isExisting
+    found <- test path doesExist
     case rmForce options of
         Nuke ->
             when found

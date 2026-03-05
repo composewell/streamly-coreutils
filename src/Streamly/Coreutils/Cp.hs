@@ -112,10 +112,10 @@ cpShouldOverwrite :: CpOverwrite -> FilePath -> FilePath -> IO Bool
 cpShouldOverwrite option src dest =
     case option of
         OverwriteAlways -> return True
-        OverwriteOnly -> test dest isExisting
-        OverwriteNever -> not <$> test dest isExisting
+        OverwriteOnly -> test dest doesExist
+        OverwriteNever -> not <$> test dest doesExist
         OverwriteUpdate -> do
-            r <- test dest isExisting
+            r <- test dest doesExist
             if r
             then test src $ modifyTimeComparedTo dest (>)
             else return True

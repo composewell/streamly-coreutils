@@ -20,7 +20,7 @@ module Streamly.Coreutils.Touch
 where
 
 import Control.Monad (unless)
-import Streamly.Coreutils.FileTest (test, isExisting)
+import Streamly.Coreutils.FileTest (test, doesExist)
 import System.IO (openFile, IOMode(WriteMode), hClose)
 
 #if !defined (CABAL_OS_WINDOWS)
@@ -65,7 +65,7 @@ touch f path = do
     let opt = f defaultConfig
     if (createNew opt == True && deRef opt == True)
     then do
-        found <- test path isExisting
+        found <- test path doesExist
         unless found $ openFile path WriteMode >>= hClose
     else
         case deRef opt of
