@@ -1,20 +1,20 @@
-# packcheck-0.6.0
+# packcheck-0.7.1
 # You can use any of the options supported by packcheck as environment
 # variables here.  See https://github.com/composewell/packcheck for all
 # options and their explanation.
 
-name: packcheck
+name: TEST
 
 #-----------------------------------------------------------------------------
 # Events on which the build should be triggered
 #-----------------------------------------------------------------------------
 
 on:
+  workflow_dispatch:
+  pull_request:
   push:
     branches:
       - master
-  pull_request:
-
 
 #-----------------------------------------------------------------------------
 # Build matrix
@@ -22,153 +22,349 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.name }}
+    name: >-
+      ${{ matrix.runner }}
+      ${{ matrix.command }}
+      ${{ matrix.ghc_version }}
+      ${{ matrix.name }}
     env:
       # ------------------------------------------------------------------------
       # Common options
       # ------------------------------------------------------------------------
-      # GHC_OPTIONS: "-Werror"
       CABAL_REINIT_CONFIG: y
       LC_ALL: C.UTF-8
 
-      STACK_UPGRADE: "y"
+      # ------------------------------------------------------------------------
+      # What to build
+      # ------------------------------------------------------------------------
+      # DISABLE_TEST: "y"
+      # DISABLE_BENCH: "y"
+      # DISABLE_DOCS: "y"
+      # DISABLE_SDIST_BUILD: "y"
+      # DISABLE_SDIST_GIT_CHECK: "y"
+      # DISABLE_DIST_CHECKS: "y"
 
-      CABAL_CHECK_RELAX: y
-      CABAL_HACKAGE_MIRROR: hackage.haskell.org:http://hackage.fpcomplete.com
-
-      PACKCHECK_LOCAL_PATH: "./packcheck.sh"
-      PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
-      PACKCHECK_GITHUB_COMMIT: "v0.6.0"
-
-      BUILD: ${{ matrix.build }}
+      # ------------------------------------------------------------------------
+      # Selecting tool versions
+      # ------------------------------------------------------------------------
+      # For updating see: https://downloads.haskell.org/~ghcup/
+      GHCUP_VERSION: 0.1.50.2
       GHCVER: ${{ matrix.ghc_version }}
-      #RESOLVER: ${{ matrix.resolver }}
-      #CABAL_BUILD_OPTIONS: ${{ matrix.cabal_build_options }}
-      CABAL_PROJECT: ${{ matrix.cabal_project }}
-      #DISABLE_DOCS: ${{ matrix.disable_docs }}
-      #DISABLE_SDIST_BUILD: ${{ matrix.disable_sdist_build }}
-      #DISABLE_SDIST_BUILD: "y"
-      HLINT_OPTIONS: ${{ matrix.hlint_options }}
-      HLINT_TARGETS: ${{ matrix.hlint_targets }}
-      DOCTEST: ${{ matrix.doctest }}
 
+      # ------------------------------------------------------------------------
+      # cabal options
+      # ------------------------------------------------------------------------
+      CABAL_CHECK_RELAX: y
+
+      # CABAL_BUILD_OPTIONS="-j1"
+      # Enable the above option if you:
+      # 1. want logs in serial order to be able to correlate them better.
+      #
+      # 2. run into memory issues due to Build paralellism. We need to
+      # have sufficient per CPU memory, if not we can use a lower -j
+      # option; cabal default is ncpus.
+      #
+      # Currently (2026-03-12) from packcheck output we see:
+      # Linux: 15GB, 4 cpus
+      # macOS: 7GB, 3 cpus
+      # Windows: 16GB, 4 cpus
+
+      # ------------------------------------------------------------------------
+      # stack options (if using stack builds)
+      # ------------------------------------------------------------------------
+      # Note requiring a specific version of stack using STACKVER may fail due to
+      # github API limit while checking and upgrading/downgrading to the specific
+      # version.
+      #STACKVER: "1.6.5"
+      #STACK_UPGRADE: "y"
+      STACK_YAML: "stack.yaml"
+
+      # ------------------------------------------------------------------------
+      # Location of packcheck.sh (the shell script invoked to perform CI tests ).
+      # ------------------------------------------------------------------------
+      # You can either commit the packcheck.sh script at this path in your repo or
+      # you can use it by specifying the PACKCHECK_REPO_URL option below in which
+      # case it will be automatically copied from the packcheck repo to this path
+      # during CI tests. In any case it is finally invoked from this path.
+      PACKCHECK: "./packcheck.sh"
+      # If you have not committed packcheck.sh in your repo at PACKCHECK
+      # then it is automatically pulled from this URL.
+      PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
+      PACKCHECK_GITHUB_COMMIT: "3d3c94bf48f18a99271d509c1f1702d15824b1f0"
+
+      # ------------------------------------------------------------------------
+      # Final build variables
+      # ------------------------------------------------------------------------
+      PACKCHECK_COMMAND: ${{ matrix.command }} ${{ matrix.pack_options }}
+
+      # Subdir
+      SUBDIR: ${{ matrix.subdir }}
+    # ubuntu seems to have better support than debian on CI systems
     runs-on: ${{ matrix.runner }}
+    #continue-on-error: ${{ matrix.ignore_error }}
     strategy:
       fail-fast: false
       matrix:
+
+        # The order of jobs is important to optimize fail-fast.
+
+        # This section is to order the important jobs first especially for
+        # "fail-fast" so that these are the ones started first.
+        #name:
+        #  - ci
+
+        # The name of the CI is built using the name and other info from CI,
+        # therefore, the "name" field can be same for all tests here.
+        #
+        # The reason we have an explicit "name" field here is to force
+        # an additional config instead of adding to an existing config
+        # while adding additional configs.
+        # Look at <https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idstrategymatrix>
+        # for more info about adding matrix elements.
+        # Adding any element to the list will increase the number of matrix
+        # elements proportional to the cross product.
         include:
 
-          - name: 9.8.1-Werror
-            ghc_version: 9.8.1
-            build: cabal-v2
-            runner: ubuntu-latest
-            cabal-version: 3.10.1.0
-            cabal_project: cabal.project.d/master-Werror
+          #- name: ci
+          #  runner: ubuntu-latest
+          #  command: cabal
+          #  ghc_version: head
+          #  # The URL may change, to find a working URL go to https://gitlab.haskell.org/ghc/ghc/-/jobs/
+          #  # Find a debian10/11/12 job, click on a passed/failed status, at the
+          #  # end of the output you will find the tar.xz name, put that tar
+          #  # name after "raw/", and put the job name after "job=".
+          #  # Also see https://github.com/mpickering/ghc-artefact-nix/blob/master/gitlab-artifact.nix
+          #  #
+          #  # May also use ghcup for installing ghc head version, use the
+          #  # version "LatestNightly", and the following config:
+          #  # ghcup config add-release-channel https://ghc.gitlab.haskell.org/ghcup-metadata/ghcup-nightlies-0.0.7.yaml
+          #  # WARNING! cannot use # comments inside pack_options.
+          #  pack_options: >-
+          #    GHCUP_GHC_OPTIONS="-u https://gitlab.haskell.org/ghc/ghc/-/jobs/artifacts/master/raw/ghc-x86_64-linux-deb10-int_native-validate.tar.xz?job=x86_64-linux-deb10-int_native-validate"
+          #    CABAL_PROJECT=cabal.project.ghc-head
+          #    DISABLE_SDIST_BUILD="y"
 
-          - name: 9.6.3-macos
+          - name: ci
+            runner: ubuntu-latest
+            command: cabal
+            ghc_version: 9.14.1
+            # WARNING! cannot use # comments inside pack_options.
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
+
+          - name: ci
+            runner: macos-latest
+            command: cabal
+            ghc_version: 9.12.4
+            # WARNING! cannot use # comments inside pack_options.
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
+
+          - name: werror-fusion
+            runner: ubuntu-latest
+            command: cabal
+            ghc_version: 9.10.3
+            # WARNING! cannot use # comments inside pack_options.
+            pack_options: >-
+              CABAL_BUILD_OPTIONS="--flag fusion-plugin"
+              CABAL_PROJECT=cabal.project.d/master-Werror
+
+          - name: ghc-9.10.3
+            runner: ubuntu-latest
+            command: stack
+            # WARNING! cannot use # comments inside pack_options.
+            pack_options: >-
+              STACK_UPGRADE="y"
+              DISABLE_SDIST_BUILD="y"
+
+          - name: ci
+            runner: ubuntu-latest
+            command: cabal
+            ghc_version: 9.8.4
+            # WARNING! cannot use # comments inside pack_options.
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
+
+          - name: ci
+            runner: ubuntu-latest
+            command: cabal
             ghc_version: 9.6.3
-            build: cabal-v2
-            runner: macos-latest
-            cabal-version: 3.10.1.0
-            cabal_project: cabal.project.d/master
+            # WARNING! cannot use # comments inside pack_options.
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
 
-          - name: 9.4.4
-            ghc_version: 9.4.4
-            build: cabal-v2
+          - name: ci
             runner: ubuntu-latest
-            cabal-version: 3.8.1.0
-            cabal_project: cabal.project.d/master
+            command: cabal
+            ghc_version: 9.4.7
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
 
-          - name: 9.2.7+fusion-plugin
-            ghc_version: 9.2.7
-            build: cabal-v2
+          - name: ci
             runner: ubuntu-latest
-            cabal-build-options: --flag fusion-plugin
-            cabal-version: 3.6
-            cabal_project: cabal.project.d/master
+            command: cabal
+            ghc_version: 9.2.8
+            #pack_options: >-
+              #CABAL_PROJECT=cabal.project.d/master
 
-          - name: 9.0.2+doctest
-            ghc_version: 9.0.2
-            build: cabal-v2
+          - name: no-docs
             runner: ubuntu-latest
-            cabal-version: 3.2
-            doctest: "y"
-            cabal_project: cabal.project.d/master
-
-          - name: 8.10.7+macOS
+            command: cabal
             ghc_version: 8.10.7
-            build: cabal-v2
-            runner: macos-latest
-            cabal-version: 3.2
-            cabal_project: cabal.project.d/master
+            pack_options: >-
+              DISABLE_DOCS="y"
+            #CABAL_PROJECT=cabal.project.d/master
 
-          - name: 8.8.4
-            ghc_version: 8.8.4
-            build: cabal-v2
+          - name: ci
+            runner: windows-latest
+            command: cabal
+            ghc_version: 9.12.4
+
+          - name: ci
             runner: ubuntu-latest
-            cabal-version: 3.2
-            cabal_project: cabal.project.d/master
+            command: hlint
+            # WARNING! cannot use # comments inside pack_options.
+            pack_options: >-
+              HLINT_VERSION=3.6.1
+              HLINT_OPTIONS="lint"
+              HLINT_TARGETS="src test Benchmark"
 
-          - name: 8.6.5
-            ghc_version: 8.6.5
-            build: cabal-v2
+          - name: docspec
             runner: ubuntu-latest
-            cabal-version: 3.2
-            cabal_project: cabal.project.d/master
+            command: cabal
+            ghc_version: 9.12.4
+            # WARNING! cannot use # comments inside pack_options.
+            pack_options: >-
+              DISABLE_SDIST_BUILD="y"
+              ENABLE_DOCSPEC="y"
+              DOCSPEC_URL=https://github.com/phadej/cabal-extras/releases/download/cabal-docspec-0.0.0.20250606/cabal-docspec-0.0.0.20250606-x86_64-linux.xz
+              DOCSPEC_OPTIONS="--timeout 60"
 
-          - name: hlint
-            ghc_version: 8.10.7
-            build: cabal-v2
-            hlint_options: "lint"
-            hlint_targets: "src test Benchmark"
-            runner: ubuntu-latest
-            cabal-version: 3.2
-            cabal_project: cabal.project.d/master
-
+#-----------------------------------------------------------------------------
+# Usually you do need to change anything below, this is generic code for
+# caching and running packcheck on Linux/Mac/Windows.
+#-----------------------------------------------------------------------------
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
-    - uses: haskell/actions/setup@v1
-      with:
-        ghc-version: ${{ matrix.ghc_version }}
+    # This should happen before cache restore.
+    - name: Remove ~/.ghcup symlink (non-Windows)
+      if: runner.os != 'Windows'
+      run: |
+        rm -f ~/.ghcup
 
-    - uses: actions/cache@v4
-      name: Restore cache ~/.cabal, ~/.stack, .stack-work, ~/.ghc, ~/.local
+    - name: Cache hackage package index (non-Windows)
+      uses: actions/cache@v4
+      if: runner.os != 'Windows'
       with:
         path: |
-          ~/.cabal
+            ~/.cache/cabal/packages
+        # Bump the key version to clear the cache
+        key: cache-cabal-packages
+
+    # See the "cabal path" output in the CI logs to tweak the cache locations
+    # ghc is big but cheap to install, if cache size is a concern we can avoid
+    # caching it.
+    - name: Cache ghcup and ghc (non-Windows)
+      uses: actions/cache@v4
+      if: runner.os != 'Windows'
+      with:
+        path: |
+          ~/.ghcup
+        key: ${{ matrix.runner }}-${{ matrix.ghc_version }}.${{ matrix.ghc_salt}}
+
+    # XXX If we want to invalidate the cache on resolver change we
+    # should use a separate cache for stack as it should be keyed on
+    # resolver as well. But that requires resolver as a matrix element
+    # and then copied to pack_options from there, needs some work. It
+    # should be fine as resolver minor version change can only increase
+    # the cache size.
+    - name: Cache build dependencies (non-Windows)
+      uses: actions/cache@v4
+      if: runner.os != 'Windows'
+      with:
+        # cabal: ~/.local/bin, ~/.local/state/cabal
+        # ~/.cache/cabal/packages can be cached, but will increase the
+        # cache size. But can save the "cabal update" time.
+        path: |
+          ~/.local/bin
+          ~/.local/state/cabal
           ~/.stack
-          .stack-work
-          ~/.ghc
-          ~/.local
-        key: ${{ runner.os }}-${{ matrix.name }}
+        # Bump the key version to clear the cache
+        key: ${{ matrix.runner }}-${{ matrix.command }}-${{ matrix.ghc_version }}-${{ matrix.name }}-v1
+
+    - name: Cache common directories (Windows)
+      uses: actions/cache@v4
+      if: runner.os == 'Windows'
+      with:
+        path: |
+          ${{ env.APPDATA }}/local
+          C:/ghcup
+          C:/cabal
+        key: ${{ matrix.runner }}-${{ matrix.command }}-${{ matrix.ghc_version }}-${{ matrix.name }}-v1
 
     - name: Download packcheck
+      # on windows-latest GitHub Actions defaults to PowerShell
+      shell: bash
       run: |
-        # If a custom stack-yaml is specified, replace the default with that
-        if test -e "$STACK_YAML"; then rm -f stack.yaml && ln -sv $STACK_YAML stack.yaml; else true; fi
-        unset STACK_YAML
-
-        # Get packcheck if needed
-        CURL=$(which curl)
-        PACKCHECK_URL=${PACKCHECK_GITHUB_URL}/${PACKCHECK_GITHUB_COMMIT}/packcheck.sh
-        if test ! -e "$PACKCHECK_LOCAL_PATH"; then $CURL -sL -o "$PACKCHECK_LOCAL_PATH" $PACKCHECK_URL; fi;
-        chmod +x $PACKCHECK_LOCAL_PATH
+        if test ! -e "$PACKCHECK"
+        then
+          if test -z "$PACKCHECK_GITHUB_COMMIT"
+          then
+              die "PACKCHECK_GITHUB_COMMIT env var is not specified."
+          fi
+          PACKCHECK_URL=${PACKCHECK_GITHUB_URL}/${PACKCHECK_GITHUB_COMMIT}/packcheck.sh
+          curl --fail -sL -o "$PACKCHECK" $PACKCHECK_URL || exit 1
+          chmod +x $PACKCHECK
+        elif test ! -x "$PACKCHECK"
+        then
+            chmod +x $PACKCHECK
+        fi
 
     - name: Run packcheck
+      # on windows-latest GitHub Actions defaults to PowerShell
+      shell: bash
       run: |
-        if test -n "$DOCTEST"
+        if test -n "$SUBDIR"
         then
-          mkdir -p $HOME/.cabal/bin
-          curl -sL https://github.com/phadej/cabal-extras/releases/download/cabal-docspec-0.0.0.20210111/cabal-docspec-0.0.0.20210111.xz > cabal-docspec.xz
-          echo '0829bd034fba901cbcfe491d98ed8b28fd54f9cb5c91fa8e1ac62dc4413c9562  cabal-docspec.xz' | sha256sum -c -
-          xz -d < cabal-docspec.xz > $HOME/.cabal/bin/cabal-docspec
-          rm -f cabal-docspec.xz
-          chmod a+x $HOME/.cabal/bin/cabal-docspec
-          cabal update
-          cabal build all --project-file cabal.project.d/master
-          $HOME/.cabal/bin/cabal-docspec --version
-          $HOME/.cabal/bin/cabal-docspec --timeout 60
-        else
-          bash -c "$PACKCHECK_LOCAL_PATH $BUILD"
+          mv "$PACKCHECK" "$SUBDIR/packcheck.sh"
+          # This is required otherwise dist-newstyle will be created in
+          # the top level directory as it is considered the working dir.
+          rm -f cabal.project
+          cd "$SUBDIR"
         fi
+        # Commands like mount, sysctl for info require sbin
+        PATH_VAR=/bin:/usr/bin:/sbin:/usr/sbin
+        case "$(uname)" in
+          Linux)
+            # On Linux it defaults to /usr/local, during cache restore
+            # tar is unable to change permissions and restore fails.
+            export GHCUP_INSTALL_BASE_PREFIX=$HOME
+            ;;
+          CYGWIN*|MINGW*|MSYS*)
+            PATH_VAR="$PATH_VAR:/c/Program Files/7-Zip:/mingw64/bin"
+            ;;
+        esac
+        # Use "bash -c" instead of invoking directly to preserve quoted
+        # arguments in PACKCHECK_COMMAND e.g. DOCSPEC_OPTIONS="--timeout 60".
+        # Direct invocation would word-split on spaces inside quoted values.
+        echo "$PACKCHECK $PACKCHECK_COMMAND PATH=\"$PATH_VAR\""
+        bash -c "$PACKCHECK $PACKCHECK_COMMAND PATH=\"$PATH_VAR\""
+
+    - name: Check cache locations
+      if: runner.os != 'Windows'
+      run: |
+        # We want to see if it is a symlink; e.g. on github ~/.ghcup is a
+        # pre-existing symlink to /usr/local.
+        list="$HOME/.local/bin $HOME/.local/state/cabal $HOME/.ghcup $HOME/.stack"
+        for dir in $list; do
+          # macOS does not have --no-dereference option
+          if [ -L "$dir" ]; then
+            echo "$dir is a symlink -> $(readlink $dir)"
+          else
+            du -sh "$dir" 2>/dev/null || echo "$dir missing"
+          fi
+        done
+        echo
+        #ls -ld $list 2>/dev/null || true
+        ls -al $list 2>/dev/null || true
