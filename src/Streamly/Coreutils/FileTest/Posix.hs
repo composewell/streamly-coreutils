@@ -13,6 +13,7 @@
 module Streamly.Coreutils.FileTest.Posix
     ( testFd
     , testHandle
+    , sameFileAs
     , isReadable
     , isWritable
     , isExecutable
@@ -49,6 +50,20 @@ testFd fd (FileTest (Predicate f)) =
 
 testHandle :: Handle -> FileTest -> IO Bool
 testHandle = undefined
+
+-- | True if file1 and file2 exist and have the same device id and inode.
+--
+-- Like coreutil @test file1 -ef file2@.
+--
+-- The supplied file path is dereferenced if it is a symlink.
+--
+sameFileAs :: FilePath -> FileTest
+sameFileAs path =
+  withStatusM $ \st -> do
+    st1 <- Files.getFileStatus path
+    pure $
+      Files.deviceID st == Files.deviceID st1 &&
+      Files.fileID   st == Files.fileID   st1
 
 -- XXX large Int may get truncated to some valid id.
 -- XXX Need a protable "Uid" (unix CUid or windows SID) to expose hasUid.

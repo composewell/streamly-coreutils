@@ -5,6 +5,7 @@
 module Streamly.Coreutils.Filetest.Windows
     ( Uid
     , Gid
+    , sameFileAs
     {-
     , isOwnedByUserId
     , isOwnedByGroupId
@@ -29,18 +30,20 @@ import Control.Exception
     , fromException
     , throwIO
     )
-import Data.Bits ((.|.))
+
+import Data.Bits (shiftL, (.|.))
+import Data.Word (Word64)
 import Foreign.Ptr (nullPtr)
 import System.IO.Error (IOException)
-
 import System.PosixCompat.Files (FileStatus)
 import System.Posix.Types (ownerWriteMode)
-
-import System.Win32.Security
-    ( PSID
-    , SID
-    , dACL_SECURITY_INFORMATION
-    , oWNER_SECURITY_INFORMATION
+import System.Win32.File
+    ( ..
+    , getFileInformationByHandle
+    , bhfiVolumeSerialNumber
+    , bhfiFileIndexHigh
+    , bhfiFileIndexLow
+    , BY_HANDLE_FILE_INFORMATION(..)
     )
 import System.Win32.File
     ( closeHandle
@@ -58,6 +61,12 @@ import System.Win32.File
     , gENERIC_READ
     , gENERIC_WRITE
     , oPEN_EXISTING
+    )
+import System.Win32.Security
+    ( PSID
+    , SID
+    , dACL_SECURITY_INFORMATION
+    , oWNER_SECURITY_INFORMATION
     )
 import System.Win32.Types
     ( BOOL
@@ -227,6 +236,47 @@ instance Storable GENERIC_MAPPING where
         pokeByteOff p 4  w
         pokeByteOff p 8  e
         pokeByteOff p 12 a
+
+-------------------------------------------------------------------------------
+-- Same file
+-------------------------------------------------------------------------------
+
+-- | Open a file handle suitable for metadata queries.
+-- Uses fILE_FLAG_BACKUP_SEMANTICS so that directories can be opened too.
+-- Uses 0 for desired access since only metadata is needed; this succeeds
+-- even when data-read access is restricted.
+withFileHandle :: FilePath -> (HANDLE -> IO a) -> IO a
+withFileHandle path action =
+    bracket
+        (createFile path 0
+            (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
+            Nothing
+            oPEN_EXISTING
+            fILE_FLAG_BACKUP_SEMANTICS
+            Nothing)
+        closeHandle
+        action
+
+-- | Return a (volumeSerialNumber, fileIndex) pair that uniquely identifies
+-- a file on the local system, following the same-inode logic as POSIX.
+fileId :: FilePath -> IO (DWORD, Word64)
+fileId path =
+    withFileHandle path $ \h -> do
+        info <- getFileInformationByHandle h
+        let vol  = bhfiVolumeSerialNumber info
+            high = fromIntegral (bhfiFileIndexHigh info) :: Word64
+            low  = fromIntegral (bhfiFileIndexLow  info) :: Word64
+            idx  = (high `shiftL` 32) .|. low
+        pure (vol, idx)
+
+-- | True if both paths refer to the same underlying file or directory,
+-- equivalent to POSIX inode comparison.
+sameFileAs :: FilePath -> FileTest
+sameFileAs path2 =
+    withPathM $ \path1 -> do
+        id1 <- fileId path1
+        id2 <- fileId path2
+        pure (id1 == id2)
 
 -------------------------------------------------------------------------------
 -- withFileOwnerSID

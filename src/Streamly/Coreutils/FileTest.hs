@@ -59,7 +59,7 @@
 --
 -- > test file1 -nt file2  -> newerThanFile file2
 -- > test file1 -ot file2  -> olderThanFile file2
--- > test file1 -ef file2  -> isHardLinkOf file (not implemented)
+-- > test file1 -ef file2  -> sameFileAs file2
 --
 -- Example:
 --
@@ -182,6 +182,9 @@ module Streamly.Coreutils.FileTest
     -}
     , isOwnedByCurrentUser
     , isOwnedByCurrentGroup
+
+    -- ** Hard Links
+    , sameFileAs
 
     -- ** File size
     -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
@@ -435,3 +438,16 @@ isWritable = FileTest.isWritable
 --
 isExecutable :: FileTest
 isExecutable = FileTest.isExecutable
+
+-- | True if the file being tested and the supplied file refer to the same
+-- underlying file or directory.
+--
+-- Like coreutil @test file1 -ef file2@.
+--
+-- On POSIX systems this compares the device id and inode number. On Windows
+-- it compares the volume serial number and file index.
+--
+-- The supplied file path is dereferenced if it is a symlink.
+--
+sameFileAs :: FilePath -> FileTest
+sameFileAs = FileTest.sameFileAs

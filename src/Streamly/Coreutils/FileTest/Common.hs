@@ -103,9 +103,6 @@ module Streamly.Coreutils.FileTest.Common
 
     -- ** General
     , doesExist
-#if !defined(CABAL_OS_WINDOWS)
-    -- , isHardLinkTo
-#endif
 
     -- ** File Type
     , isDir
@@ -669,17 +666,6 @@ hasSetGid = hasMode Files.setGroupIDMode
 -- /Unimplemented/
 hasStickyBit :: FileTest
 hasStickyBit = undefined
-
--- Note: Hard links are supported in Windows/NTFS.
-{-
--- | True if file1 and file2 exist and have the same device id and inode.
---
--- Like coreutil @test file1 -ef file2@.
---
--- /Unimplemented/
-isHardLinkTo :: FilePath -> FileTest
-isHardLinkTo = undefined
--}
 
 -----------------------------------
 -- Time
