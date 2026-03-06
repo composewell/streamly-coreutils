@@ -143,11 +143,15 @@ module Streamly.Coreutils.FileTest.Common
     -- ** File size
     -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
     , size
-    , sizeComparedTo
+    , isNonEmptyFile
+
+    -- These are not very useful, just size should be enough
     , largerThan
     , smallerThan
     , sizeEquals
-    , nonEmpty
+    , sizeNonZero
+
+    , sizeComparedTo
     , largerThanFile
     , smallerThanFile
     , sameSizeAs
@@ -170,7 +174,7 @@ module Streamly.Coreutils.FileTest.Common
     , accessedWithin
     , accessedOlderThan
 
-    -- , createAge
+    , metadataAge
 
     -- *** File timestamp
     , modifyTime
@@ -671,6 +675,8 @@ isHardLinkTo = undefined
 -- Time
 -----------------------------------
 
+-- XXX Use the streamly time module with improvements
+
 -- NOTES: NominalDiffTime is actually time duration in seconds possibly
 -- fractional. In contrast to DiffTime it ignores the leap seconds, so it is
 -- the actual elapsed time duration. A more specific and intuitive name for
@@ -709,7 +715,8 @@ days n = n * 86400
 -- Comparing times
 -----------------------------------
 
-timeSatisfiesWith :: (FileStatus -> POSIXTime) -> (POSIXTime -> Bool) -> FileTest
+timeSatisfiesWith ::
+    (FileStatus -> POSIXTime) -> (POSIXTime -> Bool) -> FileTest
 timeSatisfiesWith getFileTime p = withStatus (p . getFileTime)
 
 -- | True if the modification time satisfies the supplied predicate.
@@ -719,16 +726,22 @@ timeSatisfiesWith getFileTime p = withStatus (p . getFileTime)
 modifyTime :: (POSIXTime -> Bool) -> FileTest
 modifyTime = timeSatisfiesWith Files.modificationTimeHiRes
 
--- | True if modified before the given timestamp.
+-- | True if the file was modified at or before the given timestamp.
+--
+-- >>> modifiedBefore t = modifyTime (<= t)
+--
 modifiedBefore :: POSIXTime -> FileTest
-modifiedBefore t = modifyTime (< t)
+modifiedBefore t = modifyTime (<= t)
 
--- | True if modified after the given timestamp.
+-- | True if the file was modified at or after the given timestamp.
 modifiedAfter :: POSIXTime -> FileTest
-modifiedAfter t = modifyTime (> t)
+modifiedAfter t = modifyTime (>= t)
 
 -- XXX Use Path instead of filepath.
--- XXX no dereference option for symlinks?
+--
+-- NOTE: The specified file path is always dereferenced. Time comparison of
+-- symlinks is rare, not provided here.
+
 timeComparedToWith ::
        (FileStatus -> POSIXTime)
     -> FilePath
@@ -739,39 +752,54 @@ timeComparedToWith getFileTime path cmp =
     st1 <- Files.getFileStatus path
     pure $ cmp (getFileTime st) (getFileTime st1)
 
--- Works on both Posix and Windows via unix-compat.
--- XXX no dereference option for symlinks?
-
 -- | Compare the modification time of the file with the modification time of
 -- another file.
 --
--- If the file path is a symlink dereferences it.
+-- If specified file path is a symlink it is dereferenced.
+--
 modifyTimeComparedTo ::
     FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 
--- | Compare modification time with another file.
+-- | True if the file was modified strictly before the reference file.
 --
--- >>> modifiedBeforeFile "ref.txt"
+-- >>> modifiedBeforeFile path = modifyTimeComparedTo path (<)
+--
+-- If specified file path is a symlink it is dereferenced.
 --
 modifiedBeforeFile :: FilePath -> FileTest
 modifiedBeforeFile path = modifyTimeComparedTo path (<)
 
+-- | True if the file was modified strictly after the reference file.
+--
+-- >>> modifiedAfterFile path = modifyTimeComparedTo path (>)
+--
+-- If specified file path is a symlink it is dereferenced.
+--
 modifiedAfterFile  :: FilePath -> FileTest
 modifiedAfterFile path = modifyTimeComparedTo path (>)
 
 -- | Compare the access time of the file with the access time of
 -- another file.
 --
--- If the file path is a symlink dereferences it.
+-- If specified file path is a symlink it is dereferenced.
 accessTimeComparedTo ::
     FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 accessTimeComparedTo = timeComparedToWith Files.accessTimeHiRes
 
--- | Compare access time with another file.
+-- | True if the file was accessed strictly before the reference file.
+--
+-- >>> accessedBeforeFile path = accessTimeComparedTo path (<)
+--
+-- If specified file path is a symlink it is dereferenced.
 accessedBeforeFile :: FilePath -> FileTest
 accessedBeforeFile path = accessTimeComparedTo path (<)
 
+-- | True if the file was accessed __strictly__ after the reference file.
+--
+-- >>> accessedAfterFile path = accessTimeComparedTo path (>)
+--
+-- If specified file path is a symlink it is dereferenced.
 accessedAfterFile  :: FilePath -> FileTest
 accessedAfterFile path = accessTimeComparedTo path (>)
 
@@ -798,42 +826,110 @@ ageSatisfiesWith
 ageSatisfiesWith getFileTime p =
   withStatusM $ \st -> p <$> ageOfWith getFileTime st
 
--- | True if access age satisfies the predicate.
+-- | True if the access age of the file satisfies the supplied predicate.
 --
 -- >>> accessAge (> minutes 10)
+--
+-- Common predicates can be expressed using 'accessAge':
+--
+-- >>> accessedWithin age    = accessAge (<= age)
+-- >>> accessedOlderThan age = accessAge (> age)
 --
 accessAge :: (NominalDiffTime -> Bool) -> FileTest
 accessAge = ageSatisfiesWith Files.accessTimeHiRes
 
+-- | True if the file was accessed within the given duration.
+--
+-- >>> accessedWithin (minutes 5)
+--
+-- Definition:
+--
+-- >>> accessedWithin age = accessAge (<= age)
+--
+-- Note: @not_ (accessedWithin age)@ is equivalent to
+-- @accessedOlderThan age@.
+--
 accessedWithin :: NominalDiffTime -> FileTest
-accessedWithin dt = accessAge (< dt)
+accessedWithin age = accessAge (<= age)
 
+-- | True if the file was accessed __strictly__ older than the given duration.
+--
+-- >>> accessedOlderThan (minutes 5)
+--
+-- Definition:
+--
+-- >>> accessedOlderThan age = accessAge (> age)
+--
+-- This is equivalent to:
+--
+-- >>> accessedOlderThan age = not_ (accessedWithin age)
+--
 accessedOlderThan :: NominalDiffTime -> FileTest
-accessedOlderThan dt = accessAge (> dt)
+accessedOlderThan age = accessAge (> age)
 
--- | True if modify age satisfies the predicate.
+-- | True if the modification age of the file satisfies the supplied predicate.
 --
 -- >>> modifyAge (> minutes 10)
+--
+-- Common predicates can be expressed using 'modifyAge':
+--
+-- >>> modifiedWithin age    = modifyAge (<= age)
+-- >>> modifiedOlderThan age = modifyAge (> age)
 --
 modifyAge :: (NominalDiffTime -> Bool) -> FileTest
 modifyAge = ageSatisfiesWith Files.modificationTimeHiRes
 
--- | True if modified within the given duration.
+-- | True if the file was modified within the given duration.
 --
 -- >>> modifiedWithin (minutes 5)
 --
+-- Definition:
+--
+-- >>> modifiedWithin age = modifyAge (<= age)
+--
+-- Other predicates:
+--
+-- >>> modifiedOlderThan age = not_ (modifiedWithin age)
+--
 modifiedWithin :: NominalDiffTime -> FileTest
-modifiedWithin dt = modifyAge (< dt)
+modifiedWithin age = modifyAge (<= age)
 
--- | True if modified older than the given duration.
+-- | True if the file was modified __strictly__ older than the given duration.
+--
+-- >>> modifiedOlderThan (minutes 5)
+--
+-- Definition:
+--
+-- >>> modifiedOlderThan age = modifyAge (> age)
+--
+-- This is equivalent to:
+--
+-- >>> modifiedOlderThan age = not_ (modifiedWithin age)
+--
 modifiedOlderThan :: NominalDiffTime -> FileTest
-modifiedOlderThan dt = modifyAge (> dt)
+modifiedOlderThan age = modifyAge (> age)
 
 {-
+-- Posix does not have a create time. Posix ctime is metadata change time and
+-- not creation time. Windows does have file creation time we can keep
+-- createAge in Windows specific module.
+--
 -- See https://unix.stackexchange.com/questions/91197/how-to-find-creation-date-of-file
-hasCreateAge :: (POSIXTime -> POSIXTime -> Bool) -> Double -> FileTest
-hasCreateAge = undefined
+createAge :: (NominalDiffTime -> Bool) -> FileTest
+createAge = undefined
 -}
+
+-- | True if the metadata age of the file satisfies the supplied predicate.
+--
+-- >>> metadataAge (> minutes 10)
+--
+-- The metadata age is the duration since the file's metadata last changed.
+-- Metadata includes file properteis other than the data, for example:
+--
+-- * permission changes
+-- * ownership changes
+metadataAge :: (NominalDiffTime -> Bool) -> FileTest
+metadataAge = ageSatisfiesWith Files.statusChangeTimeHiRes
 
 -----------------------------------
 -- Absolute size
@@ -845,58 +941,111 @@ hasCreateAge = undefined
 getSize :: FileStatus -> Int64
 getSize st = let COff sz = Files.fileSize st in sz
 
--- | True if file size satisfies the supplied predicate.
+-- | True if the file size satisfies the supplied predicate.
 --
 -- >>> size (> 1024)
 --
+-- Common predicates can be expressed using 'size':
+--
+-- >>> largerThan n  = size (> n)
+-- >>> smallerThan n = size (< n)
+-- >>> sizeEquals n  = size (== n)
+-- >>> sizeNonZero   = size (> 0)
+--
+-- Note: For directories, the reported size reflects filesystem metadata and
+-- does not indicate the number of entries in the directory. An empty
+-- directory may still have a non-zero size. On POSIX systems, the size
+-- typically accounts for the mandatory "." and ".." entries.
 size :: (Int64 -> Bool) -> FileTest
 size cmp = withStatus (\st -> cmp (getSize st))
 
--- | True if file size is greater than the given size in bytes.
+-- | True if file size is strictly greater than the given size in bytes.
 --
--- >>> largerThan 4096
+-- >>> largerThan n = size (> n)
 --
 largerThan :: Int64 -> FileTest
 largerThan n = size (> n)
 
+-- | True if file size is strictly less than the given size in bytes.
+--
+-- >>> smallerThan n = size (< n)
+--
 smallerThan :: Int64 -> FileTest
 smallerThan n = size (< n)
 
+-- | True if file size is exactly equal to the given size in bytes.
+--
+-- >>> sizeEquals n = size (== n)
+--
 sizeEquals :: Int64 -> FileTest
 sizeEquals n = size (== n)
 
--- | True if file is non-empty.
+-- | True if file is non-empty. Note that this may not be reliable for
+-- directories, on Posix directories it will always be true because of \".\"
+-- and \"..\" entries.
 --
 -- Like coreutil @test -s file@
 --
-nonEmpty :: FileTest
-nonEmpty = size (> 0)
+sizeNonZero :: FileTest
+sizeNonZero = size (> 0)
+
+-- | True if the path refers to a regular file whose size is greater than zero.
+--
+isNonEmptyFile :: FileTest
+isNonEmptyFile = and_ isFile (size (> 0))
 
 -----------------------------------
 -- Comparing size with other files
 -----------------------------------
 
--- XXX no dereference option for symlinks?
+-- NOTE: The specified file path is always dereferenced. Size comparison of
+-- symlinks is rare, not provided here.
 
--- | Compare the file size with the size of another file using supplied
--- comparison function. The first argument of the comparison function is the
--- size of the file being tested and the second argument is the size of the
--- file in the argument.
+-- | Compare the file size with the size of another file using the supplied
+-- comparison function. If specified file path is a symlink it is dereferenced.
 --
--- >>> sizeComparedTo (>) "abc.txt"
+-- The first argument of the comparison function is the size of the file being
+-- tested and the second argument is the size of the reference file.
 --
--- If the supplied file path is a symlink dereferences it.
+-- Common predicates can be defined using 'sizeComparedTo':
+--
+-- >>> largerThanFile path  = sizeComparedTo path (>)
+-- >>> smallerThanFile path = sizeComparedTo path (<)
+-- >>> sameSizeAs path      = sizeComparedTo path (==)
+--
+-- If the supplied file path is a symlink it is dereferenced.
 sizeComparedTo :: FilePath -> (Int64 -> Int64 -> Bool) -> FileTest
 sizeComparedTo path rel =
   withStatusM $ \st -> do
     st1 <- Files.getFileStatus path
     pure $ rel (getSize st) (getSize st1)
 
+-- | True if the file is __strictly__ larger than the given file. If specified
+-- file path is a symlink it is dereferenced.
+--
+-- Definition:
+--
+-- >>> largerThanFile path = sizeComparedTo path (>)
+--
 largerThanFile :: FilePath -> FileTest
 largerThanFile path = sizeComparedTo path (>)
 
+-- | True if the file is __strictly__ smaller than the given file. If specified
+-- file path is a symlink it is dereferenced.
+--
+-- Definition:
+--
+-- >>> smallerThanFile path = sizeComparedTo path (<)
+--
 smallerThanFile :: FilePath -> FileTest
 smallerThanFile path = sizeComparedTo path (<)
 
+-- | True if the file has the same size as the given file. If specified file
+-- path is a symlink it is dereferenced.
+--
+-- Definition:
+--
+-- >>> sameSizeAs path = sizeComparedTo path (==)
+--
 sameSizeAs :: FilePath -> FileTest
 sameSizeAs path = sizeComparedTo path (==)

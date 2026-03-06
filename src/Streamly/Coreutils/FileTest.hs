@@ -187,6 +187,9 @@ module Streamly.Coreutils.FileTest
     -- XXX Need convenient size units and conversions (e.g. kB 1, kiB 1, mB 2)
     , size
     , sizeComparedTo
+    , largerThanFile
+    , smallerThanFile
+    , sameSizeAs
 
     -- ** File times
     -- | 'NominalDiffTime' is time duration specified in seconds possibly
@@ -200,7 +203,7 @@ module Streamly.Coreutils.FileTest
     --
     -- Unit helpers are convenient to specify time durations:
     --
-    -- >>> modifiedOlderThan (days 1 + hours 5 + minutes 10 + seconds 20)
+    -- >>> modifiedWithin (days 1 + hours 5 + minutes 10 + seconds 20)
 
     -- *** Time units
     , seconds
@@ -210,14 +213,18 @@ module Streamly.Coreutils.FileTest
 
     -- *** File age
     , modifyAge
+    , modifiedWithin
+    -- , modifiedOlderThan -- (not_ modifiedWithin) is better
     , accessAge
-    -- , createAge
+    , metadataAge
 
     -- *** File timestamp
     , modifyTime
 
     -- *** Compare timestamps with file
     , modifyTimeComparedTo
+    , modifiedBeforeFile
+    , modifiedAfterFile
     , accessTimeComparedTo
 
     -- * Deprecated
