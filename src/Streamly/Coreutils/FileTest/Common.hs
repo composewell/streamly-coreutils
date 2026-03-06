@@ -185,8 +185,8 @@ module Streamly.Coreutils.FileTest.Common
 
     -- *** Compare timestamps with file
     , modifyTimeComparedTo
-    , modifiedBeforeFile
-    , modifiedAfterFile
+    , olderThanFile
+    , newerThanFile
 
     , accessTimeComparedTo
     , accessedBeforeFile
@@ -776,21 +776,21 @@ modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 
 -- | True if the file was modified strictly before the reference file.
 --
--- >>> modifiedBeforeFile path = modifyTimeComparedTo path (<)
+-- >>> olderThanFile path = modifyTimeComparedTo path (<)
 --
 -- If specified file path is a symlink it is dereferenced.
 --
-modifiedBeforeFile :: FilePath -> FileTest
-modifiedBeforeFile path = modifyTimeComparedTo path (<)
+olderThanFile :: FilePath -> FileTest
+olderThanFile path = modifyTimeComparedTo path (<)
 
 -- | True if the file was modified strictly after the reference file.
 --
--- >>> modifiedAfterFile path = modifyTimeComparedTo path (>)
+-- >>> newerThanFile path = modifyTimeComparedTo path (>)
 --
 -- If specified file path is a symlink it is dereferenced.
 --
-modifiedAfterFile  :: FilePath -> FileTest
-modifiedAfterFile path = modifyTimeComparedTo path (>)
+newerThanFile  :: FilePath -> FileTest
+newerThanFile path = modifyTimeComparedTo path (>)
 
 -- | Compare the access time of the file with the access time of
 -- another file.

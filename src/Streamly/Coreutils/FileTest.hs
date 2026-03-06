@@ -57,8 +57,8 @@
 -- > test -w file        -> isWritable
 -- > test -x file        -> isExecutable
 --
--- > test file1 -nt file2  -> modifiedAfter file2
--- > test file1 -ot file2  -> modifiedBefore file2
+-- > test file1 -nt file2  -> newerThanFile file2
+-- > test file1 -ot file2  -> olderThanFile file2
 -- > test file1 -ef file2  -> isHardLinkOf file (not implemented)
 --
 -- Example:
@@ -223,8 +223,8 @@ module Streamly.Coreutils.FileTest
 
     -- *** Compare timestamps with file
     , modifyTimeComparedTo
-    , modifiedBeforeFile
-    , modifiedAfterFile
+    , olderThanFile
+    , newerThanFile
     , accessTimeComparedTo
 
     -- * Deprecated
