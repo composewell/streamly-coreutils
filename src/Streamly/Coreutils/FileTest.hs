@@ -46,7 +46,7 @@
 -- > test -h file        -> isSymLink
 -- > test -k file        -> hasStickyBit
 -- > test -L file        -> isSymLink
--- > test -N file        -> modifiedAfterRead (not implemented yet)
+-- > test -N file        -> modifiedSinceLastAccess
 -- > test -O file        -> isOwnedByCurrentUser
 -- > test -p file        -> isPipe
 -- > test -r file        -> isReadable

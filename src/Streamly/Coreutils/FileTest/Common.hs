@@ -169,6 +169,7 @@ module Streamly.Coreutils.FileTest.Common
     , modifyAge
     , modifiedWithin
     , modifiedOlderThan
+    , modifiedSinceLastAccess
 
     , accessAge
     , accessedWithin
@@ -921,6 +922,18 @@ modifiedWithin age = modifyAge (<= age)
 --
 modifiedOlderThan :: NominalDiffTime -> FileTest
 modifiedOlderThan age = modifyAge (> age)
+
+-- | True if the file has been modified since it was last accessed.
+--
+-- Equivalent to GNU @test -N file@.
+--
+-- This checks whether the modification time is later than the access time.
+--
+-- >>> test "file.txt" modifiedSinceLastAccess
+modifiedSinceLastAccess :: FileTest
+modifiedSinceLastAccess =
+  withStatus $ \st ->
+    Files.modificationTimeHiRes st > Files.accessTimeHiRes st
 
 {-
 -- Posix does not have a create time. Posix ctime is metadata change time and
