@@ -316,6 +316,10 @@ newtype FileTest =
 
 -- | A boolean @and@ function for combining two 'FileTest' predicates.
 --
+-- For example:
+--
+-- >>> isNonEmptyFile = isFile `and_` (size (> 0))
+--
 -- Note that 'and_' uses a single @stat@ system call for both the tests,
 -- even if you combine many tests using a combination of 'and_' and 'or_'.
 --
@@ -337,6 +341,10 @@ and_ (FileTest (Predicate p)) (FileTest (Predicate q)) =
         else pure False
 
 -- | A boolean @or@ function for combining two 'FileTest' predicates.
+--
+-- For example:
+--
+-- >>> isFileDir = isFile `or_` isDir
 --
 -- Note that 'or_' uses a single @stat@ system call for both the tests,
 -- even if you combine many tests using a combination of 'and_' and 'or_'.
@@ -730,10 +738,15 @@ modifyTime = timeSatisfiesWith Files.modificationTimeHiRes
 --
 -- >>> modifiedBefore t = modifyTime (<= t)
 --
+-- Equivalent to coreutil @test file1 -ot file2@.
 modifiedBefore :: POSIXTime -> FileTest
 modifiedBefore t = modifyTime (<= t)
 
 -- | True if the file was modified at or after the given timestamp.
+--
+-- >>> modifiedAfter t = modifyTime (>= t)
+--
+-- Equivalent to coreutil @test file1 -nt file2@.
 modifiedAfter :: POSIXTime -> FileTest
 modifiedAfter t = modifyTime (>= t)
 
