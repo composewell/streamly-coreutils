@@ -14,6 +14,7 @@ module Streamly.Coreutils.FileTest.Posix
     ( testFd
     , testHandle
     , sameFileAs
+    , isTerminalFd
     , isReadable
     , isWritable
     , isExecutable
@@ -31,6 +32,7 @@ import System.Posix.Types (Fd, GroupID, UserID)
 import qualified System.Posix.Files as Posix
 import qualified System.PosixCompat.Files as Files
 import qualified System.Posix.User as User
+import qualified System.Posix.Terminal as Terminal
 
 import Streamly.Coreutils.FileTest.Common
 
@@ -64,6 +66,17 @@ sameFileAs path =
     pure $
       Files.deviceID st == Files.deviceID st1 &&
       Files.fileID   st == Files.fileID   st1
+
+-- XXX Need to pass the Fd in the state.
+
+-- | True if the supplied file descriptor refers to a terminal device.
+--
+-- Equivalent to the POSIX @isatty@ check and the shell command
+-- @test -t fd@.
+isTerminalFd :: Fd -> FileTest
+isTerminalFd fd =
+    withPathM $ \_ ->
+        Terminal.queryTerminal fd
 
 -- XXX large Int may get truncated to some valid id.
 -- XXX Need a protable "Uid" (unix CUid or windows SID) to expose hasUid.

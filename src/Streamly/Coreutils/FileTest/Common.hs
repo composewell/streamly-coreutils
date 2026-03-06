@@ -112,9 +112,6 @@ module Streamly.Coreutils.FileTest.Common
     , isBlockDevice
     , isPipe
     , isSocket
-#if !defined(CABAL_OS_WINDOWS)
-    -- , isTerminalFD
-#endif
 
     -- ** File Permissions
 
@@ -572,17 +569,6 @@ isPipe = withStatus Files.isNamedPipe
 --
 isSocket :: FileTest
 isSocket = withStatus Files.isSocket
-
-{-
--- | True if the file whose file descriptor number is
--- file_descriptor is open and is associated with a terminal.
---
--- Like coreutil @test -t file_descriptor@
---
--- /Unimplemented/
-isTerminalFD :: FileTest
-isTerminalFD = undefined
--}
 
 ---------------
 -- Permissions

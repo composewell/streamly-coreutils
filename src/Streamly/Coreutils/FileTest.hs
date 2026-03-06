@@ -52,7 +52,7 @@
 -- > test -r file        -> isReadable
 -- > test -s file        -> size (> 0)
 -- > test -S file        -> isSocket
--- > test -t fd          -> isTerminalFd (not implemented)
+-- > test -t fd          -> isTerminalFd
 -- > test -u file        -> hasSetUid
 -- > test -w file        -> isWritable
 -- > test -x file        -> isExecutable
@@ -102,6 +102,7 @@ module Streamly.Coreutils.FileTest
     , isBlockDevice
     , isPipe
     , isSocket
+    -- , isTerminalFd -- XXX needs to be fixed
 
     -- ** File Mode
     -- | We can define convenience operations by combining multiple elementary
@@ -237,7 +238,7 @@ module Streamly.Coreutils.FileTest
     )
 where
 
-import System.Posix.Types (FileMode)
+import System.Posix.Types (Fd, FileMode)
 
 import qualified System.PosixCompat.Files as Files
 
@@ -451,3 +452,10 @@ isExecutable = FileTest.isExecutable
 --
 sameFileAs :: FilePath -> FileTest
 sameFileAs = FileTest.sameFileAs
+
+-- | True if the supplied file descriptor refers to a terminal device.
+--
+-- Equivalent to POSIX @isatty@ and the shell command @test -t fd@.
+-- On Windows this checks whether the handle refers to a console device.
+isTerminalFd :: Fd -> FileTest
+isTerminalFd = FileTest.isTerminalFd

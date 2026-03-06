@@ -6,6 +6,7 @@ module Streamly.Coreutils.Filetest.Windows
     ( Uid
     , Gid
     , sameFileAs
+    , isTerminalFd
     {-
     , isOwnedByUserId
     , isOwnedByGroupId
@@ -33,10 +34,13 @@ import Control.Exception
 
 import Data.Bits (shiftL, (.|.))
 import Data.Word (Word64)
+import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (nullPtr)
 import System.IO.Error (IOException)
 import System.PosixCompat.Files (FileStatus)
-import System.Posix.Types (ownerWriteMode)
+import System.Posix.Types (Fd(..), ownerWriteMode)
+import System.Win32.Console (getConsoleMode)
+
 import System.Win32.File
     ( ..
     , getFileInformationByHandle
@@ -45,6 +49,7 @@ import System.Win32.File
     , bhfiFileIndexLow
     , BY_HANDLE_FILE_INFORMATION(..)
     )
+import System.Win32.File (fILE_TYPE_CHAR, getFileType)
 import System.Win32.File
     ( closeHandle
     , createFile
@@ -74,6 +79,7 @@ import System.Win32.Types
     , HANDLE
     , LPDWORD
     , failIfFalse_
+    , iNVALID_HANDLE_VALUE
     , withFilePath
     )
 
@@ -277,6 +283,40 @@ sameFileAs path2 =
         id1 <- fileId path1
         id2 <- fileId path2
         pure (id1 == id2)
+
+-------------------------------------------------------------------------------
+-- Terminal
+-------------------------------------------------------------------------------
+
+-- | Convert a CRT file descriptor to a Windows HANDLE.
+-- Returns -1 (cast to HANDLE) on error, per CRT documentation.
+foreign import ccall unsafe "_get_osfhandle"
+    c_get_osfhandle :: CInt -> IO HANDLE
+
+-- | Returns True only if GetConsoleMode succeeds on the handle,
+-- which is the Windows-canonical way to test for a console.
+isConsoleHandle :: HANDLE -> IO Bool
+isConsoleHandle h =
+    (getConsoleMode h >> pure True)
+    `catch` \(_ :: IOError) -> pure False
+
+-- | True if the fd is connected to a console (terminal).
+-- Mirrors the behaviour of POSIX @test -t@:
+--   1. fd must be a valid Windows HANDLE
+--   2. The handle's file type must be FILE_TYPE_CHAR
+--   3. GetConsoleMode must succeed — this distinguishes real console
+--      handles from other character devices (serial ports, NUL, etc.)
+isTerminalFd :: Fd -> FileTest
+isTerminalFd (Fd fd) =
+    withPathM $ \_ -> do
+        h <- c_get_osfhandle (fromIntegral fd)
+        if h == iNVALID_HANDLE_VALUE
+        then pure False
+        else do
+            t <- getFileType h
+            if t /= fILE_TYPE_CHAR
+            then pure False
+            else isConsoleHandle h
 
 -------------------------------------------------------------------------------
 -- withFileOwnerSID
