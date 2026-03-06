@@ -182,7 +182,8 @@ module Streamly.Coreutils.FileTest.Common
     , modifiedBefore
     , modifiedAfter
 
-    -- , accessTime
+    , accessTime
+    , metadataChangeTime
 
     -- *** Compare timestamps with file
     , modifyTimeComparedTo
@@ -730,10 +731,52 @@ timeSatisfiesWith getFileTime p = withStatus (p . getFileTime)
 
 -- | True if the modification time satisfies the supplied predicate.
 --
--- >>> modifyTime (< someTime)
+-- Modification time (@mtime@) records when the file contents (not the
+-- metadata) were last written or file size was changed. Writing metadata (e.g.
+-- via @chmod@) does not update the modification time.
 --
 modifyTime :: (POSIXTime -> Bool) -> FileTest
 modifyTime = timeSatisfiesWith Files.modificationTimeHiRes
+
+-- | True if the metadata change time satisfies the supplied predicate.
+--
+-- Metadata change time (@ctime@) records when the file metadata last changed.
+-- This includes operations such as permission or ownership changes, renames,
+-- link count changes, or timestamp updates. Modifying the file contents or
+-- changing its size also updates @ctime@.
+--
+-- Typical timestamp effects:
+--
+-- * reading file data (@atime@)
+-- * writing or truncating file data (@mtime@, @ctime@)
+-- * permission or ownership changes; @chmod@, @chown@ (@ctime@)
+-- * link/unlink or rename operations; @ln@, @mv@ (@ctime@)
+-- * attribute or ACL changes (@ctime@)
+--
+-- Reading metadata (e.g. via @stat@) does not change any timestamps.
+--
+metadataChangeTime :: (POSIXTime -> Bool) -> FileTest
+metadataChangeTime = timeSatisfiesWith Files.statusChangeTimeHiRes
+
+-- | True if the access time satisfies the supplied predicate.
+--
+-- Access time (@atime@) records when the file data was last read.
+-- Reading metadata (e.g. via @stat@) does not update the access time.
+--
+-- >>> accessTime (< someTime)
+--
+-- Many systems avoid updating access time on every read for performance
+-- reasons.
+--
+-- Common strategies include:
+--
+-- * @noatime@ — never update atime; default on windows.
+-- * @relatime@ — update atime only if it is earlier than the modification
+--   time or sufficiently old; default on Linux and macOS.
+-- * @strictatime@ — update atime on every read (traditional POSIX behavior).
+--
+accessTime :: (POSIXTime -> Bool) -> FileTest
+accessTime = timeSatisfiesWith Files.accessTimeHiRes
 
 -- | True if the file was modified at or before the given timestamp.
 --
@@ -950,10 +993,7 @@ createAge = undefined
 -- >>> metadataAge (> minutes 10)
 --
 -- The metadata age is the duration since the file's metadata last changed.
--- Metadata includes file properteis other than the data, for example:
 --
--- * permission changes
--- * ownership changes
 metadataAge :: (NominalDiffTime -> Bool) -> FileTest
 metadataAge = ageSatisfiesWith Files.statusChangeTimeHiRes
 

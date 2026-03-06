@@ -220,6 +220,8 @@ module Streamly.Coreutils.FileTest
 
     -- *** File timestamp
     , modifyTime
+    , accessTime
+    , metadataChangeTime
 
     -- *** Compare timestamps with file
     , modifyTimeComparedTo
