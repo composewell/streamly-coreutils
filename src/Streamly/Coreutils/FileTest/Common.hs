@@ -199,12 +199,12 @@ import Data.Int (Int64)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Data.Time.Clock (NominalDiffTime)
-import Foreign.C.Error (Errno(..), eNOENT)
-import GHC.IO.Exception (IOException(..), IOErrorType(..))
+import System.IO.Error (isDoesNotExistError)
 
 -- XXX Remove the dependency on unix-compat and directory
 import System.PosixCompat.Files (FileStatus)
 import System.Posix.Types (COff(..), FileMode)
+
 import qualified System.PosixCompat.Files as Files
 
 import Prelude hiding (and, or)
@@ -393,18 +393,11 @@ not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 applyCatchENOENT :: (t -> IO Bool) -> t -> IO Bool
 applyCatchENOENT f fs =
     f fs `catch` eatENOENT
-
-    where
-
-    isENOENT e =
-        case e of
-            IOError
-                { ioe_type = NoSuchThing
-                , ioe_errno = Just ioe
-                } -> Errno ioe == eNOENT
-            _ -> False
-
-    eatENOENT e = if isENOENT e then return False else throwIO e
+  where
+    -- isDoesNotExistError covers NoSuchThing (ENOENT)
+    eatENOENT e
+        | isDoesNotExistError e = return False
+        | otherwise             = throwIO e
 
 -- | Apply a predicate to a 'FilePath', if the path is a symlink uses the link
 -- target and not the link itself. See 'testl' for testing the link itself.
@@ -490,18 +483,15 @@ false = FileTest $ Predicate $ const (pure False)
 -- with anything else. But as a FileTest the same predicate can be used with
 -- either "test" or "testl" to execute the predicate.
 
--- >>> doesExist = true
+-- XXX Rename to doesItExist or pathExists
 
 -- | True if the path exists. In case of symlink whether it tests the link file
 -- or the file pointed to by it depends on whether you use 'test' or 'testl' to
 -- execute the predicate.
 --
--- Note: 'doesExist' itself performs no check. File existence is determined
--- by 'test' or 'testl', which return False if the path does not exist.
---
 -- Like coreutil @test -e file@
 doesExist :: FileTest
-doesExist = true
+doesExist = withStatus (const True)
 
 {-# DEPRECATED isExisting "Use doesExist instead." #-}
 isExisting :: FileTest

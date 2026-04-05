@@ -92,7 +92,7 @@ module Streamly.Coreutils.FileTest
 
     -- ** General
     -- , predicate -- exposes FileStatus
-    , doesExist
+    , doesExist -- XXX doesItExist or doesPathExist
 
     -- ** File Type
     , isDir
