@@ -81,13 +81,17 @@ stripLatin1 = Array.dropAround (isSpace . chr. fromIntegral)
 
 -- XXX Move to Data.Stream.
 
--- | Convert a list of indices (minimum 0) to a list of booleans such that if
--- an index is present in the list then it is replaced with True and if it is
--- absent then it is replaced by False.
+-- | Convert an input list of indices (minimum 0) to an output list of
+-- booleans such that for each integer index present in the input list the
+-- corresponding index in the output list is True and all other indices are
+-- False. The size of the output list is determined by the max index in the
+-- input list, which is the last index in the output list and has a True entry.
+--
+-- Negative integers in the input list are ignored.
 makeIndexMask :: [Int] -> [Bool]
 makeIndexMask indices =
     -- Sort would be O(n) if pre-sorted
-    let xs1 = fmap List.head $ List.group $ List.sort $ filter (>= 0) indices
+    let xs1 = List.nub $ List.sort $ filter (>= 0) indices
      in go 0 xs1 id
 
     where
