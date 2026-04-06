@@ -2,7 +2,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Streamly.Coreutils.Filetest.Windows
+module Streamly.Coreutils.FileTest.Windows
     ( Uid
     , Gid
     , sameFileAs
@@ -25,6 +25,7 @@ module Streamly.Coreutils.Filetest.Windows
 
 import Control.Exception
     ( AsyncException
+    , IOException
     , SomeException
     , bracket
     , catch
@@ -36,17 +37,14 @@ import Data.Bits (shiftL, (.|.))
 import Data.Word (Word64)
 import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (nullPtr)
-import System.IO.Error (IOException)
-import System.PosixCompat.Files (FileStatus)
-import System.Posix.Types (Fd(..), ownerWriteMode)
+import System.PosixCompat.Files (FileStatus, ownerWriteMode)
+import System.Posix.Types (Fd(..))
 import System.Win32.Console (getConsoleMode)
 
 import System.Win32.File
-    ( ..
-    , getFileInformationByHandle
+    ( getFileInformationByHandle
     , bhfiVolumeSerialNumber
-    , bhfiFileIndexHigh
-    , bhfiFileIndexLow
+    , bhfiFileIndex
     , BY_HANDLE_FILE_INFORMATION(..)
     )
 import System.Win32.File (fILE_TYPE_CHAR, getFileType)
@@ -269,10 +267,8 @@ fileId :: FilePath -> IO (DWORD, Word64)
 fileId path =
     withFileHandle path $ \h -> do
         info <- getFileInformationByHandle h
-        let vol  = bhfiVolumeSerialNumber info
-            high = fromIntegral (bhfiFileIndexHigh info) :: Word64
-            low  = fromIntegral (bhfiFileIndexLow  info) :: Word64
-            idx  = (high `shiftL` 32) .|. low
+        let vol = bhfiVolumeSerialNumber info
+            idx = fromIntegral (bhfiFileIndex info) :: Word64
         pure (vol, idx)
 
 -- | True if both paths refer to the same underlying file or directory,
@@ -378,7 +374,7 @@ isPathOwnedByCurrentUser :: FilePath -> IO Bool
 isPathOwnedByCurrentUser path =
     withFileOwnerSID path $ \fileSid ->
         withEffectiveUserSID $ \userSid ->
-            (/= 0) <$> c_EqualSid fileSid userSid
+            c_EqualSid fileSid userSid
 
 isOwnedByCurrentUser :: FileTest
 isOwnedByCurrentUser = withPathM isPathOwnedByCurrentUser
@@ -391,7 +387,7 @@ isPathOwnedByCurrentGroup :: FilePath -> IO Bool
 isPathOwnedByCurrentGroup path =
     withFilePrimaryGroupSID path $ \fileSid ->
         withEffectiveGroupSID $ \userSid ->
-            (/= 0) <$> c_EqualSid fileSid userSid
+            c_EqualSid fileSid userSid
 
 isOwnedByCurrentGroup :: FileTest
 isOwnedByCurrentGroup = withPathM isPathOwnedByCurrentGroup
@@ -434,10 +430,10 @@ isReadableNow = withPathM isPathReadableNow
 --
 isFileWritableNow :: FilePath -> FileStatus -> IO Bool
 isFileWritableNow path st = do
-    isDirectory <- testGeneral path st isDir
+    isDirectory <- testWithStatus path st isDir
     -- Under unix-compat on Windows, ownerWriteMode corresponds to the
     -- FILE_ATTRIBUTE_READONLY flag being unset.
-    writable <- testGeneral path st (hasMode ownerWriteMode)
+    writable <- testWithStatus path st (hasMode ownerWriteMode)
     -- The READONLY attribute on directories does not prevent creating
     -- files inside the directory.
     if not writable && not isDirectory
@@ -545,9 +541,9 @@ pathAccess path mask =
                                       pPrivSet pPrivSetLen
                                       pGrantedAccess pAccessStatus
                             -- ok == 0 means AccessCheck itself failed
-                            if ok == 0
-                            then return False
-                            else peek pAccessStatus
+                            if ok
+                            then peek pAccessStatus
+                            else return False
     `catch` handler
   where
     handler :: SomeException -> IO Bool
