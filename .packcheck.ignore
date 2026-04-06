@@ -2,6 +2,7 @@
 .packcheck.ignore
 .github/workflows/haskell.yml
 .gitignore
+appveyor.yml
 benchmark/Main.hs
 hie.yaml
 cabal.project.d/master
