@@ -1,3 +1,4 @@
+.cirrus.yml
 .packcheck.ignore
 stack.yaml
 .github/workflows/haskell.yml
