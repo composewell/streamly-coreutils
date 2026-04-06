@@ -457,5 +457,5 @@ sameFileAs = FileTest.sameFileAs
 --
 -- Equivalent to POSIX @isatty@ and the shell command @test -t fd@.
 -- On Windows this checks whether the handle refers to a console device.
-isTerminalFd :: Fd -> FileTest
-isTerminalFd = FileTest.isTerminalFd
+_isTerminalFd :: Fd -> FileTest
+_isTerminalFd = FileTest.isTerminalFd
