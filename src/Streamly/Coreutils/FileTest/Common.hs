@@ -97,7 +97,7 @@ module Streamly.Coreutils.FileTest.Common
     -- * Running Predicates
     , test
     , testl
-    , testGeneral
+    , testWithStatus
 
     -- * Predicates
 
@@ -442,9 +442,9 @@ testl path (FileTest (Predicate f)) =
 
 -- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
 -- predicates that require filepath when using apply.
-testGeneral :: FilePath -> FileStatus -> FileTest -> IO Bool
-testGeneral fp st (FileTest (Predicate f)) =
-    mkFileState "FileTest.apply" fp st >>= f
+testWithStatus :: FilePath -> FileStatus -> FileTest -> IO Bool
+testWithStatus fp st (FileTest (Predicate f)) =
+    mkFileState "FileTest.testWithStatus" fp st >>= f
 
 -- | Like 'withState' but the supplied function may perform IO.
 withStateM :: (FilePath -> FileStatus -> IO Bool) -> FileTest
