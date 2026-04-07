@@ -68,6 +68,11 @@
 -- > test path (size (> 4096))
 -- > test path (modifyTimeComparedTo (>) "reference.txt")
 
+-- $setup
+-- >>> import Prelude hiding (or, and)
+-- >>> import Data.Time.Clock (NominalDiffTime)
+-- >>> import Data.Time.Clock.POSIX (POSIXTime)
+
 module Streamly.Coreutils.FileTest
     (
     -- * File Test Predicate Type
@@ -200,14 +205,14 @@ module Streamly.Coreutils.FileTest
     -- fractional. It has a Num instance so you can specify literals and cast
     -- common types as follows:
     --
-    -- >>> 0.5 :: NominalDiffTime
-    -- >>> fromIntegral :: Int -> NominalDiffTime
-    -- >>> realToFrac :: Double -> NominalDiffTime
-    -- >>> fromInteger :: Integer -> NominalDiffTime
+    -- >>> let _ = (0.5 :: NominalDiffTime)
+    -- >>> let _ = (fromIntegral :: Int -> NominalDiffTime)
+    -- >>> let _ = (realToFrac :: Double -> NominalDiffTime)
+    -- >>> let _ = (fromInteger :: Integer -> NominalDiffTime)
     --
     -- Unit helpers are convenient to specify time durations:
     --
-    -- >>> modifiedWithin (days 1 + hours 5 + minutes 10 + seconds 20)
+    -- >>> let _ = modifiedWithin (days 1 + hours 5 + minutes 10 + seconds 20)
 
     -- *** Time units
     , seconds
@@ -299,7 +304,7 @@ isOwnedByCurrentUser = FileTest.isOwnedByCurrentUser
 -- a primary group plus a list of group SIDs.
 --
 --  * file's gSID is not used in access checks; only ACLS determines access.
---  * process token’s primary gSID is used as gSID for new files.
+--  * process token's primary gSID is used as gSID for new files.
 --  * there is no setgid concept or equivalent.
 --
 -- The group SID in Windows exists mainly for POSIX/NFS interoperability, where

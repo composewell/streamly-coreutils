@@ -213,6 +213,8 @@ import Streamly.Internal.Data.Time.Units
 
 -- $setup
 -- >>> import Prelude hiding (or, and)
+-- >>> import Data.Time.Clock (NominalDiffTime)
+-- >>> import Data.Time.Clock.POSIX (POSIXTime)
 
 newtype Predicate m a =
     Predicate (a -> m Bool)
@@ -670,14 +672,14 @@ hasStickyBit = undefined
 
 -- | Time duration in seconds.
 --
--- >>> modifiedOlderThan (seconds 30)
+-- >>> let _ = modifiedOlderThan (seconds 30)
 --
 seconds :: NominalDiffTime -> NominalDiffTime
 seconds = id
 
 -- | Time duration in minutes.
 --
--- >>> modifiedWithin (minutes 5)
+-- >>> let _ = modifiedWithin (minutes 5)
 --
 minutes :: NominalDiffTime -> NominalDiffTime
 minutes n = n * 60
@@ -688,7 +690,7 @@ hours n = n * 3600
 
 -- | Time duration in days.
 --
--- >>> accessedOlderThan (days 1)
+-- >>> let _ = accessedOlderThan (days 1)
 --
 days :: NominalDiffTime -> NominalDiffTime
 days n = n * 86400
@@ -735,7 +737,7 @@ metadataChangeTime = timeSatisfiesWith Files.statusChangeTimeHiRes
 -- Access time (@atime@) records when the file data was last read.
 -- Reading metadata (e.g. via @stat@) does not update the access time.
 --
--- >>> accessTime (< someTime)
+-- >>> let _ = accessTime (< 0)
 --
 -- Many systems avoid updating access time on every read for performance
 -- reasons.
@@ -857,7 +859,7 @@ ageSatisfiesWith getFileTime p =
 
 -- | True if the access age of the file satisfies the supplied predicate.
 --
--- >>> accessAge (> minutes 10)
+-- >>> let _ = accessAge (> minutes 10)
 --
 -- Common predicates can be expressed using 'accessAge':
 --
@@ -869,7 +871,7 @@ accessAge = ageSatisfiesWith Files.accessTimeHiRes
 
 -- | True if the file was accessed within the given duration.
 --
--- >>> accessedWithin (minutes 5)
+-- >>> let _ = accessedWithin (minutes 5)
 --
 -- Definition:
 --
@@ -883,7 +885,7 @@ accessedWithin age = accessAge (<= age)
 
 -- | True if the file was accessed __strictly__ older than the given duration.
 --
--- >>> accessedOlderThan (minutes 5)
+-- >>> let _ = accessedOlderThan (minutes 5)
 --
 -- Definition:
 --
@@ -898,7 +900,7 @@ accessedOlderThan age = accessAge (> age)
 
 -- | True if the modification age of the file satisfies the supplied predicate.
 --
--- >>> modifyAge (> minutes 10)
+-- >>> let _ = modifyAge (> minutes 10)
 --
 -- Common predicates can be expressed using 'modifyAge':
 --
@@ -910,7 +912,7 @@ modifyAge = ageSatisfiesWith Files.modificationTimeHiRes
 
 -- | True if the file was modified within the given duration.
 --
--- >>> modifiedWithin (minutes 5)
+-- >>> let _ = modifiedWithin (minutes 5)
 --
 -- Definition:
 --
@@ -925,7 +927,7 @@ modifiedWithin age = modifyAge (<= age)
 
 -- | True if the file was modified __strictly__ older than the given duration.
 --
--- >>> modifiedOlderThan (minutes 5)
+-- >>> let _ = modifiedOlderThan (minutes 5)
 --
 -- Definition:
 --
@@ -944,7 +946,7 @@ modifiedOlderThan age = modifyAge (> age)
 --
 -- This checks whether the modification time is later than the access time.
 --
--- >>> test "file.txt" modifiedSinceLastAccess
+-- >>> let _ = modifiedSinceLastAccess
 modifiedSinceLastAccess :: FileTest
 modifiedSinceLastAccess =
   withStatus $ \st ->
@@ -962,7 +964,7 @@ createAge = undefined
 
 -- | True if the metadata age of the file satisfies the supplied predicate.
 --
--- >>> metadataAge (> minutes 10)
+-- >>> let _ = metadataAge (> minutes 10)
 --
 -- The metadata age is the duration since the file's metadata last changed.
 --
@@ -981,7 +983,7 @@ getSize st = let COff sz = Files.fileSize st in sz
 
 -- | True if the file size satisfies the supplied predicate.
 --
--- >>> size (> 1024)
+-- >>> let _ = size (> 1024)
 --
 -- Common predicates can be expressed using 'size':
 --
