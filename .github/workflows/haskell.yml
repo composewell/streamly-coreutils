@@ -219,6 +219,8 @@ jobs:
             runner: windows-latest
             command: cabal
             ghc_version: 9.12.4
+            pack_options: >-
+              DISABLE_SDIST_BUILD="y"
 
           - name: ci
             runner: ubuntu-latest
@@ -342,6 +344,7 @@ jobs:
             export GHCUP_INSTALL_BASE_PREFIX=$HOME
             ;;
           CYGWIN*|MINGW*|MSYS*)
+            export CABAL_BUILDDIR="C:\b"
             PATH_VAR="$PATH_VAR:/c/Program Files/7-Zip:/mingw64/bin"
             ;;
         esac
