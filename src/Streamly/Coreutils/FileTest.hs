@@ -187,7 +187,7 @@ module Streamly.Coreutils.FileTest
     , isOwnedByGroupName
     -}
     , isOwnedByCurrentUser
-    , isOwnedByCurrentGroup
+    -- , isOwnedByCurrentGroup
 
     -- ** Hard Links
     , sameFileAs
@@ -261,11 +261,13 @@ import Prelude hiding (and, or)
 -- User and group ownerships
 -------------------------------------------------------------------------------
 
+{-
 _isOwnedByUserId :: FileTest.Uid -> FileTest
 _isOwnedByUserId = FileTest.isOwnedByUserId
 
 _isOwnedByGroupId :: FileTest.Gid -> FileTest
 _isOwnedByGroupId = FileTest.isOwnedByGroupId
+-}
 
 -- | Unimplemented
 _isOwnedByUserName :: String -> FileTest
@@ -322,8 +324,10 @@ isOwnedByCurrentUser = FileTest.isOwnedByCurrentUser
 --
 -- On Windows effective group id means the primary group SID.
 --
+{-
 isOwnedByCurrentGroup :: FileTest
 isOwnedByCurrentGroup = FileTest.isOwnedByCurrentGroup
+-}
 
 -------------------------------------------------------------------------------
 -- Mode based access
@@ -338,7 +342,7 @@ hasPermissions (user, group, other) = withStateM $ \fp st -> do
 #if !defined(CABAL_OS_WINDOWS)
     else do
         -- XXX need to check access via other group memberships as well
-        isGroup <- testWithStatus fp st isOwnedByCurrentGroup
+        isGroup <- testWithStatus fp st FileTest.isOwnedByCurrentGroup
         if isGroup
         then checkMode group
         else checkMode other
