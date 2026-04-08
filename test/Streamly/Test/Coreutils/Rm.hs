@@ -43,6 +43,7 @@ import System.Directory
     , createDirectoryLink
     , createFileLink
     , doesPathExist
+    , getTemporaryDirectory
     )
 import System.FilePath ((</>))
 import System.IO.Temp (createTempDirectory)
@@ -71,9 +72,10 @@ import Streamly.Coreutils.Rm
 
 -- | Run a test inside a fresh temporary directory, cleaning up afterwards.
 withTempDir :: (FilePath -> IO ()) -> IO ()
-withTempDir action =
+withTempDir action = do
+    tmpRoot <- getTemporaryDirectory
     bracket
-        (createTempDirectory "/tmp" "rm-test-")
+        (createTempDirectory tmpRoot "rm-test-")
         removePathForcibly'
         action
   where
