@@ -62,6 +62,9 @@ where
 
 import Streamly.Coreutils.FileTest
     (doesExist, test, testl, isDir, isWritableByMode)
+#if defined(mingw32_HOST_OS)
+import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
+#endif
 import System.Directory
     ( removeFile
     , removeDirectory
@@ -154,10 +157,21 @@ rmfile options path =
 
 performRm :: RmOptions -> FilePath -> IO ()
 performRm options path = do
+    -- isDir returns false if path is symlink
     dir <- testl path isDir
     if dir
     then rmdir options path
-    else rmfile options path
+    else do
+#if defined(mingw32_HOST_OS)
+        dirSymLink <- testl path isDirSymLink
+        if dirSymLink
+        -- XXX if it is write-protected and we have full-force on then we
+        -- should remove the read-only attr and remove it?
+        then removeDirectory path
+        else rmfile options path
+#else
+        rmfile options path
+#endif
 
 -------------------------------------------------------------------------------
 -- API

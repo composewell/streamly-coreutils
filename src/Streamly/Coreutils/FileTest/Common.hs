@@ -513,11 +513,18 @@ isExisting = doesExist
 
 -- | True if file is a directory.
 --
+-- On Windows if tested for a symlink with a dir attr set, it always returns
+-- False. Use the Windows specific isDirSymlink to test if the symlink has a
+-- dir attribute.
+--
 -- Like @test -d file@
 isDir :: FileTest
 isDir = withStatus Files.isDirectory
 
 -- | True if file is a regular file.
+--
+-- On Windows everything other a directory or a symlink is reported as a
+-- regular file.
 --
 -- Like coreutil @test -f file@
 isFile :: FileTest
@@ -527,6 +534,9 @@ isFile = withStatus Files.isRegularFile
 
 -- | True if path is a symbolic link. This is meaningful only when 'testl' is
 -- used, in case of 'test' it always returns false.
+--
+-- On Windows it tells if the path is a reparse point i.e. it can be a symlink
+-- or a junction.
 --
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest

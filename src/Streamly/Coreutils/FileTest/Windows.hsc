@@ -21,6 +21,8 @@ module Streamly.Coreutils.FileTest.Windows
     , isReadable
     , isWritable
     , isExecutable
+
+    , isDirSymLink
     ) where
 
 import Control.Exception
@@ -33,23 +35,18 @@ import Control.Exception
     , throwIO
     )
 
-import Data.Bits (shiftL, (.|.))
+import Data.Bits (shiftL, (.|.), (.&.))
 import Data.Word (Word64)
 import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (nullPtr)
-import System.PosixCompat.Files (FileStatus, ownerWriteMode)
+import System.PosixCompat.Files (FileStatus, isSymbolicLink, ownerWriteMode)
 import System.Posix.Types (Fd(..))
 import System.Win32.Console (getConsoleMode)
-
 import System.Win32.File
-    ( getFileInformationByHandle
-    , bhfiVolumeSerialNumber
+    ( BY_HANDLE_FILE_INFORMATION(..)
     , bhfiFileIndex
-    , BY_HANDLE_FILE_INFORMATION(..)
-    )
-import System.Win32.File (fILE_TYPE_CHAR, getFileType)
-import System.Win32.File
-    ( closeHandle
+    , bhfiVolumeSerialNumber
+    , closeHandle
     , createFile
     , fILE_ADD_FILE
     , fILE_EXECUTE
@@ -58,11 +55,15 @@ import System.Win32.File
     , fILE_SHARE_DELETE
     , fILE_SHARE_READ
     , fILE_SHARE_WRITE
+    , fILE_TYPE_CHAR
     , fILE_WRITE_DATA
     , gENERIC_ALL
     , gENERIC_EXECUTE
     , gENERIC_READ
     , gENERIC_WRITE
+    , getFileAttributes
+    , getFileInformationByHandle
+    , getFileType
     , oPEN_EXISTING
     )
 import System.Win32.Security
@@ -571,3 +572,29 @@ isWritable = withPathM pathIsWritable
 
 isExecutable :: FileTest
 isExecutable = withPathM pathIsExecutable
+
+fILE_ATTRIBUTE_DIRECTORY    :: DWORD
+fILE_ATTRIBUTE_DIRECTORY    = 0x10
+
+fILE_ATTRIBUTE_REPARSE_POINT :: DWORD
+fILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
+-- | True iff the path is a reparse point (symlink or junction) that the OS
+-- also marks as a directory object.
+isPathDirSymLink :: FilePath -> FileStatus -> IO Bool
+isPathDirSymLink path st =
+    -- XXX We should cache the raw attributes for multiple checks Currently we
+    -- cache only the FileStatus from unix-compat which does not have full info
+    -- for windows and we need to make additional calls.
+    if isSymbolicLink st
+    then do
+        attrs <- getFileAttributes path
+        return $ attrs .&. fILE_ATTRIBUTE_DIRECTORY /= 0
+    else
+        return False
+
+-- | True if path is a symbolic link or a junction which the directory
+-- attribute set. This is meaningful only when 'testl' is used, in case of
+-- 'test' it always returns false.
+isDirSymLink :: FileTest
+isDirSymLink = withStateM isPathDirSymLink
