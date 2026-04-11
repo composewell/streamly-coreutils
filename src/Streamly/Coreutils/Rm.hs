@@ -84,19 +84,22 @@ module Streamly.Coreutils.Rm
     )
 where
 
+import Control.Monad (forM_, when)
 import Streamly.Coreutils.FileTest
     (doesExist, test, testl, isDir, isWritableByMode)
 #if defined(mingw32_HOST_OS)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
 import System.Directory
-    ( removeFile
+    ( getPermissions
+    , removeFile
     , removeDirectory
     , removeDirectoryRecursive
     , removePathForcibly
+    , setPermissions
     , listDirectory
+    , writable
     )
-import Control.Monad (forM_)
 import System.FilePath ((</>))
 
 -- TODO: backward compatibility for Rm, None, Nuke changes.
@@ -172,12 +175,30 @@ rmdir options path =
                            (path </> item)
                     withWriteProtectionCheck path removeDirectory "directory"
 
+_setWritable :: FilePath -> IO ()
+_setWritable path = do
+    -- XXX should use "chmod"
+    perms <- getPermissions path
+    when (not (writable perms)) $ do
+        setPermissions path (setOwnerWritable True perms)
+
+    where
+
+    setOwnerWritable w p = p { writable = w }
+
 rmfile :: RmOptions -> FilePath -> IO ()
 rmfile options path =
     case rmForce options of
         FullForce -> removePathForcibly path
-        NoForce -> withWriteProtectionCheck path removeFile "regular file"
-        Force -> removeFile path
+        NoForce   -> withWriteProtectionCheck path removeFile "regular file"
+        Force     -> do
+#if defined(mingw32_HOST_OS)
+            -- On Windows, file deletability is tied to the file's own
+            -- read-only attribute (unlike POSIX where only parent-dir write
+            -- matters). Force must clear it before unlinking.
+            _setWritable path
+#endif
+            removeFile path
 
 performRm :: RmOptions -> FilePath -> IO ()
 performRm options path = do
