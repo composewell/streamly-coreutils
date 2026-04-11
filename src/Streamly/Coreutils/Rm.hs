@@ -18,6 +18,30 @@
 -- 2. 'rmContents': Removes the /contents/ of the target container but not the
 -- container itself. The container may be a dir or a symlink to a dir.
 --
+-- = Idioms
+--
+-- Equivalent to @rm -f@, removes readonly files as well:
+--
+--  >>> rmf = rm (withForce Force)
+--
+-- Equivalent to @rm -r@, removes directories with writable files:
+--
+--  >>> rmr = rm (recursive True . withForce Force)
+--
+-- Equivalent to @rm -rf@, removes directories with readonly files as well,
+-- directories must have write permissions:
+--
+--  >>> rmrf = rm (recursive True . withForce Force)
+--
+-- Removes directories without write permissions as well:
+--
+--  >>> rmrff = rm (recursive True . withForce FullForce)
+--
+-- Equivalent to @rm -rf dirSymLink/@, removing the contents but leaving the
+-- directory intact:
+--
+--  >>> rmrc = rmContents Force
+--
 -- = Comparison with Posix @rm@
 --
 -- The behavior of posix rm and the rm in this module is identical except one
