@@ -86,7 +86,7 @@ where
 
 import Control.Monad (forM_, when)
 import Streamly.Coreutils.FileTest
-    (doesExist, test, testl, isDir, isWritableByMode)
+    (doesItExist, test, testl, isDir, isWritableByMode)
 #if defined(mingw32_HOST_OS)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
@@ -259,7 +259,7 @@ rm f path = do
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
     --
-    found <- testl path doesExist
+    found <- testl path doesItExist
     if found
     then performRm options path
     else

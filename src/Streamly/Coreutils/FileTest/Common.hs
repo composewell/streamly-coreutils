@@ -46,7 +46,7 @@
 --
 -- Naming: unary predicates are either isSomething or hasSomething. Binary
 -- predicates are nouns. Predicates are named so that they read well on the
--- call site e.g. "test path doesExist" or "test path isReadable".
+-- call site e.g. "test path doesItExist" or "test path isReadable".
 --
 -- Files supported by windows:
 --
@@ -102,7 +102,7 @@ module Streamly.Coreutils.FileTest.Common
     -- * Predicates
 
     -- ** General
-    , doesExist
+    , doesItExist
 
     -- ** File Type
     , isDir
@@ -418,7 +418,7 @@ applyCatchENOENT f fs =
 -- to lack of permissions. The exception type can be used to determine the
 -- reason for failure.
 --  * test 'isSymLink' always returns false.
---  * test 'doesExist' returns false if the path is symlink but it does not
+--  * test 'doesItExist' returns false if the path is symlink but it does not
 --  point to an existing file.
 --
 test :: FilePath -> FileTest -> IO Bool
@@ -430,7 +430,7 @@ test path (FileTest (Predicate f)) = do
 -- symlink.
 --
 --  * 'isSymLink' returns true if path is a symlink, false otherwise.
---  * 'doesExist' returns true if the link exists irrespective of whether it
+--  * 'doesItExist' returns true if the link exists irrespective of whether it
 --  points to an existing file.
 --  * Predicates related to file permission mode bits are meaningless, and
 --  should not be used.
@@ -493,19 +493,17 @@ false = FileTest $ Predicate $ const (pure False)
 -- with anything else. But as a FileTest the same predicate can be used with
 -- either "test" or "testl" to execute the predicate.
 
--- XXX Rename to doesItExist or pathExists
-
 -- | True if the path exists. In case of symlink whether it tests the link file
 -- or the file pointed to by it depends on whether you use 'test' or 'testl' to
 -- execute the predicate.
 --
 -- Like coreutil @test -e file@
-doesExist :: FileTest
-doesExist = withStatus (const True)
+doesItExist :: FileTest
+doesItExist = withStatus (const True)
 
-{-# DEPRECATED isExisting "Use doesExist instead." #-}
+{-# DEPRECATED isExisting "Use doesItExist instead." #-}
 isExisting :: FileTest
-isExisting = doesExist
+isExisting = doesItExist
 
 ---------------
 -- Type of file

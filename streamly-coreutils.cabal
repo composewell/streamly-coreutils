@@ -184,7 +184,6 @@ test-suite Streamly.Coreutils.Rm
     , hspec
     , streamly-coreutils
     , temporary
-    -- , unix
     , unix-compat
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.Rm.main

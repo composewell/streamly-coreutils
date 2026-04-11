@@ -39,7 +39,7 @@
 -- > test -b file        -> isBlockDevice
 -- > test -c file        -> isCharDevice
 -- > test -d file        -> isDir
--- > test -e file        -> doesExist
+-- > test -e file        -> doesItExist
 -- > test -f file        -> isFile
 -- > test -g file        -> hasSetGid
 -- > test -G file        -> isOwnedByCurrentGroup
@@ -63,7 +63,7 @@
 --
 -- Example:
 --
--- > test path doesExist
+-- > test path doesItExist
 -- > test path isReadable
 -- > test path (size (> 4096))
 -- > test path (modifyTimeComparedTo (>) "reference.txt")
@@ -97,7 +97,7 @@ module Streamly.Coreutils.FileTest
 
     -- ** General
     -- , predicate -- exposes FileStatus
-    , doesExist -- XXX doesItExist or doesPathExist
+    , doesItExist
 
     -- ** File Type
     , isDir

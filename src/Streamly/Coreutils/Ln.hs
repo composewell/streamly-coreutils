@@ -19,7 +19,7 @@ module Streamly.Coreutils.Ln
 where
 
 import Control.Monad (when)
-import Streamly.Coreutils.FileTest (test, doesExist)
+import Streamly.Coreutils.FileTest (test, doesItExist)
 
 import qualified System.PosixCompat.Files as Posix
 
@@ -41,7 +41,7 @@ ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
     when (lnForce opt == False) $ do
-        found <- test tgt doesExist
+        found <- test tgt doesItExist
         when found $ error msg
     case lnSymbolic opt of
         False -> Posix.createLink src tgt

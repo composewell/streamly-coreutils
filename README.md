@@ -15,11 +15,11 @@ contents concurrently for improved performance.
 Currently, this library provides implementations for the
 following coreutils-inspired as well as some additional commands:
 
-Filesystem: `cp`, `rm`, `mv`, `ln`, `readlink`, `test`, `stat`, `touch`
-Directories: `ls`, `dirname`, `mkdir`, `cd`, `pwd`, `home` and others
-Text Processing: `cut`, `tail`
-Processes: `sleep`
-Shell: `which`, executing shell commands with streaming
+* Filesystem: `cp`, `rm`, `mv`, `ln`, `readlink`, `test`, `stat`, `touch`
+* Directories: `ls`, `dirname`, `mkdir`, `cd`, `pwd`, `home` and others
+* Text Processing: `cut`, `tail`
+* Processes: `sleep`
+* Shell: `which`, executing shell commands with streaming
 
 ## Important API Notice
 
