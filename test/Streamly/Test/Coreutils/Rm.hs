@@ -37,7 +37,7 @@
 module Streamly.Test.Coreutils.Rm (main) where
 
 import Control.Exception (bracket, try, evaluate, SomeException)
-import Control.Monad (void)
+import Control.Monad (void, when)
 import System.Directory
     ( createDirectory
     , createDirectoryLink
@@ -138,6 +138,19 @@ modeR_X = ownerReadMode `unionFileModes` ownerExecuteMode
 modeR__ = ownerReadMode
 mode___ = nullFileMode
 
+-- | On Unix, assert that an action fails due to directory permission
+-- restrictions. On Windows, directory permission bits are not enforced;
+-- the action is run but its result is ignored.
+parentDirPermCheck :: IO () -> IO ()
+parentDirPermCheck =
+#if defined(mingw32_HOST_OS)
+    -- On Windows, we do not check parent dir permission as they are controlled
+    -- by ACLs, not permission modes.
+    id
+#else
+    shouldThrow'
+#endif
+
 -------------------------------------------------------------------------------
 -- Test groups
 -------------------------------------------------------------------------------
@@ -236,7 +249,7 @@ main = hspec $ do
                     createDirectory sub
                     createFileWithMode f modeRWX
                     setFileMode sub modeR_X
-                    shouldThrow' $ rm id f
+                    parentDirPermCheck $ rm id f
                     -- restore so cleanup succeeds
                     setFileMode sub modeRWX
 
@@ -247,7 +260,7 @@ main = hspec $ do
                     createDirectory sub
                     createFileWithMode f modeRWX
                     setFileMode sub mode___
-                    shouldThrow' $ rm id f
+                    parentDirPermCheck $ rm id f
                     setFileMode sub modeRWX
 
 -- TODO
@@ -290,9 +303,6 @@ main = hspec $ do
                 withTempDir $ \d -> do
                     let f = d </> "file"
                     createFileWithMode f modeR_X
-                    -- Force skips the NoForce pre-check; removeFile is
-                    -- called directly. The OS will succeed because unlink
-                    -- depends on the parent directory, not file mode.
                     rm (withForce Force) f
                     shouldNotExist f
 
@@ -330,7 +340,7 @@ main = hspec $ do
                 createDirectory sub
                 createFileWithMode f modeRWX
                 setFileMode sub modeR_X
-                shouldThrow' $ rm (withForce Force) f
+                parentDirPermCheck $ rm (withForce Force) f
                 setFileMode sub modeRWX
 
     -- -------------------------------------------------------------------------
@@ -423,8 +433,12 @@ main = hspec $ do
                     createDirWithMode sub modeRWX
                     createFileWithMode f modeRWX
                     setFileMode sub modeRW_
-                    shouldThrow' $ rm (recursive True) sub
-                    setFileMode sub modeRWX -- restore for cleanup
+                    parentDirPermCheck $ rm (recursive True) sub
+                    -- Restore permissions for cleanup; path may already be
+                    -- gone on platforms that do not enforce execute bits
+                    -- (e.g. Windows).
+                    exists <- doesPathExist sub
+                    when exists $ setFileMode sub modeRWX
 
             it "dir r-x, file rwx: errors (cannot rmdir, no write on dir)" $
                 withTempDir $ \d -> do
@@ -518,8 +532,12 @@ main = hspec $ do
                     createDirWithMode sub modeRWX
                     createFileWithMode f modeRWX
                     setFileMode sub modeR_X -- restrict after file is created
-                    shouldThrow' $ rm (withForce Force . recursive True) sub
-                    setFileMode sub modeRWX -- restore for cleanup
+                    parentDirPermCheck $ rm (withForce Force . recursive True) sub
+                    -- Restore permissions for cleanup; path may already be
+                    -- gone on platforms that do not enforce execute bits
+                    -- (e.g. Windows).
+                    exists <- doesPathExist sub
+                    when exists $ setFileMode sub modeRWX
 
         describe "dir with subdir" $ do
 
