@@ -104,19 +104,27 @@ import System.FilePath ((</>))
 
 -- TODO: backward compatibility for Rm, None, Nuke changes.
 
--- | Defines error handling and permission overrides.
+-- | Defines how @rm@ handles missing paths and permission obstacles.
+--
+-- On Unix, deleting a file requires write permission on its parent directory,
+-- not on the file itself. On Windows, it requires the file's own read-only
+-- attribute to be unset.
 data RmForce
     = NoForce
-    -- ^ Default: Strict adherence to permissions. Errors if a path is
-    -- missing or write-protected.
+    -- ^ Default. Errors if a path is missing. Errors if a file or directory
+    -- is write-protected (on Unix: checked via mode bits; on Windows: checked
+    -- via the read-only attribute).
     | Force
-    -- ^ Mirrors @rm -f@: Ignores missing paths and deletes write-protected
-    -- files and write protected empty sub-directories.
-    -- @Note:@ Non-empty write-protected and non-traversable sub-directories
-    -- will still cause an error.
+    -- ^ Mirrors @rm -f@. Silently ignores missing paths. Deletes
+    -- write-protected files and directories where the OS permits it — that
+    -- is, where the current user has write permission on the parent directory
+    -- (Unix) or is not blocked by ACLs (Windows). Errors only on genuine
+    -- permission failures.
     | FullForce
-    -- ^ Best effort: Attempts to @chmod@ directories to ensure children
-    -- can be deleted.
+    -- ^ Extends @Force@. In recursive mode, also chmods directories to
+    -- ensure their contents can be traversed and removed, even if the
+    -- directory itself is write-protected. On Windows this is equivalent
+    -- to @Force@ since directory mode bits are not enforced.
 
 data RmOptions = RmOptions
     { rmForce :: RmForce
@@ -166,7 +174,19 @@ rmdir options path =
         True ->
             case rmForce options of
                 FullForce -> removePathForcibly path
-                Force -> removeDirectoryRecursive path
+                Force ->
+#if defined(mingw32_HOST_OS)
+                    -- On Unix removePathForcibly makes directories writable to
+                    -- facilitate removal of files in them, but on Windows
+                    -- directory attributes do not affect file deletion, it
+                    -- changes the FILE_ATTRIBUTE_READONLY on files to make
+                    -- them deletable. This is exactly what we want for the
+                    -- Force option. So FullForce and Force are essentially
+                    -- same on Windows.
+                    removePathForcibly path
+#else
+                    removeDirectoryRecursive path
+#endif
                 NoForce -> do
                     contents <- listDirectory path
                     withWriteProtectionCheck path (const (pure ())) "directory"
@@ -175,16 +195,16 @@ rmdir options path =
                            (path </> item)
                     withWriteProtectionCheck path removeDirectory "directory"
 
+-- XXX implement and use "chmod"
+
+-- | Make a path writable by the owner. Used on Windows before deletion to
+-- clear FILE_ATTRIBUTE_READONLY. Compiled on all platforms so that it is
+-- tested on Unix too, but only called on Windows.
 _setWritable :: FilePath -> IO ()
 _setWritable path = do
-    -- XXX should use "chmod"
     perms <- getPermissions path
-    when (not (writable perms)) $ do
-        setPermissions path (setOwnerWritable True perms)
-
-    where
-
-    setOwnerWritable w p = p { writable = w }
+    when (not (writable perms)) $
+        setPermissions path (perms { writable = True })
 
 rmfile :: RmOptions -> FilePath -> IO ()
 rmfile options path =
@@ -210,9 +230,12 @@ performRm options path = do
 #if defined(mingw32_HOST_OS)
         dirSymLink <- testl path isDirSymLink
         if dirSymLink
-        -- XXX if it is write-protected and we have full-force on then we
-        -- should remove the read-only attr and remove it?
-        then removeDirectory path
+        then do
+            case rmForce options of
+                FullForce -> _setWritable path
+                Force     -> _setWritable path
+                NoForce   -> return ()
+            removeDirectory path
         else rmfile options path
 #else
         rmfile options path
