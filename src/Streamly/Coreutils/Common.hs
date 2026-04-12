@@ -1,11 +1,17 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 -- | This module is deprecated. Use 'Data.Bool' and 'Bool' instead.
 module Streamly.Coreutils.Common
     {-# DEPRECATED "This module is deprecated. Please use 'Bool' from 'Data.Bool' instead." #-}
     ( Switch
+#if __GLASGOW_HASKELL__ >= 914
+    , data On
+    , data Off
+#else
     , pattern On
     , pattern Off
+#endif
     ) where
 
 -- Define Switch as a Bool alias

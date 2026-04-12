@@ -143,7 +143,7 @@ mode___ = nullFileMode
 -- the action is run but its result is ignored.
 parentDirPermCheck :: IO () -> IO ()
 parentDirPermCheck =
-#if defined(mingw32_HOST_OS)
+#if defined(CABAL_OS_WINDOWS)
     -- On Windows, we do not check parent dir permission as they are controlled
     -- by ACLs, not permission modes.
     id

@@ -87,14 +87,16 @@ where
 import Control.Monad (forM_, when)
 import Streamly.Coreutils.FileTest
     (doesItExist, test, testl, isDir, isWritableByMode)
-#if defined(mingw32_HOST_OS)
+#if defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
 import System.Directory
     ( getPermissions
     , removeFile
     , removeDirectory
+#if !defined(CABAL_OS_WINDOWS)
     , removeDirectoryRecursive
+#endif
     , removePathForcibly
     , setPermissions
     , listDirectory
@@ -175,7 +177,7 @@ rmdir options path =
             case rmForce options of
                 FullForce -> removePathForcibly path
                 Force ->
-#if defined(mingw32_HOST_OS)
+#if defined(CABAL_OS_WINDOWS)
                     -- On Unix removePathForcibly makes directories writable to
                     -- facilitate removal of files in them, but on Windows
                     -- directory attributes do not affect file deletion, it
@@ -212,7 +214,7 @@ rmfile options path =
         FullForce -> removePathForcibly path
         NoForce   -> withWriteProtectionCheck path removeFile "regular file"
         Force     -> do
-#if defined(mingw32_HOST_OS)
+#if defined(CABAL_OS_WINDOWS)
             -- On Windows, file deletability is tied to the file's own
             -- read-only attribute (unlike POSIX where only parent-dir write
             -- matters). Force must clear it before unlinking.
@@ -227,7 +229,7 @@ performRm options path = do
     if dir
     then rmdir options path
     else do
-#if defined(mingw32_HOST_OS)
+#if defined(CABAL_OS_WINDOWS)
         dirSymLink <- testl path isDirSymLink
         if dirSymLink
         then do

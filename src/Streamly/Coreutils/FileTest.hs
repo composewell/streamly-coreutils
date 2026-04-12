@@ -68,11 +68,6 @@
 -- > test path (size (> 4096))
 -- > test path (modifyTimeComparedTo (>) "reference.txt")
 
--- $setup
--- >>> import Prelude hiding (or, and)
--- >>> import Data.Time.Clock (NominalDiffTime)
--- >>> import Data.Time.Clock.POSIX (POSIXTime)
-
 module Streamly.Coreutils.FileTest
     (
     -- * File Test Predicate Type
@@ -251,11 +246,15 @@ import qualified System.PosixCompat.Files as Files
 import qualified Streamly.Coreutils.FileTest.Posix as FileTest
 #else
 import qualified Streamly.Coreutils.FileTest.Windows as FileTest
-import System.Win32.Types
 #endif
 
 import Streamly.Coreutils.FileTest.Common
 import Prelude hiding (and, or)
+
+-- $setup
+-- >>> import Prelude hiding (or, and)
+-- >>> import Data.Time.Clock (NominalDiffTime)
+-- >>> import Data.Time.Clock.POSIX (POSIXTime)
 
 -------------------------------------------------------------------------------
 -- User and group ownerships
@@ -334,7 +333,7 @@ isOwnedByCurrentGroup = FileTest.isOwnedByCurrentGroup
 -------------------------------------------------------------------------------
 
 hasPermissions :: (FileMode, FileMode, FileMode) -> FileTest
-hasPermissions (user, group, other) = withStateM $ \fp st -> do
+hasPermissions (user, _group, _other) = withStateM $ \fp st -> do
     isOwner <- testWithStatus fp st isOwnedByCurrentUser
     let checkMode = testWithStatus fp st . hasMode
     if isOwner
@@ -344,8 +343,8 @@ hasPermissions (user, group, other) = withStateM $ \fp st -> do
         -- XXX need to check access via other group memberships as well
         isGroup <- testWithStatus fp st FileTest.isOwnedByCurrentGroup
         if isGroup
-        then checkMode group
-        else checkMode other
+        then checkMode _group
+        else checkMode _other
 #else
     else return False
 #endif

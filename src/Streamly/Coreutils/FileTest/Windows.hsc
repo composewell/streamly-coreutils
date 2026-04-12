@@ -3,11 +3,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Streamly.Coreutils.FileTest.Windows
-    ( Uid
-    , Gid
-    , sameFileAs
+    ( sameFileAs
     , isTerminalFd
     {-
+    , Uid
+    , Gid
     , isOwnedByUserId
     , isOwnedByGroupId
     -}
@@ -35,10 +35,7 @@ import Control.Exception
     , throwIO
     )
 
-import Data.Bits (shiftL, (.|.), (.&.))
-import Data.Word (Word64)
 import Foreign.C.Types (CInt(..))
-import Foreign.Ptr (nullPtr)
 import System.PosixCompat.Files (FileStatus, isSymbolicLink, ownerWriteMode)
 import System.Posix.Types (Fd(..))
 import System.Win32.Console (getConsoleMode)
@@ -68,7 +65,6 @@ import System.Win32.File
     )
 import System.Win32.Security
     ( PSID
-    , SID
     , dACL_SECURITY_INFORMATION
     , oWNER_SECURITY_INFORMATION
     )
@@ -91,12 +87,12 @@ import Streamly.Coreutils.FileTest.Common
 -- Types
 -------------------------------------------------------------------------------
 
+{-
 -- | Wraps a Windows SID pointer representing a user identity.
 newtype Uid = Uid PSID
 -- | Wraps a Windows SID pointer representing a group identity.
 newtype Gid = Gid PSID
 
-{-
 isOwnedByUserId :: Uid -> FileTest
 isOwnedByUserId (Uid uid) = withPathM $ \fp -> undefined
 
@@ -269,7 +265,7 @@ fileId path =
     withFileHandle path $ \h -> do
         info <- getFileInformationByHandle h
         let vol = bhfiVolumeSerialNumber info
-            idx = fromIntegral (bhfiFileIndex info) :: Word64
+            idx = bhfiFileIndex info
         pure (vol, idx)
 
 -- | True if both paths refer to the same underlying file or directory,
@@ -306,7 +302,7 @@ isConsoleHandle h =
 isTerminalFd :: Fd -> FileTest
 isTerminalFd (Fd fd) =
     withPathM $ \_ -> do
-        h <- c_get_osfhandle (fromIntegral fd)
+        h <- c_get_osfhandle fd
         if h == iNVALID_HANDLE_VALUE
         then pure False
         else do
@@ -575,9 +571,6 @@ isExecutable = withPathM pathIsExecutable
 
 fILE_ATTRIBUTE_DIRECTORY    :: DWORD
 fILE_ATTRIBUTE_DIRECTORY    = 0x10
-
-fILE_ATTRIBUTE_REPARSE_POINT :: DWORD
-fILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 -- | True iff the path is a reparse point (symlink or junction) that the OS
 -- also marks as a directory object.
