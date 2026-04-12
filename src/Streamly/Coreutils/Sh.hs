@@ -8,19 +8,27 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Use shell scripts in your Haskell programs, interfacing via standard input
--- and output.  The functions in this module are just convenience wrappers over
--- "Streamly.System.Process" to run shell commands using "\/bin/sh" as the
--- shell.
+-- This module allows you to run shell commands from Haskell using
+-- @/bin/sh@ as the command interpreter. Haskell program interacts with shell
+-- processes via their standard input and output streams.
+--
+-- The functions in this module are just convenience wrappers over
+-- "Streamly.System.Process", specialized for shell-based workflows.
+--
+-- === Example
+--
+-- Convert text to uppercase using shell commands:
 --
 -- >>> :{
---   toBytes "echo hello"
--- & pipeBytes "tr [a-z] [A-Z]"
--- & Stdio.putBytes
+-- toBytes "echo hello"
+--     & pipeBytes "tr [a-z] [A-Z]"
+--     & Stdio.putBytes
 -- :}
 -- HELLO
 --
-
+-- This example demonstrates piping the output of @echo@ shell command into
+-- the @tr@ command, using Streamly's streaming abstractions.
+--
 module Streamly.Coreutils.Sh
     (
     -- * Generation
@@ -60,9 +68,6 @@ import qualified Streamly.Internal.System.Process as Process
 
 -- $setup
 -- >>> :set -XFlexibleContexts
--- >>> :set -package streamly
--- >>> :set -package streamly-core
--- >>> :set -package streamly-process
 -- >>> import Data.Function ((&))
 -- >>> import qualified Streamly.Internal.Console.Stdio as Stdio
 -- >>> import qualified Streamly.Data.Fold as Fold
