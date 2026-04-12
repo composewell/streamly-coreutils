@@ -19,6 +19,16 @@ category:            Streamly, Streaming
 stability:           Experimental
 build-type:          Simple
 
+tested-with:
+    GHC==9.14.1
+  , GHC==9.12.4
+  , GHC==9.10.3
+  , GHC==9.8.4
+  , GHC==9.6.3
+  , GHC==9.4.7
+  , GHC==9.2.8
+  , GHC==8.10.7
+
 extra-doc-files:
     CHANGELOG.md
   , README.md
