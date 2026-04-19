@@ -21,7 +21,7 @@
 --
 -- >>> :{
 -- toBytes "echo hello"
---     & pipeBytes "tr [a-z] [A-Z]"
+--     & pipeBytes "tr '[a-z]' ''[A-Z]''"
 --     & Stdio.putBytes
 -- :}
 -- HELLO
@@ -114,7 +114,7 @@ runWith f cmd = f "/bin/sh" ["-c", cmd]
 --
 -- >>> :{
 --    toChunks "echo hello"
---  & pipeWith Process.pipeChunks "tr [a-z] [A-Z]"
+--  & pipeWith Process.pipeChunks "tr '[a-z]' '[A-Z]'"
 --  & Stdio.putChunks
 --  :}
 --HELLO
@@ -142,11 +142,11 @@ pipeWith f cmd = f "/bin/sh" ["-c", cmd]
 -- exception is raised.
 --
 -- The following code is equivalent to the shell command @echo "hello world" |
--- tr [a-z] [A-Z]@:
+-- tr '[a-z]' '[A-Z]'@:
 --
 -- >>> :{
 --    toChunks "echo hello world"
---  & pipeChunks "tr [a-z] [A-Z]"
+--  & pipeChunks "tr '[a-z]' '[A-Z]'"
 --  & Stdio.putChunks
 --  :}
 --HELLO WORLD
@@ -162,7 +162,7 @@ pipeChunks = pipeWith Process.pipeChunks
 --
 -- >>> :{
 --    toBytes "echo hello world"
---  & pipeBytes "tr [a-z] [A-Z]"
+--  & pipeBytes "tr '[a-z]' '[A-Z]'"
 --  & Stdio.putBytes
 --  :}
 --HELLO WORLD
@@ -178,7 +178,7 @@ pipeBytes = pipeWith Process.pipeBytes
 --
 -- >>> :{
 --    toChars "echo hello world"
---  & pipeChars "tr [a-z] [A-Z]"
+--  & pipeChars "tr '[a-z]' '[A-Z]'"
 --  & Stdio.putChars
 --  :}
 --HELLO WORLD

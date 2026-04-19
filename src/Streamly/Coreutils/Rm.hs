@@ -26,7 +26,7 @@
 --
 -- Equivalent to @rm -r@, removes directories with writable files:
 --
---  >>> rmr = rm (recursive True . withForce Force)
+--  >>> rmr = rm (recursive True)
 --
 -- Equivalent to @rm -rf@, removes directories with readonly files as well,
 -- directories must have write permissions:
@@ -40,7 +40,7 @@
 -- Equivalent to @rm -rf dirSymLink/@, removing the contents but leaving the
 -- directory intact:
 --
---  >>> rmrc = rmContents Force
+--  >>> rmcf = rmContents Force
 --
 -- = Comparison with Posix @rm@
 --
