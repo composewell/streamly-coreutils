@@ -109,7 +109,7 @@ jobs:
       # If you have not committed packcheck.sh in your repo at PACKCHECK
       # then it is automatically pulled from this URL.
       PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
-      PACKCHECK_GITHUB_COMMIT: "90dc103036b5e3c001c193de524e1a5e8db026cd"
+      PACKCHECK_GITHUB_COMMIT: "fa6064227164de8d47dd65bdcb43b52844ba0e29"
 
     # ubuntu seems to have better support than debian on CI systems
     runs-on: ${{ matrix.runner }}
@@ -235,8 +235,10 @@ jobs:
             runner: windows-latest
             command: cabal
             ghc_version: 9.14.1
+            # On Windows, DISABLE_SDIST_BUILD is useful for (1) avoiding
+            # path length restriction, (2) avoid installing autoreconf
+            # for configure builds.
             # WARNING! cannot use # comments inside pack_options.
-            # DISABLE_SDIST_BUILD for shorter paths on Windows
             pack_options: >-
               GHC_PATH=/c/ghcup/bin/ghc
               CABAL_PATH=/c/ghcup/bin/cabal
@@ -269,15 +271,16 @@ jobs:
               DOCSPEC_OPTIONS="--timeout 60"
 
 #-----------------------------------------------------------------------------
-# Usually you do need to change anything below, this is generic code for
+# Usually you do not need to change anything below, this is generic code for
 # caching and running packcheck on Linux/Mac/Windows.
 #-----------------------------------------------------------------------------
 
     steps:
 
-    - name: Optimize Windows Runner Environment
+    - name: Enable long paths on Windows
       if: runner.os == 'Windows'
       shell: powershell
+      continue-on-error: true
       run: |
         # Enable long paths.  Sometimes failures occur due to path
         # length limitation.
@@ -291,7 +294,7 @@ jobs:
 
         # This does not seem to make much difference.
         # Disable Windows Defender to speed up IO/Tar operations
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        #Set-MpPreference -DisableRealtimeMonitoring $true
 
     - uses: actions/checkout@v4
 
@@ -384,6 +387,9 @@ jobs:
               chmod +x $1
           fi
         }
+        if test -n "$SUBDIR"; then
+          cd "$SUBDIR"
+        fi
         download_one packcheck.sh
 
     # Store the function in a file so that it can be reused across multiple
@@ -391,14 +397,12 @@ jobs:
     - name: Setup packcheck
       shell: bash
       run: |
+        if test -n "$SUBDIR"; then
+          rm -f cabal.project
+          cd "$SUBDIR"
+        fi
         cat << 'EOF' > packcheck-setup.sh
         setup_packcheck_args() {
-          if test -n "$SUBDIR"; then
-            mv packcheck.sh "$SUBDIR/"
-            rm -f cabal.project
-            cd "$SUBDIR"
-          fi
-
           ARGS="${{ matrix.command }} $COMMON_OPTIONS"
           if test "${{ matrix.command }}" = "cabal"; then
             ARGS="$ARGS $CABAL_OPTIONS"
@@ -439,6 +443,9 @@ jobs:
         (runner.os == 'Windows' && steps.restore-deps-win.outputs.cache-hit != 'true')
       shell: bash
       run: |
+        if test -n "$SUBDIR"; then
+          cd "$SUBDIR"
+        fi
         source packcheck-setup.sh
         setup_packcheck_args
         eval "./packcheck.sh $ARGS BUILD_DEPS_ONLY=y"
@@ -493,6 +500,9 @@ jobs:
     - name: Run packcheck (final build)
       shell: bash
       run: |
+        if test -n "$SUBDIR"; then
+          cd "$SUBDIR"
+        fi
         source packcheck-setup.sh
         setup_packcheck_args
         eval "./packcheck.sh $ARGS BUILD_PACKAGE_ONLY=y"
