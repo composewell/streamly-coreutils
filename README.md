@@ -1,12 +1,12 @@
 # Streamly Coreutils
 
 This repository provides Haskell functions that reimplement common
-GNU `coreutils` commands, leveraging the `streamly` library for
+GNU `coreutils` commands, utilizing the `streamly` library for
 efficient, streaming data processing where applicable. The goal is to
 offer a functional and highly performant alternative to traditional
 shell commands within Haskell applications, enabling complex data
-transformations and system interactions using a pure functional
-paradigm. Where applicable, these implementations are designed to be
+transformations, system programming and scripting using a pure functional
+paradigm. Where applicable, the implementation is designed to be
 highly concurrent, for example, the `ls` equivalent can list directory
 contents concurrently for improved performance.
 
@@ -15,11 +15,16 @@ contents concurrently for improved performance.
 Currently, this library provides implementations for the
 following coreutils-inspired as well as some additional commands:
 
-* Filesystem: `cp`, `rm`, `mv`, `ln`, `readlink`, `test`, `stat`, `touch`
-* Directories: `ls`, `dirname`, `mkdir`, `cd`, `pwd`, `home` and others
+* Dir traversal: `ls`, `cp -r`, `rm -r`
+* Dir modify: `touch`, `ln`, `cp`, `mkdir`, `rm`, `mv`
+* File stat: `test`, `stat`, `touch`
+* File read/write: `cp`
+* Symlink read: `readlink`
+* Processes: `cd`, `pwd`, `sleep`
+* Environment: `home`
 * Text Processing: `cut`, `tail`
-* Processes: `sleep`
-* Shell: `which`, executing shell commands with streaming
+* Shell: streaming composition of shell commands
+* Paths: `dirname`, `which`
 
 ## Important API Notice
 

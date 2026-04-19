@@ -9,7 +9,9 @@
 -- Functionality equivalent to the @cut@ command.
 
 module Streamly.Coreutils.Cut
-    ( foldIndicesBy
+    ( foldIndicesBy -- XXX rename to cut
+
+    -- * Deprecated
     , decodeLatin1
     , readLines
     , splitByWord8
@@ -41,7 +43,9 @@ decodeLatin1 arr =
         & Stream.toList
         & runIdentity
 
--- XXX this should go in unicode text file reading module - Unicode.FileIO?
+-- XXX this should go in unicode text file reading module - Unicode.FileIO or
+-- cat coreutil? Redirection ">" can have its own "pipeTo" or "redirectTo"
+-- function.
 -- e.g. readUtf8, writeUtf8, readLines, readWords, readWordsBy, readDSV,
 -- readDSVSeq
 
@@ -119,9 +123,12 @@ filterIndices :: Monad m =>
     [Int] -> Stream m a -> Stream m a
 filterIndices xs = filterByMask (Stream.fromList (makeIndexMask xs))
 
--- | Split the lines in a file using the given separator and then fold the
--- selected indices (indices start from 0) in each line using the supplied
--- fold.
+-- XXX Rename to "cut" using "CutOptions". fold, indices can be part of
+-- CutOptions with defaults.
+
+-- | @foldIndicesBy fold indices separator file@. Split the lines in a file
+-- using the given separator and then fold the selected indices (indices start
+-- from 0) in each line using the supplied fold.
 --
 -- For example to generate an array of the selected indices for each line:
 --

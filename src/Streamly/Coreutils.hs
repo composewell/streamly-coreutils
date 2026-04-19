@@ -7,12 +7,10 @@
 -- Portability : GHC
 --
 module Streamly.Coreutils
-    ( module Streamly.Coreutils.Uniq
-    , module Streamly.Coreutils.Cp
+    ( module Streamly.Coreutils.Cp
     , module Streamly.Coreutils.FileTest
     )
 where
 
-import Streamly.Coreutils.Uniq
 import Streamly.Coreutils.Cp
 import Streamly.Coreutils.FileTest

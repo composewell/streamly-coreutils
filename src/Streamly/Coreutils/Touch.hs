@@ -14,8 +14,8 @@ module Streamly.Coreutils.Touch
 
     -- * Options
     , Touch
-    , create
-    , followLinks
+    , create -- XXX rename for conflicts
+    , followLinks -- XXX this is a common option in multiple commands
     )
 where
 

@@ -116,7 +116,7 @@ module Streamly.Coreutils.FileTest
     --
     -- On POSIX systems, this checks the standard Unix permission bits.
     --
-    -- On Windows, only one or two predicates make sense:
+    -- On Windows, only select few predicates make sense:
     --
     -- * 'hasOwnerWrite' - returns false if the file is marked read only via attributes.
     -- * 'hasOwnerExec' - returns true based on the file extension: @.bat@, @.cmd@,
@@ -150,9 +150,9 @@ module Streamly.Coreutils.FileTest
 
     -- *** Mode based access
     -- | These APIs perform only the file permission mode checks, actual
-    -- readability, writability or executability may depend many other factors
+    -- readability, writability or executability may depend on many other factors
     -- like filesystem mount permissions, access control lists (ACLs) etc. For
-    -- deeper checks see: 'isReadable', 'isWritable', 'isExecutable'.
+    -- more comprehensive checks see: 'isReadable', 'isWritable', 'isExecutable'.
     --
     , isReadableByMode
     , isWritableByMode
@@ -208,6 +208,8 @@ module Streamly.Coreutils.FileTest
     -- Unit helpers are convenient to specify time durations:
     --
     -- >>> let _ = modifiedWithin (days 1 + hours 5 + minutes 10 + seconds 20)
+
+    -- XXX These can be moved to the streamly time module.
 
     -- *** Time units
     , seconds

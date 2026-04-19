@@ -1,7 +1,7 @@
 cabal-version:       2.4
 name:                streamly-coreutils
 version:             0.1.0
-synopsis:            GNU Coreutils like API for Streamly
+synopsis:            GNU Coreutils like API for Haskell
 description:
    Streaming Haskell implementations of GNU coreutils, built on
    Streamly.  Provides familiar, composable, high-performance,
@@ -170,17 +170,6 @@ library
 -------------------------------------------------------------------------------
 -- Test suites
 -------------------------------------------------------------------------------
-
--- test-suite coreutils-test
---   import: compile-options
---   type: exitcode-stdio-1.0
---   main-is: Main.hs
---   hs-source-dirs: test
---   build-depends:
---       streamly-coreutils
---     , streamly-core
---     , base              >= 4.8   && < 5
---   default-language: Haskell2010
 
 test-suite Streamly.Coreutils.Rm
   import: compile-options
