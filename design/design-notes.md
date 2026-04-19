@@ -61,6 +61,12 @@ because the number of functions can explode with more combinations,
 and in the latter we need to remember only one function and use any
 combination of options. That keeps the organization better.
 
+The downside of using a single multiway function with options is
+that we dynamically select a branch which we could have selected
+statically. However depending on the function and usecase this may be
+insignficant, in cases where it makes sense we can also select different
+functions rather than a single multiway function.
+
 ## Directory Operations
 
 Summary of important dir and file operations:
