@@ -1,143 +1,187 @@
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
+
 -- |
 -- Module      : Streamly.Coreutils.Id
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
 -- Stability   : experimental
--- Portability : GHC
+-- Portability : GHC (POSIX only)
 --
--- Experimental alternative wrapper API over System.Posix.User.
+-- Experimental alternative wrapper API over "System.Posix.User".
 --
--- Shorter names, closer to shell commands.
--- Int for user-id/group-id for covnenience.
--- Adds one missing function
+-- Provides the read-only functionality of the @id@, @whoami@, and @logname@
+-- coreutils commands, intended for programmatic use.
 --
--- Functions to get and set the user and group id of the current process.
+-- = Design notes
 --
--- Substitutes the functionality of the @id@ and @whoami@ coreutils commands.
+-- * __Scope: current process only.__ This module only reports identity
+--   information about the /current process/. Looking up identity details for
+--   an arbitrary named user (i.e. @id \<username\>@) is a separate concern
+--   that requires reading the user/group database (@/etc/passwd@,
+--   @/etc/group@, NSS, etc.). That functionality will live in a separate
+--   module (e.g. @Streamly.Coreutils.UserDB@) and is not implemented here.
 --
--- This is a Posix only module.
-
--- TODO: create a portable module with "idNum" and "idName" commands to print
--- the current user id, name.
+-- * __Scope: read-only.__ Setting the uid/gid of the current process
+--   (@setuid@, @setgid@) is the domain of @sudo@-style utilities and has
+--   significant security implications. It is intentionally not exposed from
+--   this module.
 --
--- Can separate process API and the user DB API.
-
+-- * __Portability.__ This is a POSIX-only module. A portable alternative
+--   exposing a minimal common subset (e.g. @idNum@, @idName@) could be added
+--   later.
+--
+-- * __Int for ids.__ User and group ids are exposed as 'Int' for
+--   convenience and brevity at call sites. Alternatives considered:
+--   'System.Posix.Types.UserID' / 'System.Posix.Types.GroupID' (which are
+--   @CUid@ / @CGid@ newtypes) would be more type-safe (a uid cannot be
+--   confused with a gid) and avoid any downcast concerns on platforms where
+--   these are wider than 'Int'. If type safety or exotic-platform
+--   correctness becomes a priority, switch to those. Downcasts via
+--   'fromIntegral' are safe on all mainstream 64-bit platforms where
+--   uid_t/gid_t are 32 bits.
+--
+-- * __'Maybe' for DB lookups.__ Functions that may fail to find a matching
+--   entry return 'Maybe' rather than throwing, which is friendlier for
+--   callers. The underlying @System.Posix.User@ primitives throw on a miss;
+--   we catch and convert.
+--
+-- * __Individual functions over a bundled record.__ Each piece of
+--   information is exposed as its own function rather than a combined
+--   @IdInfo@ record. A record would not save syscalls here (each field
+--   corresponds to a distinct primitive), so the extra surface area isn't
+--   justified. Revisit if a batched primitive becomes available.
+--
+-- * __@whoami@ is just @effectiveUserName@__ and is not exposed as a
+--   separate function to avoid redundancy.
+--
 module Streamly.Coreutils.Id
     (
-      uid
-    , euid
-    , gid
-    , egid
-    , uid2name
-    , gid2name
-    -- , groups
+    -- * Numeric ids of the current process
+      realUserId
+    , effectiveUserId
+    , realGroupId
+    , effectiveGroupId
+    , groupIds
+
+    -- * Names for the current process
+    , realUserName
+    , effectiveUserName
+    , realGroupName
+    , effectiveGroupName
+    , groupNames
+    , loginName
     )
 where
 
-import System.Posix (getGroupEntryForID)
-import Prelude hiding (id)
+import Control.Exception (try, SomeException)
+import Data.List (nub)
 import qualified System.Posix.User as Posix
 
-------------------------------------------------------
--- Current process settings
-------------------------------------------------------
+------------------------------------------------------------------------------
+-- Internal helpers
+------------------------------------------------------------------------------
 
--- | Return current process real user id.
+-- Look up a user-db entry by id, returning Nothing if it doesn't exist rather
+-- than throwing. See "Maybe for DB lookups" in the module header.
 --
--- id -ru
-uid :: IO Int
-uid = fromIntegral <$> Posix.getRealUserID
+-- Type signatures are intentionally omitted: UserEntry and GroupEntry are
+-- defined in an internal module of the unix package and are not re-exported
+-- from System.Posix.User, so they cannot be named here without pulling in
+-- the internal module. The inferred types are correct.
+-- tryLookupUser :: Int -> IO (Maybe UserEntry)
+tryLookupUser i = do
+    r <- try (Posix.getUserEntryForID (fromIntegral (i :: Int)))
+    return $ case r of
+        Left (_ :: SomeException) -> Nothing
+        Right ue -> Just ue
 
--- | Return current process real group id.
+-- tryLookupGroup :: Int -> IO (Maybe GroupEntry)
+tryLookupGroup i = do
+    r <- try (Posix.getGroupEntryForID (fromIntegral (i :: Int)))
+    return $ case r of
+        Left (_ :: SomeException) -> Nothing
+        Right ge -> Just ge
+
+------------------------------------------------------------------------------
+-- Current process: numeric ids
+------------------------------------------------------------------------------
+
+-- | Real user id of the current process. Corresponds to @id -ru@.
+realUserId :: IO Int
+realUserId = fromIntegral <$> Posix.getRealUserID
+
+-- | Effective user id of the current process. Corresponds to @id -u@.
+effectiveUserId :: IO Int
+effectiveUserId = fromIntegral <$> Posix.getEffectiveUserID
+
+-- | Real group id of the current process. Corresponds to @id -rg@.
+realGroupId :: IO Int
+realGroupId = fromIntegral <$> Posix.getRealGroupID
+
+-- | Effective group id of the current process. Corresponds to @id -g@.
+effectiveGroupId :: IO Int
+effectiveGroupId = fromIntegral <$> Posix.getEffectiveGroupID
+
+-- | All group ids the current process belongs to: the effective primary
+-- group plus all supplementary groups, deduplicated. Corresponds to @id -G@.
 --
--- id -rg
-gid :: IO Int
-gid = fromIntegral <$> Posix.getRealGroupID
+-- Note: @getgroups(2)@ alone returns only the supplementary list, and
+-- whether that list includes the primary gid is OS-dependent. This function
+-- explicitly merges the primary gid with the supplementary list to match
+-- the @id -G@ command's output.
+groupIds :: IO [Int]
+groupIds = do
+    primary <- effectiveGroupId
+    supp <- map fromIntegral <$> Posix.getGroups
+    return $ nub (primary : supp)
 
--- | Return current process effective user id.
+------------------------------------------------------------------------------
+-- Current process: names
+------------------------------------------------------------------------------
+
+-- | Real user name of the current process. Corresponds to @id -unr@.
 --
--- id -u
-euid :: IO Int
-euid = fromIntegral <$> Posix.getEffectiveUserID
+-- 'Nothing' if there is no user-db entry for the real uid.
+realUserName :: IO (Maybe String)
+realUserName = realUserId >>= fmap (fmap Posix.userName) . tryLookupUser
 
--- | Return current process effective group id.
+-- | Effective user name of the current process. Corresponds to @id -un@
+-- and @whoami@.
 --
--- id -g
-egid :: IO Int
-egid = fromIntegral <$> Posix.getEffectiveGroupID
+-- 'Nothing' if there is no user-db entry for the effective uid.
+effectiveUserName :: IO (Maybe String)
+effectiveUserName =
+    effectiveUserId >>= fmap (fmap Posix.userName) . tryLookupUser
 
--- | Get groups associated with the current process.
+-- | Real group name of the current process. Corresponds to @id -gnr@.
 --
--- id -G
-groups :: IO [Int]
-groups = fmap fromIntegral <$> Posix.getGroups
+-- 'Nothing' if there is no group-db entry for the real gid.
+realGroupName :: IO (Maybe String)
+realGroupName = realGroupId >>= fmap (fmap Posix.groupName) . tryLookupGroup
 
--- | The original login name of the process. Note: the current user name may
--- change by setuid but login name remains the same.
-logname :: IO String
-logname = Posix.getLoginName
-
-------------------------------------------------------
--- These should go to user database module?
-------------------------------------------------------
-
--- XXX We can parse the passwd file ourselves instead of using C code
--- XXX Use an Compact Array/OsString instead?
-
-{-
--- getpwuid
-uid2pwent =
-
--- getgrgid
-gid2grent =
-
--- getpwnam
-name2pwent =
-
--- getgrnam
-name2grent =
-
--- Stream the entries.
-getpwents  =
--}
-
--- | Convert numeric user id to user name.
-uid2name :: Int -> IO String
-uid2name i = do
-    -- XXX fromIntegral downcast
-    pw <- Posix.getUserEntryForID (fromIntegral i)
-    return (Posix.userName pw)
-
--- XXX Use an Compact Array/OsString instead?
-
--- | Convert numeric group id to group name.
-gid2name :: Int -> IO String
-gid2name i = do
-    -- XXX fromIntegral downcast
-    pw <- Posix.getGroupEntryForID (fromIntegral i)
-    return (Posix.groupName pw)
-
--- Note there is no uid2groups as anyway the groups file has the user name. We
--- search by name even if uid is provided. So we can convert uid to name and
--- then search.
-
--- | List all the groups in which a uid occurs. Returns (gid, group name).
+-- | Effective group name of the current process. Corresponds to @id -gn@.
 --
--- id -Gn <user>
-user2groups :: Int -> [(Int, String)]
-user2groups = undefined
+-- 'Nothing' if there is no group-db entry for the effective gid.
+effectiveGroupName :: IO (Maybe String)
+effectiveGroupName =
+    effectiveGroupId >>= fmap (fmap Posix.groupName) . tryLookupGroup
 
--- | Current process user name.
+-- | Names of all groups the current process belongs to, in the same order
+-- as 'groupIds'. Corresponds to @id -Gn@.
 --
--- id -un
-whoami :: IO String
-whoami = uid >>= uid2name
-
--- | Current process group names.
---
--- id -Gn
+-- Entries for which no group-db record exists are silently dropped.
 groupNames :: IO [String]
 groupNames = do
-    xs <- Posix.getGroups
-    fmap Posix.groupName <$> mapM getGroupEntryForID xs
+    gs <- groupIds
+    mEntries <- mapM tryLookupGroup gs
+    return [ Posix.groupName ge | Just ge <- mEntries ]
+
+-- | Original login name of the session the current process belongs to.
+--
+-- Note: this can differ from 'effectiveUserName' after operations like
+-- @su@ or @setuid@ — the login name reflects who originally logged in,
+-- not who the process is currently acting as. Corresponds to the
+-- @logname@ command.
+loginName :: IO String
+loginName = Posix.getLoginName

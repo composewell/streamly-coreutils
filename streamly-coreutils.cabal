@@ -124,7 +124,6 @@ library
     , Streamly.Coreutils.Directory
     , Streamly.Coreutils.Dirname
     , Streamly.Coreutils.FileTest
-    , Streamly.Coreutils.Id
     , Streamly.Coreutils.Ln
     , Streamly.Coreutils.Cut
     , Streamly.Coreutils.Ls
@@ -145,6 +144,7 @@ library
   else
       exposed-modules:
           Streamly.Coreutils.FileTest.Posix
+        , Streamly.Coreutils.Id
   other-modules:
       Streamly.Coreutils.String
     , Streamly.Coreutils.Uniq
