@@ -124,6 +124,7 @@ library
     , Streamly.Coreutils.Directory
     , Streamly.Coreutils.Dirname
     , Streamly.Coreutils.FileTest
+    , Streamly.Coreutils.Id
     , Streamly.Coreutils.Ln
     , Streamly.Coreutils.Cut
     , Streamly.Coreutils.Ls
