@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-
 -- |
 -- Module      : Streamly.Coreutils.Id
 -- Copyright   : (c) 2022 Composewell Technologies
@@ -55,10 +53,37 @@
 -- * __@whoami@ is just @effectiveUserName@__ and is not exposed as a
 --   separate function to avoid redundancy.
 --
+-- * __Scalar router ('idNum' \/ 'idName').__ In addition to the individual
+--   named functions, a pair of \"router\" functions driven by 'IdOptions'
+--   is provided. They are convenient when the choice of real\/effective
+--   and user\/group is determined dynamically (e.g. from parsed CLI flags).
+--   The individual functions remain the preferred style when the choice
+--   is known statically — they avoid the runtime dispatch and are more
+--   self-describing at the call site.
+--
+-- * __Router is scalar-only.__ 'idNum' and 'idName' only cover the
+--   scalar queries (real\/effective × user\/group). The list-returning
+--   queries ('groupIds', 'groupNames') and 'loginName' do not fit the
+--   router's return type and are kept as standalone functions rather than
+--   forced into a polymorphic or awkwardly-typed router.
+--
 module Streamly.Coreutils.Id
     (
+    -- * Option-driven router
+    -- | Convenient when the choice of real\/effective and user\/group is
+    -- determined dynamically. Start from 'defaultConfig' (effective user)
+    -- and compose modifiers.
+      IdOptions
+    , defaultConfig
+    , idReal
+    , idEffective
+    , idUser
+    , idGroup
+    , idNum
+    , idName
+
     -- * Numeric ids of the current process
-      realUserId
+    , realUserId
     , effectiveUserId
     , realGroupId
     , effectiveGroupId
@@ -82,26 +107,27 @@ import qualified System.Posix.User as Posix
 -- Internal helpers
 ------------------------------------------------------------------------------
 
--- Look up a user-db entry by id, returning Nothing if it doesn't exist rather
--- than throwing. See "Maybe for DB lookups" in the module header.
+-- Look up the user name for a uid, returning Nothing if no entry exists
+-- rather than throwing. See "Maybe for DB lookups" in the module header.
 --
--- Type signatures are intentionally omitted: UserEntry and GroupEntry are
--- defined in an internal module of the unix package and are not re-exported
--- from System.Posix.User, so they cannot be named here without pulling in
--- the internal module. The inferred types are correct.
--- tryLookupUser :: Int -> IO (Maybe UserEntry)
-tryLookupUser i = do
-    r <- try (Posix.getUserEntryForID (fromIntegral (i :: Int)))
+-- Note: this is a user-DB lookup and logically belongs in a future
+-- Streamly.Coreutils.UserDB module. It is kept internal here so the
+-- migration is not a breaking change for callers.
+userNameFromId :: Int -> IO (Maybe String)
+userNameFromId i = do
+    r <- try (Posix.getUserEntryForID (fromIntegral i))
     return $ case r of
         Left (_ :: SomeException) -> Nothing
-        Right ue -> Just ue
+        Right ue -> Just (Posix.userName ue)
 
--- tryLookupGroup :: Int -> IO (Maybe GroupEntry)
-tryLookupGroup i = do
-    r <- try (Posix.getGroupEntryForID (fromIntegral (i :: Int)))
+-- Look up the group name for a gid, returning Nothing if no entry exists
+-- rather than throwing. Same migration note as 'userNameFromId'.
+groupNameFromId :: Int -> IO (Maybe String)
+groupNameFromId i = do
+    r <- try (Posix.getGroupEntryForID (fromIntegral i))
     return $ case r of
         Left (_ :: SomeException) -> Nothing
-        Right ge -> Just ge
+        Right ge -> Just (Posix.groupName ge)
 
 ------------------------------------------------------------------------------
 -- Current process: numeric ids
@@ -144,28 +170,26 @@ groupIds = do
 --
 -- 'Nothing' if there is no user-db entry for the real uid.
 realUserName :: IO (Maybe String)
-realUserName = realUserId >>= fmap (fmap Posix.userName) . tryLookupUser
+realUserName = realUserId >>= userNameFromId
 
 -- | Effective user name of the current process. Corresponds to @id -un@
 -- and @whoami@.
 --
 -- 'Nothing' if there is no user-db entry for the effective uid.
 effectiveUserName :: IO (Maybe String)
-effectiveUserName =
-    effectiveUserId >>= fmap (fmap Posix.userName) . tryLookupUser
+effectiveUserName = effectiveUserId >>= userNameFromId
 
 -- | Real group name of the current process. Corresponds to @id -gnr@.
 --
 -- 'Nothing' if there is no group-db entry for the real gid.
 realGroupName :: IO (Maybe String)
-realGroupName = realGroupId >>= fmap (fmap Posix.groupName) . tryLookupGroup
+realGroupName = realGroupId >>= groupNameFromId
 
 -- | Effective group name of the current process. Corresponds to @id -gn@.
 --
 -- 'Nothing' if there is no group-db entry for the effective gid.
 effectiveGroupName :: IO (Maybe String)
-effectiveGroupName =
-    effectiveGroupId >>= fmap (fmap Posix.groupName) . tryLookupGroup
+effectiveGroupName = effectiveGroupId >>= groupNameFromId
 
 -- | Names of all groups the current process belongs to, in the same order
 -- as 'groupIds'. Corresponds to @id -Gn@.
@@ -174,8 +198,8 @@ effectiveGroupName =
 groupNames :: IO [String]
 groupNames = do
     gs <- groupIds
-    mEntries <- mapM tryLookupGroup gs
-    return [ Posix.groupName ge | Just ge <- mEntries ]
+    mNames <- mapM groupNameFromId gs
+    return [ n | Just n <- mNames ]
 
 -- | Original login name of the session the current process belongs to.
 --
@@ -185,3 +209,75 @@ groupNames = do
 -- @logname@ command.
 loginName :: IO String
 loginName = Posix.getLoginName
+
+------------------------------------------------------------------------------
+-- Option-driven router
+------------------------------------------------------------------------------
+
+-- | Options for the 'idNum' and 'idName' router functions. Use
+-- 'defaultConfig' together with the modifiers 'idReal', 'idEffective',
+-- 'idUser', 'idGroup' to configure.
+--
+-- The default is /effective user/, matching the behaviour of @id -u@ and
+-- @id -un@ when invoked without @-r@ or @-g@.
+data IdOptions = IdOptions
+    { idoReal  :: Bool  -- ^ True = real id, False = effective id
+    , idoGroup :: Bool  -- ^ True = group, False = user
+    }
+
+-- | Default configuration: effective user.
+defaultConfig :: IdOptions
+defaultConfig = IdOptions { idoReal = False, idoGroup = False }
+
+-- | Select the real id instead of the effective id.
+idReal :: IdOptions -> IdOptions
+idReal cfg = cfg { idoReal = True }
+
+-- | Select the effective id (the default). Useful when composing modifiers
+-- dynamically and you need to explicitly override a prior 'idReal'.
+idEffective :: IdOptions -> IdOptions
+idEffective cfg = cfg { idoReal = False }
+
+-- | Select the group id instead of the user id.
+idGroup :: IdOptions -> IdOptions
+idGroup cfg = cfg { idoGroup = True }
+
+-- | Select the user id (the default). Useful when composing modifiers
+-- dynamically and you need to explicitly override a prior 'idGroup'.
+idUser :: IdOptions -> IdOptions
+idUser cfg = cfg { idoGroup = False }
+
+-- | Return a numeric id (uid or gid, real or effective) of the current
+-- process, based on the given options.
+--
+-- > idNum id                          -- effective uid  (id -u)
+-- > idNum idReal                      -- real uid       (id -ru)
+-- > idNum idGroup                     -- effective gid  (id -g)
+-- > idNum (idReal . idGroup)          -- real gid       (id -rg)
+idNum :: (IdOptions -> IdOptions) -> IO Int
+idNum f =
+    case (idoReal cfg, idoGroup cfg) of
+        (False, False) -> effectiveUserId
+        (True,  False) -> realUserId
+        (False, True ) -> effectiveGroupId
+        (True,  True ) -> realGroupId
+  where
+    cfg = f defaultConfig
+
+-- | Return the name corresponding to a uid or gid (real or effective) of
+-- the current process, based on the given options. Returns 'Nothing' if
+-- the corresponding user- or group-db entry does not exist.
+--
+-- > idName id                         -- effective user name  (id -un)
+-- > idName idReal                     -- real user name       (id -unr)
+-- > idName idGroup                    -- effective group name (id -gn)
+-- > idName (idReal . idGroup)         -- real group name      (id -gnr)
+idName :: (IdOptions -> IdOptions) -> IO (Maybe String)
+idName f =
+    case (idoReal cfg, idoGroup cfg) of
+        (False, False) -> effectiveUserName
+        (True,  False) -> realUserName
+        (False, True ) -> effectiveGroupName
+        (True,  True ) -> realGroupName
+  where
+    cfg = f defaultConfig
