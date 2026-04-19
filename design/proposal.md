@@ -41,8 +41,6 @@ and output just the way Unix commands work, reading from stdin and writing to
 stdout and composed with pipes.  We should be able to chain the functions in a
 stream processing pipeline.
 
-Use the Haskell `path` package for file system path representation where needed.
-
 ## References
 
 * https://github.com/coreutils/coreutils
