@@ -273,11 +273,8 @@ idNum f =
 -- > idName idGroup                    -- effective group name (id -gn)
 -- > idName (idReal . idGroup)         -- real group name      (id -gnr)
 idName :: (IdOptions -> IdOptions) -> IO (Maybe String)
-idName f =
-    case (idoReal cfg, idoGroup cfg) of
-        (False, False) -> effectiveUserName
-        (True,  False) -> realUserName
-        (False, True ) -> effectiveGroupName
-        (True,  True ) -> realGroupName
+idName f = do
+    n <- idNum f
+    if idoGroup cfg then groupNameFromId n else userNameFromId n
   where
     cfg = f defaultConfig
