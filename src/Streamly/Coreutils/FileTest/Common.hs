@@ -409,6 +409,10 @@ applyCatchENOENT f fs =
         | isDoesNotExistError e = return False
         | otherwise             = throwIO e
 
+-- XXX * Returns 'False' if the file does not exist or the predicate is 'False'
+-- This can lead to silent bugs. We should raise an exception if the file does
+-- not exist unless the predicate is doesItExist.
+
 -- | Apply a predicate to a 'FilePath', if the path is a symlink uses the link
 -- target and not the link itself. See 'testl' for testing the link itself.
 --

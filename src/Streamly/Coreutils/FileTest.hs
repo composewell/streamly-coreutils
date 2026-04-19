@@ -27,6 +27,11 @@
 -- It offers greater composability and improved performance by allowing
 -- multiple predicates to share a single file status query.
 --
+-- One important difference from the shell utility is that all the predicates
+-- except 'doesItExist' raise an exception if the file does not exist so that
+-- we can distinguish the cases when the predicate is actually false and when
+-- the file does not exist. This is safer and avoids silent bugs.
+--
 -- String comparison tests provided by GNU @test@ are intentionally omitted,
 -- as they can be expressed directly using standard Haskell operators.
 --
@@ -63,10 +68,9 @@
 --
 -- Example:
 --
--- > test path doesItExist
--- > test path isReadable
--- > test path (size (> 4096))
--- > test path (modifyTimeComparedTo (>) "reference.txt")
+-- >>> _ <- test "a" doesItExist
+-- >>> _ <- test "/usr/bin/ls" (isReadable `and_` size (> 4096))
+-- >>> _ <- test "/usr/bin/ls" (modifyTimeComparedTo "reference.txt" (>))
 
 module Streamly.Coreutils.FileTest
     (
