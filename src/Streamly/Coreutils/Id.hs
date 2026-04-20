@@ -25,6 +25,7 @@ module Streamly.Coreutils.Id
     -- * Owner ids of the current process
     , idNum
     , idName
+    -- , idInfo -- get (Num, Name)
 
     -- * Groups of the current process user
     , groupIds
@@ -32,6 +33,13 @@ module Streamly.Coreutils.Id
 
     -- * Login name of the current process user
     , loginName
+
+    -- XXX FromUserId is common in all these, we can assume that as implicit
+    -- and remove it and maybe prefix these with get.
+    --
+    -- XXX To save db lookups we should perhaps get the entire user record and
+    -- use that to print whatever fields we want. We can build a formatter to
+    -- use the fields.
 
     -- * Lookups by user id
     , userNameFromId
