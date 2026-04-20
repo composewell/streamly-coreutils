@@ -16,6 +16,8 @@
 -- * 'pathMustExist' - require the path to exist (GNU @realpath -e@).
 -- * 'noSymlinks' - don't expand symbolic links; normalize @.@ and
 --   @..@ lexically only (GNU @realpath -s@ / @--no-symlinks@).
+-- * 'logical' - resolve @..@ components lexically before expanding
+--   symlinks (GNU @realpath -L@ / @--logical@).
 -- * 'relativeTo' - produce a path relative to a given base directory
 --   (GNU @realpath --relative-to=DIR@).
 --
@@ -40,15 +42,12 @@
 --   traverses through a symlink via @..@: @\/link\/..@ lexically
 --   resolves to @\/@, but physically resolves to the parent of the
 --   symlink's target.
--- * GNU @realpath@'s @-L@ / @--logical@ mode (resolve @..@ textually
---   before expanding symlinks) is not currently supported. Use
---   'noSymlinks' if you want purely lexical normalization, or the
---   default physical mode otherwise.
 
 module Streamly.Coreutils.RealPath
     ( RealPathOptions
     , pathMustExist
     , noSymlinks
+    , logical
     , relativeTo
     , realPath
     )
@@ -85,12 +84,21 @@ import System.FilePath
 --   paths: it canonicalizes as much as it can rather than failing.
 --   'pathMustExist' restores the GNU default via a pre-check.
 --
--- * GNU @-L@ / @--logical@ (resolve @..@ textually, then expand
---   remaining symlinks) is intentionally not implemented. @directory@
---   offers no primitive for it, and implementing it correctly
---   requires a per-component walker that canonicalizes surviving
---   components one at a time. Easy to get wrong on Windows edges,
---   and the demand is rare. Revisit if a real use case shows up.
+-- * 'logical' is implemented as @canonicalizePath . lexicalCollapse@:
+--   collapse @..@ segments as text first, then let 'canonicalizePath'
+--   expand whatever symlinks remain in the surviving components. This
+--   matches GNU @-L@'s spec of "resolve @..@ before symlinks". Note
+--   that symlinks /inside/ a symlink's target are still resolved
+--   physically - @-L@ only governs @..@ in the input path. An earlier
+--   version of this module deferred implementing @-L@ out of caution
+--   about a custom per-component walker; once 'lexicalCollapse' was
+--   written and tested for 'noSymlinks', 'logical' reduced to the
+--   two-step composition above.
+--
+-- * When 'logical' and 'noSymlinks' are both set, 'noSymlinks' wins:
+--   no symlink expansion happens in either phase. 'logical' in that
+--   combination is redundant (its lexical step is also what
+--   'noSymlinks' does).
 --
 -- * 'pathMustExist' composes with 'noSymlinks': existence is checked
 --   on the path as given, not the expanded form, matching GNU
@@ -112,6 +120,7 @@ import System.FilePath
 data RealPathOptions = RealPathOptions
     { _requireExistence :: Bool
     , _expandSymlinks   :: Bool
+    , _logicalDots      :: Bool
     , _relativeBase     :: Maybe FilePath
     }
 
@@ -122,6 +131,7 @@ defaultConfig :: RealPathOptions
 defaultConfig = RealPathOptions
     { _requireExistence = False
     , _expandSymlinks   = True
+    , _logicalDots      = False
     , _relativeBase     = Nothing
     }
 
@@ -173,6 +183,34 @@ pathMustExist opts = opts { _requireExistence = True }
 -- True
 noSymlinks :: RealPathOptions -> RealPathOptions
 noSymlinks opts = opts { _expandSymlinks = False }
+
+-- | Resolve @..@ components lexically before expanding symbolic
+-- links. Corresponds to GNU @realpath -L@ / @--logical@.
+--
+-- Default (without this modifier): @..@ is resolved physically, i.e.
+-- symlinks in the path are expanded first and @..@ then applies to
+-- the resolved location. With this modifier, @..@ is applied as text
+-- first (so @\/link\/..@ becomes @\/@), and any symlinks remaining in
+-- the surviving components are expanded afterwards.
+--
+-- The two modes give the same result on paths that don't mix @..@
+-- with symlinks. They diverge on a path like @\/link\/..@ where
+-- @\/link@ is a symlink: physical resolution follows the symlink and
+-- then ascends from its target; logical resolution cancels the
+-- @link@ and @..@ textually, giving @\/@.
+--
+-- If combined with 'noSymlinks', 'noSymlinks' wins - no symlinks are
+-- expanded in either phase.
+--
+-- On a path without symlinks, logical mode is equivalent to default
+-- mode:
+--
+-- >>> tmp <- getTemporaryDirectory
+-- >>> r <- realPath logical (tmp </> "a" </> ".." </> "b")
+-- >>> r == tmp </> "b"
+-- True
+logical :: RealPathOptions -> RealPathOptions
+logical opts = opts { _logicalDots = True }
 
 -- | Return the canonical path relative to the given base directory.
 -- Corresponds to GNU @realpath --relative-to=DIR@.
@@ -249,10 +287,16 @@ realPath modifier path = do
         exists <- doesPathExist path
         when (not exists) $
             ioError (userError ("realPath: path does not exist: " ++ path))
+    -- Three modes, in precedence order:
+    --   1. noSymlinks: purely lexical (wins over logical if both set).
+    --   2. logical: lexically collapse .., then expand symlinks.
+    --   3. physical (default): canonicalizePath does everything.
     resolved <-
-        if _expandSymlinks opts
-        then canonicalizePath path
-        else fmap lexicalCollapse (makeAbsolute path)
+        if not (_expandSymlinks opts)
+        then fmap lexicalCollapse (makeAbsolute path)
+        else if _logicalDots opts
+             then fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
+             else canonicalizePath path
     case _relativeBase opts of
         Nothing   -> return resolved
         Just base -> do
