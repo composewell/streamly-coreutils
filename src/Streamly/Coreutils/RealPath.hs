@@ -17,7 +17,7 @@
 --   disk: 'AllParents' (default, GNU @-E@), 'EntirePath' (GNU @-e@),
 --   or 'DontRequire' (GNU @-m@).
 -- * 'resolveSymlinks' - control when (and whether) symbolic links
---   are expanded: 'TargetParents' (default, GNU @-P@), 'OriginalParents'
+--   are expanded: 'UseTargetParents' (default, GNU @-P@), 'UseOriginalParents'
 --   (GNU @-L@), or 'DontResolve' (GNU @-s@).
 -- * 'relativeTo' - produce a path relative to a given base directory
 --   (GNU @realpath --relative-to=DIR@).
@@ -76,7 +76,7 @@ import System.FilePath
 -- = Design notes
 --
 -- * Thin wrapper over 'System.Directory.canonicalizePath' for the
---   default 'TargetParents' (physical) mode; 'OriginalParents' and
+--   default 'UseTargetParents' (physical) mode; 'UseOriginalParents' and
 --   'DontResolve' use 'makeAbsolute' plus a custom @..@-collapsing
 --   walker ('lexicalCollapse').
 --
@@ -122,7 +122,7 @@ import System.FilePath
 --   'doesDirectoryExist' so that files (not just directories) at the
 --   leaf are accepted.
 --
--- * 'OriginalParents' is implemented as
+-- * 'UseOriginalParents' is implemented as
 --   @canonicalizePath . lexicalCollapse . makeAbsolute@: collapse
 --   @..@ as text first, then let 'canonicalizePath' expand whatever
 --   symlinks remain in the surviving components. This matches GNU
@@ -175,27 +175,27 @@ data ExistenceCheck
 -- The three modes differ on where a @..@ segment points when it
 -- follows a symlink, and on whether symlinks are expanded at all.
 --
--- * 'TargetParents': @..@ means the parent of the symlink's
+-- * 'UseTargetParents': @..@ means the parent of the symlink's
 --   /target/. Symlinks are expanded first, so @..@ ascends from the
 --   resolved location. Matches GNU @realpath@'s default physical
 --   mode (@-P@).
--- * 'OriginalParents': @..@ means the parent in the /original/ path
+-- * 'UseOriginalParents': @..@ means the parent in the /original/ path
 --   you supplied - @..@ textually cancels the preceding segment,
 --   regardless of whether that segment was a symlink. Remaining
 --   symlinks in the surviving path are still expanded. Matches GNU
 --   @realpath -L@ / @--logical@.
 -- * 'DontResolve': no symlinks are expanded anywhere in the path.
---   @..@ is lexical (same as 'OriginalParents'), and symlinks in
+--   @..@ is lexical (same as 'UseOriginalParents'), and symlinks in
 --   other components are preserved as-is. Matches GNU @realpath -s@
 --   / @--no-symlinks@.
 --
 -- The three modes produce the same result on paths that contain no
--- symlinks. 'TargetParents' and 'OriginalParents' diverge when a
+-- symlinks. 'UseTargetParents' and 'UseOriginalParents' diverge when a
 -- symlink is followed by @..@; 'DontResolve' diverges from both
 -- whenever the path contains any symlink.
 data SymlinkResolution
-    = TargetParents
-    | OriginalParents
+    = UseTargetParents
+    | UseOriginalParents
     | DontResolve
 
 -- | Options for 'realPath'. Users don't construct 'RealPathOptions'
@@ -214,7 +214,7 @@ data RealPathOptions = RealPathOptions
 defaultConfig :: RealPathOptions
 defaultConfig = RealPathOptions
     { _existenceCheck    = AllParents
-    , _symlinkResolution = TargetParents
+    , _symlinkResolution = UseTargetParents
     , _relativeTo        = Nothing
     , _relativeIfWithin  = Nothing
     }
@@ -266,7 +266,7 @@ requireExistence check opts = opts { _existenceCheck = check }
 -- | Choose how @..@ and symbolic links interact. See
 -- 'SymlinkResolution' for the three modes and a full explanation.
 --
--- Default (without this modifier): 'TargetParents' - @..@ ascends
+-- Default (without this modifier): 'UseTargetParents' - @..@ ascends
 -- from the symlink's target (GNU @realpath@'s physical mode, @-P@).
 --
 -- The examples below compose with @'requireExistence' 'DontRequire'@
@@ -278,14 +278,14 @@ requireExistence check opts = opts { _existenceCheck = check }
 --
 -- >>> tmp <- getTemporaryDirectory
 -- >>> let opts m = resolveSymlinks m . requireExistence DontRequire
--- >>> r1 <- realPath (opts OriginalParents) (tmp </> "a" </> ".." </> "b")
+-- >>> r1 <- realPath (opts UseOriginalParents) (tmp </> "a" </> ".." </> "b")
 -- >>> r2 <- realPath (requireExistence DontRequire) (tmp </> "b")
 -- >>> r1 == r2
 -- True
 --
 -- 'DontResolve' collapses @..@ and @.@ textually and performs no
 -- symlink resolution (so the base is not canonicalized - the result
--- may differ from 'TargetParents' when the base contains symlinks):
+-- may differ from 'UseTargetParents' when the base contains symlinks):
 --
 -- >>> r <- realPath (opts DontResolve) (tmp </> "a" </> ".." </> "b")
 -- >>> r == tmp </> "b"
@@ -426,8 +426,8 @@ realPath modifier path = do
     let opts = modifier defaultConfig
     checkExistence (_existenceCheck opts) path
     resolved <- case _symlinkResolution opts of
-        TargetParents -> canonicalizePath path
-        OriginalParents ->
+        UseTargetParents -> canonicalizePath path
+        UseOriginalParents ->
             fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
         DontResolve -> fmap lexicalCollapse (makeAbsolute path)
     -- Relativization and containment logic:
