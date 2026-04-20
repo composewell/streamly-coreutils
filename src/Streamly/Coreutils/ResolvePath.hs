@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.RealPath
+-- Module      : Streamly.Coreutils.ResolvePath
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -10,15 +10,15 @@
 -- @.@ and @..@ segments, and follow every symbolic link along the way.
 -- Corresponds to the shell @realpath@ command.
 --
--- Call 'realPath' with @id@ for the default behavior, or compose
+-- Call 'resolvePath' with @id@ for the default behavior, or compose
 -- modifiers with @(.)@ to customize:
 --
 -- * 'requireExistence' - control which path components must exist on
 --   disk: 'AllParents' (default, GNU @-E@), 'EntirePath' (GNU @-e@),
 --   or 'DontRequire' (GNU @-m@).
--- * 'resolveSymlinks' - control when (and whether) symbolic links
+-- * 'resolutionMode' - control when (and whether) symbolic links
 --   are expanded: 'UseTargetParents' (default, GNU @-P@), 'UseOriginalParents'
---   (GNU @-L@), or 'DontResolve' (GNU @-s@).
+--   (GNU @-L@), or 'DontResolveSymlinks' (GNU @-s@).
 -- * 'relativeTo' - produce a path relative to a given base directory
 --   (GNU @realpath --relative-to=DIR@).
 -- * 'relativeIfWithin' - produce a relative path only if it's under
@@ -38,25 +38,25 @@
 -- * 'relativeTo' falls back to returning the canonicalized absolute
 --   path unchanged when no common prefix exists with the base
 --   (e.g. different drives on Windows).
--- * 'resolveSymlinks' 'DontResolve' combined with 'requireExistence'
+-- * 'resolutionMode' 'DontResolveSymlinks' combined with 'requireExistence'
 --   'DontRequire' is the only configuration that performs no
 --   filesystem access on the path components (only
 --   'System.Directory.getCurrentDirectory' when the path is
 --   relative). All other configurations involve some filesystem IO.
--- * Because 'DontResolve' is lexical, it can give a different result
+-- * Because 'DontResolveSymlinks' is lexical, it can give a different result
 --   than the default mode when the path traverses through a symlink
 --   via @..@: @\/link\/..@ lexically resolves to @\/@, but physically
 --   resolves to the parent of the symlink's target.
 
-module Streamly.Coreutils.RealPath
-    ( RealPathOptions
+module Streamly.Coreutils.ResolvePath
+    ( ResolvePathOptions
     , ExistenceCheck (..)
-    , SymlinkResolution (..)
+    , ResolutionMode (..)
     , requireExistence
-    , resolveSymlinks
+    , resolutionMode
     , relativeTo
     , relativeIfWithin
-    , realPath
+    , resolvePath
     )
 where
 
@@ -77,10 +77,10 @@ import System.FilePath
 --
 -- * Thin wrapper over 'System.Directory.canonicalizePath' for the
 --   default 'UseTargetParents' (physical) mode; 'UseOriginalParents' and
---   'DontResolve' use 'makeAbsolute' plus a custom @..@-collapsing
+--   'DontResolveSymlinks' use 'makeAbsolute' plus a custom @..@-collapsing
 --   walker ('lexicalCollapse').
 --
--- * Why a single 'SymlinkResolution' enum instead of two flags.
+-- * Why a single 'ResolutionMode' enum instead of two flags.
 --   Symlink expansion is a three-way choice, not two orthogonal
 --   booleans. An earlier iteration exposed 'logical' and 'noSymlinks'
 --   as separate modifiers, which required a precedence rule for
@@ -135,7 +135,7 @@ import System.FilePath
 --   @realpath -e -s@ and @realpath -e -L@.
 --
 -- * 'relativeTo' always canonicalizes the base physically (following
---   symlinks) regardless of the 'SymlinkResolution' mode. Otherwise
+--   symlinks) regardless of the 'ResolutionMode' mode. Otherwise
 --   @relativeTo "foo/../bar"@ with a lexical base would give
 --   surprising results. If a future use case needs a lexical base,
 --   add a separate modifier rather than overloading this one.
@@ -152,7 +152,7 @@ import System.FilePath
 --   failure is an exceptional condition, not a lookup miss - matches
 --   the error-handling guidance in the package design notes.
 
--- | Which components of a path must exist on disk for 'realPath' to
+-- | Which components of a path must exist on disk for 'resolvePath' to
 -- succeed.
 --
 -- * 'EntirePath': every component - including the leaf - must exist.
@@ -184,26 +184,26 @@ data ExistenceCheck
 --   regardless of whether that segment was a symlink. Remaining
 --   symlinks in the surviving path are still expanded. Matches GNU
 --   @realpath -L@ / @--logical@.
--- * 'DontResolve': no symlinks are expanded anywhere in the path.
+-- * 'DontResolveSymlinks': no symlinks are expanded anywhere in the path.
 --   @..@ is lexical (same as 'UseOriginalParents'), and symlinks in
 --   other components are preserved as-is. Matches GNU @realpath -s@
 --   / @--no-symlinks@.
 --
 -- The three modes produce the same result on paths that contain no
 -- symlinks. 'UseTargetParents' and 'UseOriginalParents' diverge when a
--- symlink is followed by @..@; 'DontResolve' diverges from both
+-- symlink is followed by @..@; 'DontResolveSymlinks' diverges from both
 -- whenever the path contains any symlink.
-data SymlinkResolution
+data ResolutionMode
     = UseTargetParents
     | UseOriginalParents
-    | DontResolve
+    | DontResolveSymlinks
 
--- | Options for 'realPath'. Users don't construct 'RealPathOptions'
+-- | Options for 'resolvePath'. Users don't construct 'ResolvePathOptions'
 -- directly - instead, pass @id@ for the default behavior, or a
--- modifier (or composition of modifiers with @(.)@) to 'realPath'.
-data RealPathOptions = RealPathOptions
+-- modifier (or composition of modifiers with @(.)@) to 'resolvePath'.
+data ResolvePathOptions = ResolvePathOptions
     { _existenceCheck    :: ExistenceCheck
-    , _symlinkResolution :: SymlinkResolution
+    , _resolutionMode :: ResolutionMode
     , _relativeTo        :: Maybe FilePath
     , _relativeIfWithin  :: Maybe FilePath
     }
@@ -211,10 +211,10 @@ data RealPathOptions = RealPathOptions
 -- Default configuration: the seed value that modifiers are composed
 -- onto. Users supply @id@ (or a modifier chain) at the call site
 -- rather than referring to this directly.
-defaultConfig :: RealPathOptions
-defaultConfig = RealPathOptions
+defaultConfig :: ResolvePathOptions
+defaultConfig = ResolvePathOptions
     { _existenceCheck    = AllParents
-    , _symlinkResolution = UseTargetParents
+    , _resolutionMode = UseTargetParents
     , _relativeTo        = Nothing
     , _relativeIfWithin  = Nothing
     }
@@ -229,12 +229,12 @@ defaultConfig = RealPathOptions
 -- 'EntirePath' rejects a path whose leaf does not exist:
 --
 -- >>> cwd <- getCurrentDirectory
--- >>> r1 <- realPath (requireExistence EntirePath) cwd
--- >>> r2 <- realPath (requireExistence EntirePath) r1
+-- >>> r1 <- resolvePath (requireExistence EntirePath) cwd
+-- >>> r2 <- resolvePath (requireExistence EntirePath) r1
 -- >>> r1 == r2
 -- True
 --
--- >>> result <- try (realPath (requireExistence EntirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
+-- >>> result <- try (resolvePath (requireExistence EntirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
 -- >>> either (const True) (const False) result
 -- True
 --
@@ -244,27 +244,28 @@ defaultConfig = RealPathOptions
 -- the existing prefix):
 --
 -- >>> tmp <- getTemporaryDirectory
--- >>> r1 <- realPath id (tmp </> "missing-leaf")
+-- >>> r1 <- resolvePath id (tmp </> "missing-leaf")
 -- >>> r2 <- canonicalizePath (tmp </> "missing-leaf")
 -- >>> r1 == r2
 -- True
 --
 -- 'AllParents' rejects a path whose parent does not exist:
 --
--- >>> result <- try (realPath id "/definitely/does/not/exist/child") :: IO (Either SomeException FilePath)
+-- >>> result <- try (resolvePath id "/definitely/does/not/exist/child") :: IO (Either SomeException FilePath)
 -- >>> either (const True) (const False) result
 -- True
 --
 -- 'DontRequire' accepts any path, existent or not:
 --
--- >>> r <- realPath (requireExistence DontRequire) "/definitely/does/not/exist/child"
+-- >>> r <- resolvePath (requireExistence DontRequire) "/definitely/does/not/exist/child"
 -- >>> null r
 -- False
-requireExistence :: ExistenceCheck -> RealPathOptions -> RealPathOptions
+requireExistence :: ExistenceCheck -> ResolvePathOptions -> ResolvePathOptions
 requireExistence check opts = opts { _existenceCheck = check }
 
--- | Choose how @..@ and symbolic links interact. See
--- 'SymlinkResolution' for the three modes and a full explanation.
+-- | Set the resolution mode - how @..@ segments and symbolic links
+-- are handled. See 'ResolutionMode' for the three modes and a full
+-- explanation.
 --
 -- Default (without this modifier): 'UseTargetParents' - @..@ ascends
 -- from the symlink's target (GNU @realpath@'s physical mode, @-P@).
@@ -277,24 +278,24 @@ requireExistence check opts = opts { _existenceCheck = check }
 -- base):
 --
 -- >>> tmp <- getTemporaryDirectory
--- >>> let opts m = resolveSymlinks m . requireExistence DontRequire
--- >>> r1 <- realPath (opts UseOriginalParents) (tmp </> "a" </> ".." </> "b")
--- >>> r2 <- realPath (requireExistence DontRequire) (tmp </> "b")
+-- >>> let opts m = resolutionMode m . requireExistence DontRequire
+-- >>> r1 <- resolvePath (opts UseOriginalParents) (tmp </> "a" </> ".." </> "b")
+-- >>> r2 <- resolvePath (requireExistence DontRequire) (tmp </> "b")
 -- >>> r1 == r2
 -- True
 --
--- 'DontResolve' collapses @..@ and @.@ textually and performs no
+-- 'DontResolveSymlinks' collapses @..@ and @.@ textually and performs no
 -- symlink resolution (so the base is not canonicalized - the result
 -- may differ from 'UseTargetParents' when the base contains symlinks):
 --
--- >>> r <- realPath (opts DontResolve) (tmp </> "a" </> ".." </> "b")
+-- >>> r <- resolvePath (opts DontResolveSymlinks) (tmp </> "a" </> ".." </> "b")
 -- >>> r == tmp </> "b"
 -- True
--- >>> r <- realPath (opts DontResolve) (tmp </> "." </> "x")
+-- >>> r <- resolvePath (opts DontResolveSymlinks) (tmp </> "." </> "x")
 -- >>> r == tmp </> "x"
 -- True
-resolveSymlinks :: SymlinkResolution -> RealPathOptions -> RealPathOptions
-resolveSymlinks mode opts = opts { _symlinkResolution = mode }
+resolutionMode :: ResolutionMode -> ResolvePathOptions -> ResolvePathOptions
+resolutionMode mode opts = opts { _resolutionMode = mode }
 
 -- | Return the canonical path relative to the given base directory.
 -- Corresponds to GNU @realpath --relative-to=DIR@.
@@ -312,9 +313,9 @@ resolveSymlinks mode opts = opts { _symlinkResolution = mode }
 -- A path relative to itself is @\".\"@:
 --
 -- >>> cwd <- getCurrentDirectory
--- >>> realPath (relativeTo cwd) cwd
+-- >>> resolvePath (relativeTo cwd) cwd
 -- "."
-relativeTo :: FilePath -> RealPathOptions -> RealPathOptions
+relativeTo :: FilePath -> ResolvePathOptions -> ResolvePathOptions
 relativeTo base opts = opts { _relativeTo = Just base }
 
 -- | Return a relative path only when the resolved path lies within
@@ -334,16 +335,16 @@ relativeTo base opts = opts { _relativeTo = Just base }
 --
 -- >>> tmp <- getTemporaryDirectory
 -- >>> let child = tmp </> "missing-leaf"
--- >>> realPath (relativeIfWithin tmp) child
+-- >>> resolvePath (relativeIfWithin tmp) child
 -- "missing-leaf"
 --
 -- Outside the boundary, the absolute path is returned unchanged:
 --
--- >>> r1 <- realPath (relativeIfWithin tmp) "/"
+-- >>> r1 <- resolvePath (relativeIfWithin tmp) "/"
 -- >>> r2 <- canonicalizePath "/"
 -- >>> r1 == r2
 -- True
-relativeIfWithin :: FilePath -> RealPathOptions -> RealPathOptions
+relativeIfWithin :: FilePath -> ResolvePathOptions -> ResolvePathOptions
 relativeIfWithin dir opts = opts { _relativeIfWithin = Just dir }
 
 -- Collapse @.@ and @..@ segments lexically. On absolute paths, @..@
@@ -384,14 +385,14 @@ checkExistence check path = case check of
         exists <- doesPathExist path
         when (not exists) $
             ioError
-                (userError ("realPath: path does not exist: " ++ path))
+                (userError ("resolvePath: path does not exist: " ++ path))
     AllParents -> do
         let parent = takeDirectory path
         parentExists <- doesDirectoryExist parent
         when (not parentExists) $
             ioError
                 (userError
-                    ("realPath: parent directory does not exist: "
+                    ("resolvePath: parent directory does not exist: "
                         ++ parent))
 
 -- Is the second path a descendant of (or equal to) the first?
@@ -415,21 +416,21 @@ isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
 -- The default-mode result on an existing directory is absolute:
 --
 -- >>> cwd <- getCurrentDirectory
--- >>> r <- realPath id cwd
+-- >>> r <- resolvePath id cwd
 -- >>> isAbsolute r
 -- True
-realPath
-    :: (RealPathOptions -> RealPathOptions)
+resolvePath
+    :: (ResolvePathOptions -> ResolvePathOptions)
     -> FilePath
     -> IO FilePath
-realPath modifier path = do
+resolvePath modifier path = do
     let opts = modifier defaultConfig
     checkExistence (_existenceCheck opts) path
-    resolved <- case _symlinkResolution opts of
+    resolved <- case _resolutionMode opts of
         UseTargetParents -> canonicalizePath path
         UseOriginalParents ->
             fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
-        DontResolve -> fmap lexicalCollapse (makeAbsolute path)
+        DontResolveSymlinks -> fmap lexicalCollapse (makeAbsolute path)
     -- Relativization and containment logic:
     --   * _relativeTo chooses the target to relativize against.
     --   * _relativeIfWithin gates whether relativization fires: if
