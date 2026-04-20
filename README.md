@@ -19,12 +19,12 @@ following coreutils-inspired as well as some additional commands:
 * Dir modify: `touch`, `ln`, `cp`, `mkdir`, `rm`, `mv`
 * File stat: `test`, `stat`, `touch`
 * File read/write: `cp`
-* Symlink read: `readlink`
-* Processes: `cd`, `pwd`, `sleep`
-* Environment: `home`
+* Symlinks: `readlink`, `realpath`
+* Processes: `cd`, `pwd`, `sleep`, `id`
+* UserDB: `id`, `home`
 * Text Processing: `cut`, `tail`
 * Shell: streaming composition of shell commands
-* Paths: `dirname`, `which`
+* Paths: `dirname`, `which`, `realpath`, `home`
 
 ## Important API Notice
 
