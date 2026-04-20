@@ -13,7 +13,9 @@
 -- Call 'realPath' with @id@ for the default behavior, or compose
 -- modifiers with @(.)@ to customize:
 --
--- * 'pathMustExist' - require the path to exist (GNU @realpath -e@).
+-- * 'requireExistence' - control which path components must exist on
+--   disk: 'AllParents' (default, GNU @-E@), 'EntirePath' (GNU @-e@),
+--   or 'DontRequire' (GNU @-m@).
 -- * 'resolveSymlinks' - control when (and whether) symbolic links
 --   are expanded: 'TargetParents' (default, GNU @-P@), 'OriginalParents'
 --   (GNU @-L@), or 'DontResolve' (GNU @-s@).
@@ -33,19 +35,21 @@
 -- * 'relativeTo' falls back to returning the canonicalized absolute
 --   path unchanged when no common prefix exists with the base
 --   (e.g. different drives on Windows).
--- * 'resolveSymlinks' 'DontResolve' is purely lexical - no filesystem
---   access is made on the path itself (only
---   'System.Directory.getCurrentDirectory' when the path is relative).
---   It does not check whether the path exists unless combined with
---   'pathMustExist'. Because it's lexical, it can give a different
---   result than the default mode when the path traverses through a
---   symlink via @..@: @\/link\/..@ lexically resolves to @\/@, but
---   physically resolves to the parent of the symlink's target.
+-- * 'resolveSymlinks' 'DontResolve' combined with 'requireExistence'
+--   'DontRequire' is the only configuration that performs no
+--   filesystem access on the path components (only
+--   'System.Directory.getCurrentDirectory' when the path is
+--   relative). All other configurations involve some filesystem IO.
+-- * Because 'DontResolve' is lexical, it can give a different result
+--   than the default mode when the path traverses through a symlink
+--   via @..@: @\/link\/..@ lexically resolves to @\/@, but physically
+--   resolves to the parent of the symlink's target.
 
 module Streamly.Coreutils.RealPath
     ( RealPathOptions
+    , ExistenceCheck (..)
     , SymlinkResolution (..)
-    , pathMustExist
+    , requireExistence
     , resolveSymlinks
     , relativeTo
     , realPath
@@ -54,22 +58,22 @@ where
 
 import Control.Monad (when)
 import System.Directory
-    (canonicalizePath, doesPathExist, makeAbsolute)
+    (canonicalizePath, doesDirectoryExist, doesPathExist, makeAbsolute)
 import System.FilePath
-    (makeRelative, splitDirectories, joinPath, isAbsolute)
+    (makeRelative, splitDirectories, joinPath, isAbsolute, takeDirectory)
 -- import System.IO.Error (ioError, userError)
 
 -- $setup
 -- >>> import Control.Exception (try, SomeException)
--- >>> import System.Directory (getCurrentDirectory, getTemporaryDirectory)
+-- >>> import System.Directory (canonicalizePath, getCurrentDirectory, getTemporaryDirectory)
 -- >>> import System.FilePath ((</>), isAbsolute)
 
 -- = Design notes
 --
 -- * Thin wrapper over 'System.Directory.canonicalizePath' for the
---   default 'TargetParents' (physical) mode; 'OriginalParents' and 'DontResolve'
---   use 'makeAbsolute' plus a custom @..@-collapsing walker
---   ('lexicalCollapse').
+--   default 'TargetParents' (physical) mode; 'OriginalParents' and
+--   'DontResolve' use 'makeAbsolute' plus a custom @..@-collapsing
+--   walker ('lexicalCollapse').
 --
 -- * Why a single 'SymlinkResolution' enum instead of two flags.
 --   Symlink expansion is a three-way choice, not two orthogonal
@@ -77,7 +81,9 @@ import System.FilePath
 --   as separate modifiers, which required a precedence rule for
 --   @logical . noSymlinks@ ('noSymlinks' won). Collapsing to one
 --   enum makes the choice exclusive by construction - no precedence
---   rule needed, no way to express contradictory combinations.
+--   rule needed, no way to express contradictory combinations. The
+--   same reasoning applies to 'ExistenceCheck': three mutually
+--   exclusive modes are one enum, not two flags.
 --
 -- * Why a custom walker for the lexical modes. We initially tried
 --   'System.FilePath.normalise', but its documentation is explicit:
@@ -90,7 +96,26 @@ import System.FilePath
 --
 -- * 'canonicalizePath' diverges from GNU @realpath@ on nonexistent
 --   paths: it canonicalizes as much as it can rather than failing.
---   'pathMustExist' restores the GNU default via a pre-check.
+--   The 'ExistenceCheck' pre-check restores GNU-compatible behavior
+--   by rejecting missing paths before we call 'canonicalizePath'.
+--
+-- * Default 'ExistenceCheck' is 'AllParents', matching GNU @-E@.
+--   This is a genuine behavior change from a pre-release iteration
+--   that defaulted to \"accept anything\" - we chose GNU
+--   compatibility as the cost of being slightly less permissive by
+--   default.
+--
+-- * 'AllParents' is implemented via @doesDirectoryExist@ on
+--   'takeDirectory' of the path. If the immediate parent directory
+--   exists then every intermediate ancestor must too (by
+--   transitivity of directory existence), so a single check covers
+--   the GNU @-E@ requirement. Edge cases handled by 'takeDirectory':
+--   bare filenames give @"."@ (always exists), @\/@ gives @\/@
+--   (always exists), so these pass without special-casing.
+--
+-- * 'EntirePath' uses 'doesPathExist' rather than
+--   'doesDirectoryExist' so that files (not just directories) at the
+--   leaf are accepted.
 --
 -- * 'OriginalParents' is implemented as
 --   @canonicalizePath . lexicalCollapse . makeAbsolute@: collapse
@@ -100,9 +125,9 @@ import System.FilePath
 --   symlinks /inside/ a symlink's target are still resolved
 --   physically - @-L@ only governs @..@ in the input path.
 --
--- * 'pathMustExist' composes with any 'SymlinkResolution': existence
---   is checked on the path as given, not on the expanded form,
---   matching GNU @realpath -e -s@ and @realpath -e -L@.
+-- * 'ExistenceCheck' is checked on the path as given, before any
+--   symlink resolution or @..@ collapsing. This matches GNU
+--   @realpath -e -s@ and @realpath -e -L@.
 --
 -- * 'relativeTo' always canonicalizes the base physically (following
 --   symlinks) regardless of the 'SymlinkResolution' mode. Otherwise
@@ -113,6 +138,25 @@ import System.FilePath
 -- * Throws 'IOError' rather than returning 'Maybe'. A canonicalization
 --   failure is an exceptional condition, not a lookup miss - matches
 --   the error-handling guidance in the package design notes.
+
+-- | Which components of a path must exist on disk for 'realPath' to
+-- succeed.
+--
+-- * 'EntirePath': every component - including the leaf - must exist.
+--   Matches GNU @realpath -e@ / @--canonicalize-existing@.
+-- * 'AllParents': every ancestor directory must exist, but the leaf
+--   component may be missing. Matches GNU @realpath -E@ /
+--   @--canonicalize@, the default. This is useful for paths that
+--   name something you're about to create, like the destination of
+--   a copy.
+-- * 'DontRequire': no component needs to exist. The result is
+--   canonicalized as far as the existing prefix allows and the rest
+--   is appended as-is. Matches GNU @realpath -m@ /
+--   @--canonicalize-missing@.
+data ExistenceCheck
+    = EntirePath
+    | AllParents
+    | DontRequire
 
 -- | How @..@ and symbolic links interact when resolving a path.
 -- The three modes differ on where a @..@ segment points when it
@@ -145,7 +189,7 @@ data SymlinkResolution
 -- directly - instead, pass @id@ for the default behavior, or a
 -- modifier (or composition of modifiers with @(.)@) to 'realPath'.
 data RealPathOptions = RealPathOptions
-    { _requireExistence  :: Bool
+    { _existenceCheck    :: ExistenceCheck
     , _symlinkResolution :: SymlinkResolution
     , _relativeBase      :: Maybe FilePath
     }
@@ -155,33 +199,54 @@ data RealPathOptions = RealPathOptions
 -- rather than referring to this directly.
 defaultConfig :: RealPathOptions
 defaultConfig = RealPathOptions
-    { _requireExistence  = False
+    { _existenceCheck    = AllParents
     , _symlinkResolution = TargetParents
     , _relativeBase      = Nothing
     }
 
--- | Require that the path exists. Corresponds to GNU @realpath -e@.
--- Throws 'IOError' if the path does not exist.
+-- | Set which components of a path must exist. See 'ExistenceCheck'
+-- for the three modes and a full explanation.
 --
--- Default (without this modifier): the path does not need to exist;
--- nonexistent trailing components are preserved in the result.
+-- Default (without this modifier): 'AllParents' - every ancestor
+-- directory must exist, but the leaf may be missing (GNU
+-- @realpath -E@).
 --
--- Succeeds on an existing path (result is canonicalized and is
--- idempotent under another 'realPath'):
+-- 'EntirePath' rejects a path whose leaf does not exist:
 --
 -- >>> cwd <- getCurrentDirectory
--- >>> r1 <- realPath pathMustExist cwd
--- >>> r2 <- realPath pathMustExist r1
+-- >>> r1 <- realPath (requireExistence EntirePath) cwd
+-- >>> r2 <- realPath (requireExistence EntirePath) r1
 -- >>> r1 == r2
 -- True
 --
--- Throws on a nonexistent path:
---
--- >>> result <- try (realPath pathMustExist "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
+-- >>> result <- try (realPath (requireExistence EntirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
 -- >>> either (const True) (const False) result
 -- True
-pathMustExist :: RealPathOptions -> RealPathOptions
-pathMustExist opts = opts { _requireExistence = True }
+--
+-- 'AllParents' (the default) accepts a missing leaf as long as the
+-- parent directory exists. Comparing against 'canonicalizePath' of
+-- the same input (which has the same symlink-expansion behavior on
+-- the existing prefix):
+--
+-- >>> tmp <- getTemporaryDirectory
+-- >>> r1 <- realPath id (tmp </> "missing-leaf")
+-- >>> r2 <- canonicalizePath (tmp </> "missing-leaf")
+-- >>> r1 == r2
+-- True
+--
+-- 'AllParents' rejects a path whose parent does not exist:
+--
+-- >>> result <- try (realPath id "/definitely/does/not/exist/child") :: IO (Either SomeException FilePath)
+-- >>> either (const True) (const False) result
+-- True
+--
+-- 'DontRequire' accepts any path, existent or not:
+--
+-- >>> r <- realPath (requireExistence DontRequire) "/definitely/does/not/exist/child"
+-- >>> null r
+-- False
+requireExistence :: ExistenceCheck -> RealPathOptions -> RealPathOptions
+requireExistence check opts = opts { _existenceCheck = check }
 
 -- | Choose how @..@ and symbolic links interact. See
 -- 'SymlinkResolution' for the three modes and a full explanation.
@@ -189,28 +254,28 @@ pathMustExist opts = opts { _requireExistence = True }
 -- Default (without this modifier): 'TargetParents' - @..@ ascends
 -- from the symlink's target (GNU @realpath@'s physical mode, @-P@).
 --
--- 'DontResolve' does not check whether the path exists unless
--- combined with 'pathMustExist'.
---
--- On a path that contains no symlinks, all three modes produce the
--- same result (both examples below go through 'canonicalizePath',
--- which expands any symlinks in the base):
+-- The examples below compose with @'requireExistence' 'DontRequire'@
+-- so that the @..@ component in the test path doesn't trigger a
+-- parent-existence failure. On a path that contains no symlinks, all
+-- three modes produce the same result (both examples below go
+-- through 'canonicalizePath', which expands any symlinks in the
+-- base):
 --
 -- >>> tmp <- getTemporaryDirectory
--- >>> r1 <- realPath (resolveSymlinks OriginalParents) (tmp </> "a" </> ".." </> "b")
--- >>> r2 <- realPath id (tmp </> "b")
+-- >>> let opts m = resolveSymlinks m . requireExistence DontRequire
+-- >>> r1 <- realPath (opts OriginalParents) (tmp </> "a" </> ".." </> "b")
+-- >>> r2 <- realPath (requireExistence DontRequire) (tmp </> "b")
 -- >>> r1 == r2
 -- True
 --
 -- 'DontResolve' collapses @..@ and @.@ textually and performs no
--- filesystem resolution (so the base is not canonicalized - the
--- result may differ from 'TargetParents' when the base contains
--- symlinks):
+-- symlink resolution (so the base is not canonicalized - the result
+-- may differ from 'TargetParents' when the base contains symlinks):
 --
--- >>> r <- realPath (resolveSymlinks DontResolve) (tmp </> "a" </> ".." </> "b")
+-- >>> r <- realPath (opts DontResolve) (tmp </> "a" </> ".." </> "b")
 -- >>> r == tmp </> "b"
 -- True
--- >>> r <- realPath (resolveSymlinks DontResolve) (tmp </> "." </> "x")
+-- >>> r <- realPath (opts DontResolve) (tmp </> "." </> "x")
 -- >>> r == tmp </> "x"
 -- True
 resolveSymlinks :: SymlinkResolution -> RealPathOptions -> RealPathOptions
@@ -266,6 +331,25 @@ lexicalCollapse p =
         Just r -> joinPath (r : collapsed)
         Nothing -> if null collapsed then "." else joinPath collapsed
 
+-- Perform the pre-resolution existence check demanded by the given
+-- 'ExistenceCheck'. Throws 'IOError' on violation.
+checkExistence :: ExistenceCheck -> FilePath -> IO ()
+checkExistence check path = case check of
+    DontRequire -> return ()
+    EntirePath -> do
+        exists <- doesPathExist path
+        when (not exists) $
+            ioError
+                (userError ("realPath: path does not exist: " ++ path))
+    AllParents -> do
+        let parent = takeDirectory path
+        parentExists <- doesDirectoryExist parent
+        when (not parentExists) $
+            ioError
+                (userError
+                    ("realPath: parent directory does not exist: "
+                        ++ parent))
+
 -- | Resolve a path to its canonical form.
 -- Corresponds to the shell @realpath@ command.
 --
@@ -274,7 +358,7 @@ lexicalCollapse p =
 -- documents the default that applies in its absence.
 --
 -- Throws 'IOError' if the path cannot be canonicalized, or - when
--- 'pathMustExist' is set - if the path does not exist.
+-- 'requireExistence' demands - if required components do not exist.
 --
 -- The default-mode result on an existing directory is absolute:
 --
@@ -288,10 +372,7 @@ realPath
     -> IO FilePath
 realPath modifier path = do
     let opts = modifier defaultConfig
-    when (_requireExistence opts) $ do
-        exists <- doesPathExist path
-        when (not exists) $
-            ioError (userError ("realPath: path does not exist: " ++ path))
+    checkExistence (_existenceCheck opts) path
     resolved <- case _symlinkResolution opts of
         TargetParents -> canonicalizePath path
         OriginalParents ->
