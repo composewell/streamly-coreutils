@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 -- |
 -- Module      : Streamly.Coreutils.Id
 -- Copyright   : (c) 2022 Composewell Technologies
@@ -31,6 +32,14 @@ module Streamly.Coreutils.Id
 
     -- * Login name of the current process user
     , loginName
+
+    -- * Lookups by user id
+    , userNameFromId
+    , groupNameFromId
+    , primaryGroupIdFromUserId
+    , primaryGroupNameFromUserId
+    , groupIdsFromUserId
+    , groupNamesFromUserId
 
     {-
     -- * Numeric ids of the current process
@@ -108,16 +117,18 @@ import qualified System.Posix.User as Posix
 --   router's return type and are kept as standalone functions rather than
 --   forced into a polymorphic or awkwardly-typed router.
 --
+
 ------------------------------------------------------------------------------
--- Internal helpers
+-- Lookups by user / group id
 ------------------------------------------------------------------------------
 
--- Look up the user name for a uid, returning Nothing if no entry exists
--- rather than throwing. See "Maybe for DB lookups" in the module header.
---
--- Note: this is a user-DB lookup and logically belongs in a future
--- Streamly.Coreutils.UserDB module. It is kept internal here so the
--- migration is not a breaking change for callers.
+-- These functions are user/group-DB lookups. They logically belong in a
+-- future Streamly.Coreutils.UserDB module and will likely move there; a
+-- re-export from here may be kept for backwards compatibility when that
+-- happens.
+
+-- | Look up the user name for a uid. Returns 'Nothing' if no matching
+-- user-db entry exists.
 userNameFromId :: Int -> IO (Maybe String)
 userNameFromId i = do
     r <- try (Posix.getUserEntryForID (fromIntegral i))
@@ -125,14 +136,88 @@ userNameFromId i = do
         Left (_ :: SomeException) -> Nothing
         Right ue -> Just (Posix.userName ue)
 
--- Look up the group name for a gid, returning Nothing if no entry exists
--- rather than throwing. Same migration note as 'userNameFromId'.
+-- | Look up the group name for a gid. Returns 'Nothing' if no matching
+-- group-db entry exists.
 groupNameFromId :: Int -> IO (Maybe String)
 groupNameFromId i = do
     r <- try (Posix.getGroupEntryForID (fromIntegral i))
     return $ case r of
         Left (_ :: SomeException) -> Nothing
         Right ge -> Just (Posix.groupName ge)
+
+-- Internal: look up the full passwd entry for a uid, returning Nothing on
+-- miss rather than throwing.
+userEntryFromId i = do
+    r <- try (Posix.getUserEntryForID (fromIntegral (i :: Int)))
+    return $ case r of
+        Left (_ :: SomeException) -> Nothing
+        Right ue -> Just ue
+
+-- | Primary group id of the user with the given uid. This is @pw_gid@
+-- from the user's passwd entry. Corresponds to @id -g \<uid\>@.
+--
+-- Returns 'Nothing' if no passwd entry exists for the uid.
+primaryGroupIdFromUserId :: Int -> IO (Maybe Int)
+primaryGroupIdFromUserId i =
+    fmap (fromIntegral . Posix.userGroupID) <$> userEntryFromId i
+
+-- | Primary group name of the user with the given uid. Corresponds to
+-- @id -gn \<uid\>@.
+--
+-- Returns 'Nothing' if no passwd entry exists for the uid, or if the
+-- primary gid has no matching group-db entry.
+primaryGroupNameFromUserId :: Int -> IO (Maybe String)
+primaryGroupNameFromUserId i = do
+    mGid <- primaryGroupIdFromUserId i
+    case mGid of
+        Nothing  -> return Nothing
+        Just gid -> groupNameFromId gid
+
+-- | All group ids the user with the given uid belongs to: the primary
+-- group from the passwd entry, plus every group in the group database
+-- whose member list contains the user name. Deduplicated. Corresponds
+-- to @id -G \<uid\>@.
+--
+-- Returns 'Nothing' if no passwd entry exists for the uid.
+--
+-- Note: group membership lookup walks 'Posix.getAllGroupEntries', which
+-- reflects only @/etc/group@. Groups provided exclusively via NSS
+-- backends (LDAP, SSSD, etc.) will not be seen. A future version could
+-- FFI to @getgrouplist(3)@ for full NSS coverage.
+--
+-- Note: in contrast to 'groupIds' (current process, which cannot fail),
+-- this returns 'Maybe' to distinguish a non-existent user from a user
+-- whose only group is the primary.
+groupIdsFromUserId :: Int -> IO (Maybe [Int])
+groupIdsFromUserId i = do
+    mUe <- userEntryFromId i
+    case mUe of
+        Nothing -> return Nothing
+        Just ue -> do
+            let uname   = Posix.userName ue
+                primary = fromIntegral (Posix.userGroupID ue)
+            allGroups <- Posix.getAllGroupEntries
+            let supp = [ fromIntegral (Posix.groupID g)
+                       | g <- allGroups
+                       , uname `elem` Posix.groupMembers g
+                       ]
+            return $ Just (nub (primary : supp))
+
+-- | Names of all groups the user with the given uid belongs to, in the
+-- same order as 'groupIdsFromUserId'. Corresponds to @id -Gn \<uid\>@.
+--
+-- Returns 'Nothing' if no passwd entry exists for the uid. Entries for
+-- which no group-db record exists are silently dropped.
+--
+-- See 'groupIdsFromUserId' for the note on NSS coverage.
+groupNamesFromUserId :: Int -> IO (Maybe [String])
+groupNamesFromUserId i = do
+    mGids <- groupIdsFromUserId i
+    case mGids of
+        Nothing   -> return Nothing
+        Just gids -> do
+            mNames <- mapM groupNameFromId gids
+            return $ Just [ n | Just n <- mNames ]
 
 ------------------------------------------------------------------------------
 -- Current process: numeric ids
