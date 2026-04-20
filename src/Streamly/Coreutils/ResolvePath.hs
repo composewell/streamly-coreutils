@@ -28,6 +28,28 @@
 -- Each modifier's Haddock describes the default that applies in its
 -- absence.
 --
+-- == GNU @realpath@ equivalences
+--
+-- Each binding below corresponds to a common GNU @realpath@ flag
+-- combination.
+--
+-- Default (GNU @-E -P@, no relative output):
+--
+-- >>> _ = resolvePath id                                   -- realpath
+-- >>> _ = resolvePath (requireExistence EntirePath)        -- realpath -e
+-- >>> _ = resolvePath (requireExistence AllParents)        -- realpath -E
+-- >>> _ = resolvePath (requireExistence DontRequire)       -- realpath -m
+-- >>> _ = resolvePath (resolutionMode UseTargetParents)    -- realpath -P
+-- >>> _ = resolvePath (resolutionMode UseOriginalParents)  -- realpath -L
+-- >>> _ = resolvePath (resolutionMode DontResolveSymlinks) -- realpath -s
+-- >>> _ = resolvePath (relativeTo "/usr/bin")              -- realpath --relative-to=/usr/bin
+-- >>> _ = resolvePath (relativeIfWithin "/usr")            -- realpath --relative-base=/usr
+--
+-- Composed modifiers:
+--
+-- >>> -- realpath --relative-to=/usr/bin --relative-base=/usr
+-- >>> _ = resolvePath (relativeTo "/usr/bin" . relativeIfWithin "/usr")
+--
 -- == Caveats
 --
 -- * On Windows, @subst@ drives are resolved through to their
