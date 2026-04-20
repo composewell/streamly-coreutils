@@ -21,6 +21,9 @@
 --   (GNU @-L@), or 'DontResolve' (GNU @-s@).
 -- * 'relativeTo' - produce a path relative to a given base directory
 --   (GNU @realpath --relative-to=DIR@).
+-- * 'relativeIfWithin' - produce a relative path only if it's under
+--   a given directory, otherwise absolute (GNU
+--   @realpath --relative-base=DIR@).
 --
 -- Each modifier's Haddock describes the default that applies in its
 -- absence.
@@ -52,11 +55,13 @@ module Streamly.Coreutils.RealPath
     , requireExistence
     , resolveSymlinks
     , relativeTo
+    , relativeIfWithin
     , realPath
     )
 where
 
 import Control.Monad (when)
+import Data.List (isPrefixOf)
 import System.Directory
     (canonicalizePath, doesDirectoryExist, doesPathExist, makeAbsolute)
 import System.FilePath
@@ -135,6 +140,14 @@ import System.FilePath
 --   surprising results. If a future use case needs a lexical base,
 --   add a separate modifier rather than overloading this one.
 --
+-- * 'relativeIfWithin' composes with 'relativeTo' as two independent
+--   concerns: 'relativeTo' chooses the target, 'relativeIfWithin'
+--   gates whether relativization fires. When 'relativeIfWithin' is
+--   set alone, its directory serves both roles (matching GNU
+--   @--relative-base=DIR@ without @--relative-to@). Containment is
+--   tested component-wise via 'splitDirectories' so that partial
+--   name prefixes (@\/foo@ vs @\/foobar@) don't register as matches.
+--
 -- * Throws 'IOError' rather than returning 'Maybe'. A canonicalization
 --   failure is an exceptional condition, not a lookup miss - matches
 --   the error-handling guidance in the package design notes.
@@ -191,7 +204,8 @@ data SymlinkResolution
 data RealPathOptions = RealPathOptions
     { _existenceCheck    :: ExistenceCheck
     , _symlinkResolution :: SymlinkResolution
-    , _relativeBase      :: Maybe FilePath
+    , _relativeTo        :: Maybe FilePath
+    , _relativeIfWithin  :: Maybe FilePath
     }
 
 -- Default configuration: the seed value that modifiers are composed
@@ -201,7 +215,8 @@ defaultConfig :: RealPathOptions
 defaultConfig = RealPathOptions
     { _existenceCheck    = AllParents
     , _symlinkResolution = TargetParents
-    , _relativeBase      = Nothing
+    , _relativeTo        = Nothing
+    , _relativeIfWithin  = Nothing
     }
 
 -- | Set which components of a path must exist. See 'ExistenceCheck'
@@ -300,7 +315,36 @@ resolveSymlinks mode opts = opts { _symlinkResolution = mode }
 -- >>> realPath (relativeTo cwd) cwd
 -- "."
 relativeTo :: FilePath -> RealPathOptions -> RealPathOptions
-relativeTo base opts = opts { _relativeBase = Just base }
+relativeTo base opts = opts { _relativeTo = Just base }
+
+-- | Return a relative path only when the resolved path lies within
+-- the given directory; otherwise return an absolute path.
+-- Corresponds to GNU @realpath --relative-base=DIR@.
+--
+-- Default (without this modifier): no containment check is applied -
+-- if 'relativeTo' is set, the result is always relative (possibly
+-- with @..@ segments); if not, the result is absolute.
+--
+-- When composed with 'relativeTo', the 'relativeTo' directory is
+-- used as the relativization target and this modifier's directory
+-- is used as the containment boundary. When 'relativeTo' is not set,
+-- this modifier's directory serves both roles.
+--
+-- Inside the boundary, the path is relativized:
+--
+-- >>> tmp <- getTemporaryDirectory
+-- >>> let child = tmp </> "missing-leaf"
+-- >>> realPath (relativeIfWithin tmp) child
+-- "missing-leaf"
+--
+-- Outside the boundary, the absolute path is returned unchanged:
+--
+-- >>> r1 <- realPath (relativeIfWithin tmp) "/"
+-- >>> r2 <- canonicalizePath "/"
+-- >>> r1 == r2
+-- True
+relativeIfWithin :: FilePath -> RealPathOptions -> RealPathOptions
+relativeIfWithin dir opts = opts { _relativeIfWithin = Just dir }
 
 -- Collapse @.@ and @..@ segments lexically. On absolute paths, @..@
 -- at the root is dropped (you can't ascend above @\/@). On relative
@@ -350,6 +394,14 @@ checkExistence check path = case check of
                     ("realPath: parent directory does not exist: "
                         ++ parent))
 
+-- Is the second path a descendant of (or equal to) the first?
+-- Both arguments should already be canonicalized and absolute.
+-- Uses component-wise comparison via 'splitDirectories' so that
+-- partial-name matches (e.g. @\/foo@ vs @\/foobar@) don't register
+-- as containment.
+isPathUnder :: FilePath -> FilePath -> Bool
+isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
+
 -- | Resolve a path to its canonical form.
 -- Corresponds to the shell @realpath@ command.
 --
@@ -378,8 +430,24 @@ realPath modifier path = do
         OriginalParents ->
             fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
         DontResolve -> fmap lexicalCollapse (makeAbsolute path)
-    case _relativeBase opts of
+    -- Relativization and containment logic:
+    --   * _relativeTo chooses the target to relativize against.
+    --   * _relativeIfWithin gates whether relativization fires: if
+    --     the resolved path is not under the boundary, we return the
+    --     absolute result instead.
+    --   * When _relativeIfWithin is set alone (no _relativeTo), its
+    --     directory serves both roles.
+    let target = case _relativeTo opts of
+            Just t -> Just t
+            Nothing -> _relativeIfWithin opts
+    case target of
         Nothing -> return resolved
-        Just base -> do
-            canonicalBase <- canonicalizePath base
-            return (makeRelative canonicalBase resolved)
+        Just t -> do
+            canonicalTarget <- canonicalizePath t
+            case _relativeIfWithin opts of
+                Nothing -> return (makeRelative canonicalTarget resolved)
+                Just boundary -> do
+                    canonicalBoundary <- canonicalizePath boundary
+                    if isPathUnder canonicalBoundary resolved
+                    then return (makeRelative canonicalTarget resolved)
+                    else return resolved
