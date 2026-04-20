@@ -10,7 +10,48 @@
 --
 -- Provides the read-only functionality of the @id@, @whoami@, and @logname@
 -- coreutils commands, intended for programmatic use.
---
+
+module Streamly.Coreutils.Id
+    (
+    -- * Options
+    -- | Start from 'defaultConfig' (effective user) and compose modifiers.
+      IdOptions
+    , idReal
+    , idEffective
+    , idUser
+    , idGroup
+
+    -- * Owner ids of the current process
+    , idNum
+    , idName
+
+    -- * Groups of the current process user
+    , groupIds
+    , groupNames
+
+    -- * Login name of the current process user
+    , loginName
+
+    {-
+    -- * Numeric ids of the current process
+    , realUserId
+    , effectiveUserId
+    , realGroupId
+    , effectiveGroupId
+
+    -- * Names for the current process
+    , realUserName
+    , effectiveUserName
+    , realGroupName
+    , effectiveGroupName
+    -}
+    )
+where
+
+import Control.Exception (try, SomeException)
+import Data.List (nub)
+import qualified System.Posix.User as Posix
+
 -- = Design notes
 --
 -- * __Scope: current process only.__ This module only reports identity
@@ -67,42 +108,6 @@
 --   router's return type and are kept as standalone functions rather than
 --   forced into a polymorphic or awkwardly-typed router.
 --
-module Streamly.Coreutils.Id
-    (
-    -- * Option-driven router
-    -- | Convenient when the choice of real\/effective and user\/group is
-    -- determined dynamically. Start from 'defaultConfig' (effective user)
-    -- and compose modifiers.
-      IdOptions
-    , defaultConfig
-    , idReal
-    , idEffective
-    , idUser
-    , idGroup
-    , idNum
-    , idName
-
-    -- * Numeric ids of the current process
-    , realUserId
-    , effectiveUserId
-    , realGroupId
-    , effectiveGroupId
-    , groupIds
-
-    -- * Names for the current process
-    , realUserName
-    , effectiveUserName
-    , realGroupName
-    , effectiveGroupName
-    , groupNames
-    , loginName
-    )
-where
-
-import Control.Exception (try, SomeException)
-import Data.List (nub)
-import qualified System.Posix.User as Posix
-
 ------------------------------------------------------------------------------
 -- Internal helpers
 ------------------------------------------------------------------------------
@@ -166,6 +171,7 @@ groupIds = do
 -- Current process: names
 ------------------------------------------------------------------------------
 
+{-
 -- | Real user name of the current process. Corresponds to @id -unr@.
 --
 -- 'Nothing' if there is no user-db entry for the real uid.
@@ -190,6 +196,7 @@ realGroupName = realGroupId >>= groupNameFromId
 -- 'Nothing' if there is no group-db entry for the effective gid.
 effectiveGroupName :: IO (Maybe String)
 effectiveGroupName = effectiveGroupId >>= groupNameFromId
+-}
 
 -- | Names of all groups the current process belongs to, in the same order
 -- as 'groupIds'. Corresponds to @id -Gn@.
@@ -246,6 +253,11 @@ idGroup cfg = cfg { idoGroup = True }
 -- dynamically and you need to explicitly override a prior 'idGroup'.
 idUser :: IdOptions -> IdOptions
 idUser cfg = cfg { idoGroup = False }
+
+-- TODO: After proper inlining this should get simplified such that there is
+-- not dynamic dispatch for choosing the options. So we can keep this as a
+-- simplified single point function instead of separate functions. Check GHC
+-- core if it gets simplified.
 
 -- | Return a numeric id (uid or gid, real or effective) of the current
 -- process, based on the given options.
