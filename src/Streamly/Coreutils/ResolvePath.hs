@@ -6,27 +6,34 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Resolve a path to its canonical form: make it absolute, normalize
--- @.@ and @..@ segments, and follow every symbolic link along the way.
--- Corresponds to the shell @realpath@ command.
+-- Resolve a filesystem path, similar to the GNU @realpath@ utility.
 --
--- Call 'resolvePath' with @id@ for the default behavior, or compose
--- modifiers with @(.)@ to customize:
+-- This function performs the following general functions:
 --
--- * 'requireExistence' - control which path components must exist on
---   disk: 'AllParents' (default, GNU @-E@), 'EntirePath' (GNU @-e@),
---   or 'DontRequire' (GNU @-m@).
--- * 'resolutionMode' - control when (and whether) symbolic links
---   are expanded: 'UseTargetParents' (default, GNU @-P@), 'UseOriginalParents'
---   (GNU @-L@), or 'DontResolveSymlinks' (GNU @-s@).
--- * 'relativeTo' - produce a path relative to a given base directory
---   (GNU @realpath --relative-to=DIR@).
--- * 'relativeIfWithin' - produce a relative path only if it's under
---   a given directory, otherwise absolute (GNU
---   @realpath --relative-base=DIR@).
+--   1. Prefixes current directory to a relative path to convert it to an
+--      absolute path.
+--   2. Normalizes @..@ (parent directory) components by removing the preceding
+--      path segment per occurrence.
+--   3. Resolves symbolic links by replacing them with their target paths.
 --
--- Each modifier's Haddock describes the default that applies in its
--- absence.
+-- Use 'resolvePath' with @id@ as option modifier for default options. Custom
+-- behavior can be achieved by composing option modifiers using @(.)@.
+--
+-- * Resolution order:
+-- The order in which @..@ components and symbolic links are resolved can
+-- affect the final result. This is controlled by the 'resolutionMode'
+-- modifier and is the most important aspect to understand when using
+-- 'resolvePath'.
+-- * Existence requirements:
+-- By default, all the parents in the input path must exist. Use the
+-- 'existenceCheck' modifier to enforce whether the entire path or none of it
+-- must exist on disk.
+-- * Output form:
+-- The resulting path is absolute by default. It can be made relative using
+-- the 'relativeTo' or 'relativeWithin' modifiers.
+-- * Defaults:
+-- Each modifier documents the default behavior that applies when it is not
+-- explicitly provided.
 --
 -- == GNU @realpath@ equivalences
 --
@@ -36,19 +43,19 @@
 -- Default (GNU @-E -P@, no relative output):
 --
 -- >>> _ = resolvePath id                                   -- realpath
--- >>> _ = resolvePath (requireExistence EntirePath)        -- realpath -e
--- >>> _ = resolvePath (requireExistence AllParents)        -- realpath -E
--- >>> _ = resolvePath (requireExistence DontRequire)       -- realpath -m
--- >>> _ = resolvePath (resolutionMode UseTargetParents)    -- realpath -P
--- >>> _ = resolvePath (resolutionMode UseOriginalParents)  -- realpath -L
--- >>> _ = resolvePath (resolutionMode DontResolveSymlinks) -- realpath -s
+-- >>> _ = resolvePath (existenceCheck RequirePath)         -- realpath -e
+-- >>> _ = resolvePath (existenceCheck RequireParents)      -- realpath -E
+-- >>> _ = resolvePath (existenceCheck RequireNone)         -- realpath -m
+-- >>> _ = resolvePath (resolutionMode ResolveThenParent)   -- realpath -P
+-- >>> _ = resolvePath (resolutionMode ParentThenResolve)   -- realpath -L
+-- >>> _ = resolvePath (resolutionMode NoSymlinkResolution) -- realpath -s
 -- >>> _ = resolvePath (relativeTo "/usr/bin")              -- realpath --relative-to=/usr/bin
--- >>> _ = resolvePath (relativeIfWithin "/usr")            -- realpath --relative-base=/usr
+-- >>> _ = resolvePath (relativeWithin "/usr")              -- realpath --relative-base=/usr
 --
 -- Composed modifiers:
 --
 -- >>> -- realpath --relative-to=/usr/bin --relative-base=/usr
--- >>> _ = resolvePath (relativeTo "/usr/bin" . relativeIfWithin "/usr")
+-- >>> _ = resolvePath (relativeTo "/usr/bin" . relativeWithin "/usr")
 --
 -- == Caveats
 --
@@ -60,12 +67,12 @@
 -- * 'relativeTo' falls back to returning the canonicalized absolute
 --   path unchanged when no common prefix exists with the base
 --   (e.g. different drives on Windows).
--- * 'resolutionMode' 'DontResolveSymlinks' combined with 'requireExistence'
---   'DontRequire' is the only configuration that performs no
+-- * 'resolutionMode' 'NoSymlinkResolution' combined with 'existenceCheck'
+--   'RequireNone' is the only configuration that performs no
 --   filesystem access on the path components (only
 --   'System.Directory.getCurrentDirectory' when the path is
 --   relative). All other configurations involve some filesystem IO.
--- * Because 'DontResolveSymlinks' is lexical, it can give a different result
+-- * Because 'NoSymlinkResolution' is lexical, it can give a different result
 --   than the default mode when the path traverses through a symlink
 --   via @..@: @\/link\/..@ lexically resolves to @\/@, but physically
 --   resolves to the parent of the symlink's target.
@@ -74,10 +81,10 @@ module Streamly.Coreutils.ResolvePath
     ( ResolvePathOptions
     , ExistenceCheck (..)
     , ResolutionMode (..)
-    , requireExistence
+    , existenceCheck
     , resolutionMode
     , relativeTo
-    , relativeIfWithin
+    , relativeWithin
     , resolvePath
     )
 where
@@ -98,8 +105,8 @@ import System.FilePath
 -- = Design notes
 --
 -- * Thin wrapper over 'System.Directory.canonicalizePath' for the
---   default 'UseTargetParents' (physical) mode; 'UseOriginalParents' and
---   'DontResolveSymlinks' use 'makeAbsolute' plus a custom @..@-collapsing
+--   default 'ResolveThenParent' (physical) mode; 'ParentThenResolve' and
+--   'NoSymlinkResolution' use 'makeAbsolute' plus a custom @..@-collapsing
 --   walker ('lexicalCollapse').
 --
 -- * Why a single 'ResolutionMode' enum instead of two flags.
@@ -126,13 +133,13 @@ import System.FilePath
 --   The 'ExistenceCheck' pre-check restores GNU-compatible behavior
 --   by rejecting missing paths before we call 'canonicalizePath'.
 --
--- * Default 'ExistenceCheck' is 'AllParents', matching GNU @-E@.
+-- * Default 'ExistenceCheck' is 'RequireParents', matching GNU @-E@.
 --   This is a genuine behavior change from a pre-release iteration
 --   that defaulted to \"accept anything\" - we chose GNU
 --   compatibility as the cost of being slightly less permissive by
 --   default.
 --
--- * 'AllParents' is implemented via @doesDirectoryExist@ on
+-- * 'RequireParents' is implemented via @doesDirectoryExist@ on
 --   'takeDirectory' of the path. If the immediate parent directory
 --   exists then every intermediate ancestor must too (by
 --   transitivity of directory existence), so a single check covers
@@ -140,11 +147,11 @@ import System.FilePath
 --   bare filenames give @"."@ (always exists), @\/@ gives @\/@
 --   (always exists), so these pass without special-casing.
 --
--- * 'EntirePath' uses 'doesPathExist' rather than
+-- * 'RequirePath' uses 'doesPathExist' rather than
 --   'doesDirectoryExist' so that files (not just directories) at the
 --   leaf are accepted.
 --
--- * 'UseOriginalParents' is implemented as
+-- * 'ParentThenResolve' is implemented as
 --   @canonicalizePath . lexicalCollapse . makeAbsolute@: collapse
 --   @..@ as text first, then let 'canonicalizePath' expand whatever
 --   symlinks remain in the surviving components. This matches GNU
@@ -162,9 +169,9 @@ import System.FilePath
 --   surprising results. If a future use case needs a lexical base,
 --   add a separate modifier rather than overloading this one.
 --
--- * 'relativeIfWithin' composes with 'relativeTo' as two independent
---   concerns: 'relativeTo' chooses the target, 'relativeIfWithin'
---   gates whether relativization fires. When 'relativeIfWithin' is
+-- * 'relativeWithin' composes with 'relativeTo' as two independent
+--   concerns: 'relativeTo' chooses the target, 'relativeWithin'
+--   gates whether relativization fires. When 'relativeWithin' is
 --   set alone, its directory serves both roles (matching GNU
 --   @--relative-base=DIR@ without @--relative-to@). Containment is
 --   tested component-wise via 'splitDirectories' so that partial
@@ -174,60 +181,67 @@ import System.FilePath
 --   failure is an exceptional condition, not a lookup miss - matches
 --   the error-handling guidance in the package design notes.
 
--- | Which components of a path must exist on disk for 'resolvePath' to
--- succeed.
+-- | Specifies which parts of the input path are required to exist on disk
+-- for 'resolvePath' to succeed.
 --
--- * 'EntirePath': every component - including the leaf - must exist.
---   Matches GNU @realpath -e@ / @--canonicalize-existing@.
--- * 'AllParents': every ancestor directory must exist, but the leaf
---   component may be missing. Matches GNU @realpath -E@ /
---   @--canonicalize@, the default. This is useful for paths that
---   name something you're about to create, like the destination of
---   a copy.
--- * 'DontRequire': no component needs to exist. The result is
---   canonicalized as far as the existing prefix allows and the rest
---   is appended as-is. Matches GNU @realpath -m@ /
---   @--canonicalize-missing@.
+-- * 'RequirePath':
+--     Every component of the path, including the final (leaf) component,
+--     must exist.
+--
+-- * 'RequireParents':
+--     All ancestor directories must exist, but the final component may be
+--     missing. This is useful for paths that refer to something that does
+--     not yet exist (e.g. a destination file).
+--
+-- * 'RequireNone':
+--     No part of the path is required to exist. The path is resolved as far
+--     as possible using the longest existing prefix; any remaining
+--     components are appended unchanged.
+--
+-- All three modes behave identically for paths that fully exist. They
+-- differ only when some components are missing.
 data ExistenceCheck
-    = EntirePath
-    | AllParents
-    | DontRequire
+    = RequirePath
+    | RequireParents
+    | RequireNone
 
--- | How @..@ and symbolic links interact when resolving a path.
--- The three modes differ on where a @..@ segment points when it
--- follows a symlink, and on whether symlinks are expanded at all.
+-- | Specifies how symbolic links and @..@ (parent directory) components are
+-- handled during path resolution.
 --
--- * 'UseTargetParents': @..@ means the parent of the symlink's
---   /target/. Symlinks are expanded first, so @..@ ascends from the
---   resolved location. Matches GNU @realpath@'s default physical
---   mode (@-P@).
--- * 'UseOriginalParents': @..@ means the parent in the /original/ path
---   you supplied - @..@ textually cancels the preceding segment,
---   regardless of whether that segment was a symlink. Remaining
---   symlinks in the surviving path are still expanded. Matches GNU
---   @realpath -L@ / @--logical@.
--- * 'DontResolveSymlinks': no symlinks are expanded anywhere in the path.
---   @..@ is lexical (same as 'UseOriginalParents'), and symlinks in
---   other components are preserved as-is. Matches GNU @realpath -s@
---   / @--no-symlinks@.
+-- The key distinction is whether symbolic links are resolved at all, and if
+-- they are, whether @..@ is interpreted before or after symlink expansion.
 --
--- The three modes produce the same result on paths that contain no
--- symlinks. 'UseTargetParents' and 'UseOriginalParents' diverge when a
--- symlink is followed by @..@; 'DontResolveSymlinks' diverges from both
--- whenever the path contains any symlink.
+-- * 'NoSymlinkResolution':
+--     Symbolic links are not resolved. Each @..@ removes the preceding path
+--     segment from the original, unresolved path.
+--
+-- * 'ResolveThenParent':
+--     Symbolic links are resolved as they are encountered. A subsequent @..@
+--     refers to the parent of the /resolved target/, i.e. symlinks are expanded
+--     before processing @..@.
+--
+-- * 'ParentThenResolve':
+--     Each @..@ removes the preceding segment from the original input path,
+--     regardless of whether that segment is a symlink. Any remaining symlinks
+--     in the resulting path are then resolved.
+--
+-- These modes behave identically for paths that contain no symbolic links.
+-- The difference between 'ResolveThenParent' and 'ParentThenResolve' appears
+-- when a symlink is followed by @..@. 'NoSymlinkResolution' differs whenever
+-- the path contains any symlink.
 data ResolutionMode
-    = UseTargetParents
-    | UseOriginalParents
-    | DontResolveSymlinks
+    = NoSymlinkResolution
+    | ResolveThenParent
+    | ParentThenResolve
 
 -- | Options for 'resolvePath'. Users don't construct 'ResolvePathOptions'
 -- directly - instead, pass @id@ for the default behavior, or a
 -- modifier (or composition of modifiers with @(.)@) to 'resolvePath'.
 data ResolvePathOptions = ResolvePathOptions
-    { _existenceCheck    :: ExistenceCheck
+    { _existenceCheck :: ExistenceCheck
     , _resolutionMode :: ResolutionMode
-    , _relativeTo        :: Maybe FilePath
-    , _relativeIfWithin  :: Maybe FilePath
+    , _relativeTo :: Maybe FilePath
+    , _relativeWithin :: Maybe FilePath
     }
 
 -- Default configuration: the seed value that modifiers are composed
@@ -235,35 +249,34 @@ data ResolvePathOptions = ResolvePathOptions
 -- rather than referring to this directly.
 defaultConfig :: ResolvePathOptions
 defaultConfig = ResolvePathOptions
-    { _existenceCheck    = AllParents
-    , _resolutionMode = UseTargetParents
-    , _relativeTo        = Nothing
-    , _relativeIfWithin  = Nothing
+    { _existenceCheck = RequireParents
+    , _resolutionMode = ResolveThenParent
+    , _relativeTo = Nothing
+    , _relativeWithin = Nothing
     }
 
--- | Set which components of a path must exist. See 'ExistenceCheck'
--- for the three modes and a full explanation.
+-- | Set the path existence requirement for 'resolvePath'.
+-- See 'ExistenceCheck' for a detailed description of each mode.
 --
--- Default (without this modifier): 'AllParents' - every ancestor
--- directory must exist, but the leaf may be missing (GNU
--- @realpath -E@).
+-- Default (when not specified): 'RequireParents' - all ancestor
+-- directories must exist, but the final component may be missing.
 --
--- 'EntirePath' rejects a path whose leaf does not exist:
+-- === Examples
+--
+-- 'RequirePath' rejects a path whose final component does not exist:
 --
 -- >>> cwd <- getCurrentDirectory
--- >>> r1 <- resolvePath (requireExistence EntirePath) cwd
--- >>> r2 <- resolvePath (requireExistence EntirePath) r1
+-- >>> r1 <- resolvePath (existenceCheck RequirePath) cwd
+-- >>> r2 <- resolvePath (existenceCheck RequirePath) r1
 -- >>> r1 == r2
 -- True
 --
--- >>> result <- try (resolvePath (requireExistence EntirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
+-- >>> result <- try (resolvePath (existenceCheck RequirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
 -- >>> either (const True) (const False) result
 -- True
 --
--- 'AllParents' (the default) accepts a missing leaf as long as the
--- parent directory exists. Comparing against 'canonicalizePath' of
--- the same input (which has the same symlink-expansion behavior on
--- the existing prefix):
+-- 'RequireParents' (the default) allows a missing final component as long
+-- as its parent directory exists.
 --
 -- >>> tmp <- getTemporaryDirectory
 -- >>> r1 <- resolvePath id (tmp </> "missing-leaf")
@@ -271,28 +284,28 @@ defaultConfig = ResolvePathOptions
 -- >>> r1 == r2
 -- True
 --
--- 'AllParents' rejects a path whose parent does not exist:
+-- 'RequireParents' rejects a path whose parent directory does not exist:
 --
 -- >>> result <- try (resolvePath id "/definitely/does/not/exist/child") :: IO (Either SomeException FilePath)
 -- >>> either (const True) (const False) result
 -- True
 --
--- 'DontRequire' accepts any path, existent or not:
+-- 'RequireNone' accepts any path, whether it exists or not:
 --
--- >>> r <- resolvePath (requireExistence DontRequire) "/definitely/does/not/exist/child"
+-- >>> r <- resolvePath (existenceCheck RequireNone) "/definitely/does/not/exist/child"
 -- >>> null r
 -- False
-requireExistence :: ExistenceCheck -> ResolvePathOptions -> ResolvePathOptions
-requireExistence check opts = opts { _existenceCheck = check }
+existenceCheck :: ExistenceCheck -> ResolvePathOptions -> ResolvePathOptions
+existenceCheck check opts = opts { _existenceCheck = check }
 
 -- | Set the resolution mode - how @..@ segments and symbolic links
 -- are handled. See 'ResolutionMode' for the three modes and a full
 -- explanation.
 --
--- Default (without this modifier): 'UseTargetParents' - @..@ ascends
+-- Default (without this modifier): 'ResolveThenParent' - @..@ ascends
 -- from the symlink's target (GNU @realpath@'s physical mode, @-P@).
 --
--- The examples below compose with @'requireExistence' 'DontRequire'@
+-- The examples below compose with @'existenceCheck' 'RequireNone'@
 -- so that the @..@ component in the test path doesn't trigger a
 -- parent-existence failure. On a path that contains no symlinks, all
 -- three modes produce the same result (both examples below go
@@ -300,74 +313,89 @@ requireExistence check opts = opts { _existenceCheck = check }
 -- base):
 --
 -- >>> tmp <- getTemporaryDirectory
--- >>> let opts m = resolutionMode m . requireExistence DontRequire
--- >>> r1 <- resolvePath (opts UseOriginalParents) (tmp </> "a" </> ".." </> "b")
--- >>> r2 <- resolvePath (requireExistence DontRequire) (tmp </> "b")
+-- >>> let opts m = resolutionMode m . existenceCheck RequireNone
+-- >>> r1 <- resolvePath (opts ParentThenResolve) (tmp </> "a" </> ".." </> "b")
+-- >>> r2 <- resolvePath (existenceCheck RequireNone) (tmp </> "b")
 -- >>> r1 == r2
 -- True
 --
--- 'DontResolveSymlinks' collapses @..@ and @.@ textually and performs no
+-- 'NoSymlinkResolution' collapses @..@ and @.@ textually and performs no
 -- symlink resolution (so the base is not canonicalized - the result
--- may differ from 'UseTargetParents' when the base contains symlinks):
+-- may differ from 'ResolveThenParent' when the base contains symlinks):
 --
--- >>> r <- resolvePath (opts DontResolveSymlinks) (tmp </> "a" </> ".." </> "b")
+-- >>> r <- resolvePath (opts NoSymlinkResolution) (tmp </> "a" </> ".." </> "b")
 -- >>> r == tmp </> "b"
 -- True
--- >>> r <- resolvePath (opts DontResolveSymlinks) (tmp </> "." </> "x")
+-- >>> r <- resolvePath (opts NoSymlinkResolution) (tmp </> "." </> "x")
 -- >>> r == tmp </> "x"
 -- True
 resolutionMode :: ResolutionMode -> ResolvePathOptions -> ResolvePathOptions
 resolutionMode mode opts = opts { _resolutionMode = mode }
 
 -- | Return the canonical path relative to the given base directory.
--- Corresponds to GNU @realpath --relative-to=DIR@.
 --
 -- Default (without this modifier): an absolute path is returned.
 --
 -- The base is canonicalized (physically, following symlinks) before
--- the relative path is computed, so @..@ segments and symlinks in the
+-- the relative path is computed, so that @..@ segments and symlinks in the
 -- base are handled correctly.
 --
--- If the canonical path and base share no common prefix (e.g. they
--- live on different Windows drives), the canonical absolute path is
+-- If the canonical path and base do not share the same root (for
+-- example, on different Windows drives), the absolute path is
 -- returned unchanged.
 --
 -- A path relative to itself is @\".\"@:
 --
--- >>> cwd <- getCurrentDirectory
--- >>> resolvePath (relativeTo cwd) cwd
+-- >>> resolvePath (relativeTo "/") "/"
 -- "."
 relativeTo :: FilePath -> ResolvePathOptions -> ResolvePathOptions
 relativeTo base opts = opts { _relativeTo = Just base }
 
--- | Return a relative path only when the resolved path lies within
--- the given directory; otherwise return an absolute path.
--- Corresponds to GNU @realpath --relative-base=DIR@.
+-- XXX realpath performs existence check for --relative-to path as well:
+-- $ realpath --relative-base /usr /usr/bin --relative-to /usr/bin/x/y
+-- realpath: /usr/bin/x/y: No such file or directory
 --
--- Default (without this modifier): no containment check is applied -
--- if 'relativeTo' is set, the result is always relative (possibly
--- with @..@ segments); if not, the result is absolute.
+-- Add these tests:
+-- $ realpath --relative-base /usr /usr/bin/tr --relative-to /usr/bin/ls
+-- ../tr
+-- $ realpath --relative-base /usr /usr/bin --relative-to /etc
+-- /usr/bin
+
+-- | Relativize the resolved path only when both the result and the
+-- relativization base lie within the given directory.
 --
--- When composed with 'relativeTo', the 'relativeTo' directory is
--- used as the relativization target and this modifier's directory
--- is used as the containment boundary. When 'relativeTo' is not set,
--- this modifier's directory serves both roles.
+-- This modifier introduces a /containment boundary/. Relativization is
+-- performed only if both:
+--
+--   * the resolved path, and
+--   * the base used for relativization
+--
+-- are within the specified directory. Otherwise, the absolute path is
+-- returned unchanged.
+--
+-- When 'relativeTo' is not specified, the given directory serves as
+-- both the relativization base and the containment boundary.
+-- When 'relativeTo' is specified, that determines the base, while this
+-- modifier only controls the boundary.
+--
+-- Without this modifier, if 'relativeTo' is set, the result is made
+-- relative whenever possible (even if it requires @..@ segments that
+-- escape the base directory).
+--
+-- === Examples
 --
 -- Inside the boundary, the path is relativized:
 --
--- >>> tmp <- getTemporaryDirectory
--- >>> let child = tmp </> "missing-leaf"
--- >>> resolvePath (relativeIfWithin tmp) child
+-- >>> resolvePath (relativeWithin "/") "/missing-leaf"
 -- "missing-leaf"
 --
 -- Outside the boundary, the absolute path is returned unchanged:
 --
--- >>> r1 <- resolvePath (relativeIfWithin tmp) "/"
--- >>> r2 <- canonicalizePath "/"
--- >>> r1 == r2
--- True
-relativeIfWithin :: FilePath -> ResolvePathOptions -> ResolvePathOptions
-relativeIfWithin dir opts = opts { _relativeIfWithin = Just dir }
+-- >>> tmp <- getTemporaryDirectory
+-- >>> resolvePath (relativeWithin tmp) "/missing-leaf"
+-- "/missing-leaf"
+relativeWithin :: FilePath -> ResolvePathOptions -> ResolvePathOptions
+relativeWithin dir opts = opts { _relativeWithin = Just dir }
 
 -- Collapse @.@ and @..@ segments lexically. On absolute paths, @..@
 -- at the root is dropped (you can't ascend above @\/@). On relative
@@ -402,13 +430,13 @@ lexicalCollapse p =
 -- 'ExistenceCheck'. Throws 'IOError' on violation.
 checkExistence :: ExistenceCheck -> FilePath -> IO ()
 checkExistence check path = case check of
-    DontRequire -> return ()
-    EntirePath -> do
+    RequireNone -> return ()
+    RequirePath -> do
         exists <- doesPathExist path
         when (not exists) $
             ioError
                 (userError ("resolvePath: path does not exist: " ++ path))
-    AllParents -> do
+    RequireParents -> do
         let parent = takeDirectory path
         parentExists <- doesDirectoryExist parent
         when (not parentExists) $
@@ -425,20 +453,21 @@ checkExistence check path = case check of
 isPathUnder :: FilePath -> FilePath -> Bool
 isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
 
--- | Resolve a path to its canonical form.
--- Corresponds to the shell @realpath@ command.
+-- | Resolve a filesystem path to its canonical form, similar to the
+-- shell @realpath@ command.
 --
--- Pass @id@ for default behavior, or a modifier (or modifier chain
--- composed with @(.)@) to customize. Each modifier's Haddock
--- documents the default that applies in its absence.
+-- By default, pass @id@ to use standard behavior. Custom behavior can be
+-- enabled by supplying a modifier, or by composing multiple modifiers
+-- with @(.)@. Each modifier documents the default that applies when it
+-- is not explicitly provided.
 --
--- Throws 'IOError' if the path cannot be canonicalized, or - when
--- 'requireExistence' demands - if required components do not exist.
+-- Throws 'IOError' if the path cannot be resolved, or when
+-- 'existenceCheck' is enabled and required components do not exist.
 --
--- The default-mode result on an existing directory is absolute:
+-- In the default mode, the result for an existing directory is always
+-- an absolute path:
 --
--- >>> cwd <- getCurrentDirectory
--- >>> r <- resolvePath id cwd
+-- >>> r <- resolvePath id "."
 -- >>> isAbsolute r
 -- True
 resolvePath
@@ -449,25 +478,25 @@ resolvePath modifier path = do
     let opts = modifier defaultConfig
     checkExistence (_existenceCheck opts) path
     resolved <- case _resolutionMode opts of
-        UseTargetParents -> canonicalizePath path
-        UseOriginalParents ->
+        ResolveThenParent -> canonicalizePath path
+        ParentThenResolve ->
             fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
-        DontResolveSymlinks -> fmap lexicalCollapse (makeAbsolute path)
+        NoSymlinkResolution -> fmap lexicalCollapse (makeAbsolute path)
     -- Relativization and containment logic:
     --   * _relativeTo chooses the target to relativize against.
-    --   * _relativeIfWithin gates whether relativization fires: if
+    --   * _relativeWithin gates whether relativization fires: if
     --     the resolved path is not under the boundary, we return the
     --     absolute result instead.
-    --   * When _relativeIfWithin is set alone (no _relativeTo), its
+    --   * When _relativeWithin is set alone (no _relativeTo), its
     --     directory serves both roles.
     let target = case _relativeTo opts of
             Just t -> Just t
-            Nothing -> _relativeIfWithin opts
+            Nothing -> _relativeWithin opts
     case target of
         Nothing -> return resolved
         Just t -> do
             canonicalTarget <- canonicalizePath t
-            case _relativeIfWithin opts of
+            case _relativeWithin opts of
                 Nothing -> return (makeRelative canonicalTarget resolved)
                 Just boundary -> do
                     canonicalBoundary <- canonicalizePath boundary

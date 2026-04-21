@@ -98,8 +98,9 @@ functionality:
 * readdir: FileSystem.DirIO module
 * Dir traversal: ls, find, cp -r, rm -r
 * Dir modify: mkdir, rmdir, rm, mv, cp
-* stat: test, testl
-* symlink read: readlink
-* path: makeAbsolute, canonicalize
-* environment: pwd, cd, findInPATH, home, xdg, temp
-* access control: acls, getxattr
+* file stat: test, testl
+* file access control: acls, getxattr
+* symlinks: readlink, resolvePath
+* path: makeAbsolute, canonicalize, resolvePath
+* Process/OS environment: pwd, cd, id, findInPATH, home, xdg, temp
+* UserDB: id, home
