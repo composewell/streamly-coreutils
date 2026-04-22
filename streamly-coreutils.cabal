@@ -119,6 +119,7 @@ library
   hs-source-dirs:      src
   exposed-modules:
       Streamly.Coreutils
+    , Streamly.Coreutils.Basename
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.Directory
