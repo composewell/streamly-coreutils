@@ -303,6 +303,8 @@ mkFileState tag fp st = do
 -- the "or" operation. Also, the generic foldMap or mconcat provided by Monoids
 -- are of limited use in this case.
 
+-- TODO: should we call this TestPredicate or just Predicate?
+
 -- Predicates receive a 'FileState' rather than a raw 'FileStatus'.  This
 -- gives them access to the file path and lets them share the lazily-cached
 -- 'FileStatus' without issuing redundant @stat@ calls.
@@ -587,6 +589,21 @@ isSocket = withStatus Files.isSocket
 ---------------
 -- Permissions
 ---------------
+
+-- TODO:
+--
+-- Unify with the mode building in chmod and any other places.
+--
+-- "hasMode mode" would check if mode is a subset of the file mode. "eqMode
+-- mode" would check equality. These are similar to the chmod "set" and "add"
+-- functionality. We can also reuse the same quasiquoters in both. For subset
+-- checking we can use "<" symbol in the quasiquoter.
+
+-- TODO: on Windows there is unix-compat does not distinguish between owner,
+-- group and other, all permissions are identical. Should we instead use no
+-- permissions for group/other -- that is more intuitive? Also, if one has to
+-- use the same permissions across Posix/Windows then owner-only permissions
+-- make sense, e.g. using rwx for all does not make sense.
 
 -- | True if the file has specified permission mode.
 --
