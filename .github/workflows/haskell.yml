@@ -109,7 +109,7 @@ jobs:
       # If you have not committed packcheck.sh in your repo at PACKCHECK
       # then it is automatically pulled from this URL.
       PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
-      PACKCHECK_GITHUB_COMMIT: "fa6064227164de8d47dd65bdcb43b52844ba0e29"
+      PACKCHECK_GITHUB_COMMIT: "74a50fd9bcb06907b822e910938dae795d0f23cc"
 
     # ubuntu seems to have better support than debian on CI systems
     runs-on: ${{ matrix.runner }}
