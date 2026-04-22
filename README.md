@@ -1,14 +1,26 @@
-# Streamly Coreutils
+# Streamly Coreutils (Fast, Concurrent and Powerful)
 
-This repository provides Haskell functions that reimplement common
-GNU `coreutils` commands, utilizing the `streamly` library for
-efficient, streaming data processing where applicable. The goal is to
-offer a functional and highly performant alternative to traditional
+This repository provides Haskell functions that reimplement common GNU
+`coreutils` commands, utilizing the `streamly` library for efficient,
+and concurrent streaming data processing where applicable. The goal is
+to offer a highly composable and performant alternative to traditional
 shell commands within Haskell applications, enabling complex data
-transformations, system programming and scripting using a pure functional
-paradigm. Where applicable, the implementation is designed to be
-highly concurrent, for example, the `ls` equivalent can list directory
+transformations, system programming and scripting using a pure
+functional paradigm. Where applicable, the implementation is designed
+to be concurrent, for example, the `find` equivalent can list directory
 contents concurrently for improved performance.
+
+# Fast, Concurrent and Powerful
+
+How is it fast? For example, the serial implementation of `find` is
+faster than the fastest yet find implementation which is rust `fd`. How
+is it concurrent? Concurrency comes for free using the Haskell streamly
+library, so wherever possible the implementation is concurrent and if
+you need concurrency somewhere it can be made concurrent trivially. How
+is it powerful? For example, the `find` implementation has many choices
+like bfs, dfs, interleaved, concurrent unordered, concurrent ordered,
+concurrent interleaved, all these are trivial to implement thanks to
+Haskell streamly.
 
 ## Implemented Commands
 
