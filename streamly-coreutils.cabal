@@ -154,6 +154,18 @@ library
 
   default-language:    Haskell2010
 
+executable hfd
+  import: compile-options, default-extensions
+  main-is: hfd.hs
+  hs-source-dirs: app
+  build-depends:
+      base
+    , optparse-applicative >= 0.17 && < 0.19
+    , streamly
+    , streamly-core
+    , streamly-coreutils
+  default-language: Haskell2010
+
 -------------------------------------------------------------------------------
 -- Benchmarks
 -------------------------------------------------------------------------------
