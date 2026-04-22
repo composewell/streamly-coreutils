@@ -22,7 +22,7 @@
 --     let path = fromJust $ Path.fromString "."
 -- #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 --     Stream.fold (Handle.writeChunks stdout)
---         $ findByteChunked path
+--         $ findByteChunked id path
 -- #else
 --     Stream.fold (Handle.writeWith 32000 stdout)
 --         $ reEncode
@@ -71,6 +71,14 @@ module Streamly.Coreutils.Find
     (
       find
     , findChunked
+    , serialDfs
+    , serialBfs
+    , serialBfsRev
+    , serialAppend
+    , serialInterleaved
+    , parallelUnordered
+    , parallelInterleaved
+    , parallelOrdered
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
     , findByteChunked
 #endif
@@ -94,7 +102,11 @@ import qualified Streamly.Data.Array as Array
 import qualified Streamly.FileSystem.DirIO as DirIO
 import qualified Streamly.Internal.Data.Array as GArray (compactMax')
 import qualified Streamly.Internal.Data.Stream as Stream
-    (unfoldEachEndBy, concatIterateDfs, concatIterateBfs, concatIterateBfsRev)
+    ( unfoldEachEndBy
+    , concatIterate
+    , bfsConcatIterate
+    , altBfsConcatIterate
+    )
 import qualified Streamly.Data.StreamK as StreamK
 import qualified Streamly.Internal.Data.StreamK as StreamK
     (concatIterateWith, mergeIterateWith)
@@ -125,13 +137,44 @@ import qualified Streamly.Unicode.Stream as Stream
 -- variants just uncomment the relevant line and comment the currently enabled
 -- line.
 
-newtype FindOptions = FindOptions {findConcurrent :: Bool}
+data FindTraversal
+    = FindSerialDfs
+    | FindSerialBfs
+    | FindSerialBfsRev
+    | FindSerialAppend
+    | FindSerialInterleaved
+    | FindParallelUnordered
+    | FindParallelInterleaved
+    | FindParallelOrdered
+
+newtype FindOptions = FindOptions {findTraversal :: FindTraversal}
 
 defaultConfig :: FindOptions
-defaultConfig = FindOptions False
+defaultConfig = FindOptions FindSerialDfs
 
-concurrent :: Bool -> FindOptions -> FindOptions
-concurrent opt cfg = cfg {findConcurrent = opt}
+serialDfs :: FindOptions -> FindOptions
+serialDfs cfg = cfg {findTraversal = FindSerialDfs}
+
+serialBfs :: FindOptions -> FindOptions
+serialBfs cfg = cfg {findTraversal = FindSerialBfs}
+
+serialBfsRev :: FindOptions -> FindOptions
+serialBfsRev cfg = cfg {findTraversal = FindSerialBfsRev}
+
+serialAppend :: FindOptions -> FindOptions
+serialAppend cfg = cfg {findTraversal = FindSerialAppend}
+
+serialInterleaved :: FindOptions -> FindOptions
+serialInterleaved cfg = cfg {findTraversal = FindSerialInterleaved}
+
+parallelUnordered :: FindOptions -> FindOptions
+parallelUnordered cfg = cfg {findTraversal = FindParallelUnordered}
+
+parallelInterleaved :: FindOptions -> FindOptions
+parallelInterleaved cfg = cfg {findTraversal = FindParallelInterleaved}
+
+parallelOrdered :: FindOptions -> FindOptions
+parallelOrdered cfg = cfg {findTraversal = FindParallelOrdered}
 
 {-# INLINE recReadOpts #-}
 recReadOpts :: ReadOptions -> ReadOptions
@@ -155,37 +198,48 @@ reEncode = id
 
 #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
 -- Fastest implementation, only works for posix as of now.
-findByteChunked :: Path -> Stream IO (Array Word8)
-findByteChunked path =
-        Stream.catRights
-        -- Serial
-        --  $ Stream.concatIterateDfs streamDirMaybe -- 154 ms
-        --  $ Stream.concatIterateBfs streamDirMaybe -- 154 ms
-        --  $ Stream.concatIterateBfsRev streamDirMaybe -- 154 ms
-
-        -- Serial using stream append and interleave
-        --  $ concatIterateWith StreamK.append -- 154 ms
-        --  $ mergeIterateWith StreamK.interleave  -- 154 ms
-
-        -- Concurrent
-        -- XXX To reduce concurrency overhead, perform buffering in each worker
-        -- and post the buffer or return [Path] and then unfold it.
-        $ Stream.parConcatIterate id streamDir -- 94 ms
-        --  $ Stream.parConcatIterate (Stream.interleaved True) streamDir -- 94 ms
-        --  $ Stream.parConcatIterate (Stream.ordered True) streamDir -- 154 ms
-
-        $ Stream.fromPure (Left [path])
+findByteChunked :: (FindOptions -> FindOptions) -> Path -> Stream IO (Array Word8)
+findByteChunked f path =
+        Stream.catRights $
+            case findTraversal (f defaultConfig) of
+                FindSerialDfs ->
+                    Stream.concatIterate streamDirMaybe -- 154 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialBfs ->
+                    Stream.bfsConcatIterate streamDirMaybe -- 154 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialBfsRev ->
+                    Stream.altBfsConcatIterate streamDirMaybe -- 154 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialAppend ->
+                    concatIterateWith StreamK.append -- 154 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialInterleaved ->
+                    mergeIterateWith StreamK.interleave -- 154 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelUnordered ->
+                    -- XXX To reduce concurrency overhead, perform buffering in
+                    -- each worker and post the buffer or return [Path] and
+                    -- then unfold it.
+                    Stream.parConcatIterate id streamDir -- 94 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelInterleaved ->
+                    Stream.parConcatIterate (Stream.interleaved True) streamDir -- 94 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelOrdered ->
+                    Stream.parConcatIterate (Stream.ordered True) streamDir -- 154 ms
+                    $ Stream.fromPure (Left [path])
 
     where
 
-    concatIterateWith f =
+    concatIterateWith combine =
           StreamK.toStream
-        . StreamK.concatIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
-    mergeIterateWith f =
+    mergeIterateWith combine =
           StreamK.toStream
-        . StreamK.mergeIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.mergeIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
     -- cfg = Stream.eager False . Stream.maxBuffer 2000 . Stream.maxThreads 2
@@ -198,35 +252,44 @@ findByteChunked path =
 
 -- Faster than the find implementation below
 findChunked :: (FindOptions -> FindOptions) -> Path -> Stream IO [Path]
-findChunked _opts path =
-        Stream.catRights
-
-        -- Serial using streams
-        --  $ Stream.concatIterateDfs streamDirMaybe    -- 264 ms
-        --  $ Stream.concatIterateBfs streamDirMaybe    -- 264 ms
-        --  $ Stream.concatIterateBfsRev streamDirMaybe -- 264 ms
-
-        -- Serial using stream append and interleave
-        --  $ concatIterateWith StreamK.append     -- 164 ms
-        --  $ mergeIterateWith StreamK.interleave  -- 194 ms
-
-        -- Concurrent
-        $ Stream.parConcatIterate id streamDir -- 124 ms
-        --  $ Stream.parConcatIterate (Stream.interleaved True) streamDir -- 134 ms
-        --  $ Stream.parConcatIterate (Stream.ordered True) streamDir -- 174 ms
-
-        $ Stream.fromPure (Left [path])
+findChunked f path =
+        Stream.catRights $
+            case findTraversal (f defaultConfig) of
+                FindSerialDfs ->
+                    Stream.concatIterate streamDirMaybe -- 264 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialBfs ->
+                    Stream.bfsConcatIterate streamDirMaybe -- 264 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialBfsRev ->
+                    Stream.altBfsConcatIterate streamDirMaybe -- 264 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialAppend ->
+                    concatIterateWith StreamK.append -- 164 ms
+                    $ Stream.fromPure (Left [path])
+                FindSerialInterleaved ->
+                    mergeIterateWith StreamK.interleave -- 194 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelUnordered ->
+                    Stream.parConcatIterate id streamDir -- 124 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelInterleaved ->
+                    Stream.parConcatIterate (Stream.interleaved True) streamDir -- 134 ms
+                    $ Stream.fromPure (Left [path])
+                FindParallelOrdered ->
+                    Stream.parConcatIterate (Stream.ordered True) streamDir -- 174 ms
+                    $ Stream.fromPure (Left [path])
 
     where
 
-    concatIterateWith f =
+    concatIterateWith combine =
           StreamK.toStream
-        . StreamK.concatIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
-    mergeIterateWith f =
+    mergeIterateWith combine =
           StreamK.toStream
-        . StreamK.mergeIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.mergeIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
     streamDir :: Either [Path] b -> Stream IO (Either [Path] [Path])
@@ -236,41 +299,48 @@ findChunked _opts path =
     streamDirMaybe = either (Just . Dir.readEitherChunks recReadOpts) (const Nothing)
 
 find :: (FindOptions -> FindOptions) -> Path -> Stream IO Path
-find _opts path =
-        Stream.catRights
-
-        -- Serial using unfolds
-        --  $ Stream.unfoldIterateDfs unfoldDir -- 284 ms
-        -- May fail with too many open files
-        --  $ Stream.unfoldIterateBfs unfoldDir
-        --  $ Stream.unfoldIterateBfsRev unfoldDir -- 344 ms
-
-        -- Serial using streams
-        --  $ Stream.concatIterateDfs streamDirMaybe -- 274 ms
-        --  $ Stream.concatIterateBfs streamDirMaybe -- 274 ms
-        --  $ Stream.concatIterateBfsRev streamDirMaybe -- 264 ms
-
-        -- Serial using stream append and interleave
-        --  $ concatIterateWith StreamK.append -- 204 ms
-        --  $ mergeIterateWith StreamK.interleave  -- 304 ms
-
-        -- Concurrent
-        $ Stream.parConcatIterate id streamDir -- 174 ms
-        --  $ Stream.parConcatIterate (Stream.interleaved True) streamDir -- 224 ms
-        --  $ Stream.parConcatIterate (Stream.ordered True) streamDir -- 234 ms
-
-        $ Stream.fromPure (Left path)
+find f path =
+        Stream.catRights $
+            case findTraversal (f defaultConfig) of
+                FindSerialDfs ->
+                    --  Stream.unfoldIterateDfs unfoldDir -- 284 ms
+                    Stream.concatIterate streamDirMaybe -- 274 ms
+                    $ Stream.fromPure (Left path)
+                FindSerialBfs ->
+                    -- May fail with too many open files:
+                    --  Stream.unfoldIterateBfs unfoldDir
+                    Stream.bfsConcatIterate streamDirMaybe -- 274 ms
+                    $ Stream.fromPure (Left path)
+                FindSerialBfsRev ->
+                    --  Stream.unfoldIterateBfsRev unfoldDir -- 344 ms
+                    Stream.altBfsConcatIterate streamDirMaybe -- 264 ms
+                    $ Stream.fromPure (Left path)
+                FindSerialAppend ->
+                    concatIterateWith StreamK.append -- 204 ms
+                    $ Stream.fromPure (Left path)
+                FindSerialInterleaved ->
+                    mergeIterateWith StreamK.interleave -- 304 ms
+                    $ Stream.fromPure (Left path)
+                FindParallelUnordered ->
+                    Stream.parConcatIterate id streamDir -- 174 ms
+                    $ Stream.fromPure (Left path)
+                FindParallelInterleaved ->
+                    Stream.parConcatIterate (Stream.interleaved True) streamDir -- 224 ms
+                    $ Stream.fromPure (Left path)
+                FindParallelOrdered ->
+                    Stream.parConcatIterate (Stream.ordered True) streamDir -- 234 ms
+                    $ Stream.fromPure (Left path)
 
     where
 
-    concatIterateWith f =
+    concatIterateWith combine =
           StreamK.toStream
-        . StreamK.concatIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
-    mergeIterateWith f =
+    mergeIterateWith combine =
           StreamK.toStream
-        . StreamK.mergeIterateWith f (StreamK.fromStream . streamDir)
+        . StreamK.mergeIterateWith combine (StreamK.fromStream . streamDir)
         . StreamK.fromStream
 
     streamDir :: Either Path b -> Stream IO (Either Path Path)
