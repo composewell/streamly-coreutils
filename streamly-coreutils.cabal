@@ -201,6 +201,8 @@ library
 executable hfd
   import: compile-options, default-extensions, exe-options-threaded
   main-is: hfd.hs
+  if os(windows)
+    buildable: false
 
 -------------------------------------------------------------------------------
 -- Benchmarks
