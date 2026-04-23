@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module Main (main) where
 
 import System.IO (stdout)
@@ -17,23 +15,20 @@ import Options.Applicative
     , long
     , metavar
     , optional
+    , option
     , progDesc
     , strArgument
     , (<**>)
     )
 import qualified Options.Applicative as OA
 import qualified Streamly.Data.Stream.Prelude as Stream
-#if defined(mingw32_HOST_OS) || defined(__MINGW32__)
-import qualified Streamly.Data.Array as Array
-import qualified Streamly.Data.Unfold as Unfold
-import qualified Streamly.Internal.Data.Stream as Stream (unfoldEachEndBy)
-import qualified Streamly.Unicode.Stream as Unicode
-#endif
 import qualified Streamly.FileSystem.Handle as Handle
 import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.Find
     ( FindOptions
+    , findByteChunked
+    , maxResults
     , parallelInterleaved
     , parallelOrdered
     , parallelUnordered
@@ -43,15 +38,11 @@ import Streamly.Coreutils.Find
     , serialDfs
     , serialInterleaved
     )
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
-import Streamly.Coreutils.Find (findByteChunked)
-#else
-import Streamly.Coreutils.Find (findChunked)
-#endif
 
 data Config = Config
     { cfgTraversal :: FindOptions -> FindOptions
     , cfgRoot :: FilePath
+    , cfgMaxResults :: Maybe Int
     }
 
 data Traversal
@@ -76,11 +67,12 @@ toTraversalConfig traversal =
         TraversalParallelInterleaved -> parallelInterleaved
         TraversalParallelOrdered -> parallelOrdered
 
-mkConfig :: Traversal -> Maybe FilePath -> Config
-mkConfig traversal mPath =
+mkConfig :: Traversal -> Maybe Int -> Maybe FilePath -> Config
+mkConfig traversal mMaxResults mPath =
     Config
         { cfgTraversal = toTraversalConfig traversal
         , cfgRoot = maybe "." id mPath
+        , cfgMaxResults = mMaxResults
         }
 
 traversalParser :: Parser Traversal
@@ -108,6 +100,11 @@ configParser =
     mkConfig
         <$> traversalParser
         <*> optional
+                (option (OA.eitherReader parsePositiveInt)
+                    (long "max-results"
+                        <> metavar "N"
+                        <> help "Stop after emitting N results"))
+        <*> optional
                 (strArgument
                     (metavar "PATH" <> help "Root path to search"))
 
@@ -120,22 +117,20 @@ parserInfo =
             <> progDesc "A basic fd-like driver for Streamly.Coreutils.Find."
             <> header "hfd")
 
-#if defined(mingw32_HOST_OS) || defined(__MINGW32__)
-#endif
-
 main :: IO ()
 main = do
     cfg <- execParser parserInfo
     path <- Path.fromString (cfgRoot cfg)
-#if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+    let applyConfig opts =
+            maybe id maxResults (cfgMaxResults cfg) $
+                cfgTraversal cfg opts
     Stream.fold (Handle.writeChunks stdout)
-        $ findByteChunked (cfgTraversal cfg) path
-#else
-    Stream.fold (Handle.writeWith 32000 stdout)
-        $ Unicode.encodeUtf8
-        $ Unicode.decodeUtf16le
-        $ Stream.unfoldEachEndBy 10 Array.reader
-        $ fmap Path.toArray
-        $ Stream.unfoldEach Unfold.fromList
-        $ findChunked (cfgTraversal cfg) path
-#endif
+        $ findByteChunked applyConfig path
+
+parsePositiveInt :: String -> Either String Int
+parsePositiveInt str =
+    case reads str of
+        [(n, "")]
+            | n > 0 -> Right n
+            | otherwise -> Left "N must be positive"
+        _ -> Left "N must be an integer"
