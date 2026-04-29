@@ -68,9 +68,9 @@
 --
 -- Example:
 --
--- >>> _ <- test "a" doesItExist
--- >>> _ <- test "/usr/bin/ls" (isReadable `and_` size (> 4096))
--- >>> _ <- test "/usr/bin/ls" (modifyTimeComparedTo "reference.txt" (>))
+-- >>> _ <- test [path|a|] doesItExist
+-- >>> _ <- test [path|/usr/bin/ls|] (isReadable `and_` size (> 4096))
+-- >>> _ <- test [path|/usr/bin/ls|] (modifyTimeComparedTo [path|reference.txt|] (>))
 
 module Streamly.Coreutils.FileTest
     (
@@ -254,13 +254,16 @@ import qualified Streamly.Coreutils.FileTest.Posix as FileTest
 import qualified Streamly.Coreutils.FileTest.Windows as FileTest
 #endif
 
+import Streamly.FileSystem.Path (Path)
 import Streamly.Coreutils.FileTest.Common
 import Prelude hiding (and, or)
 
 -- $setup
+-- >>> :set -XQuasiQuotes
 -- >>> import Prelude hiding (or, and)
 -- >>> import Data.Time.Clock (NominalDiffTime)
 -- >>> import Data.Time.Clock.POSIX (POSIXTime)
+-- >>> import Streamly.FileSystem.Path (path)
 
 -------------------------------------------------------------------------------
 -- User and group ownerships
@@ -464,7 +467,7 @@ isExecutable = FileTest.isExecutable
 --
 -- The supplied file path is dereferenced if it is a symlink.
 --
-sameFileAs :: FilePath -> FileTest
+sameFileAs :: Path -> FileTest
 sameFileAs = FileTest.sameFileAs
 
 -- | True if the supplied file descriptor refers to a terminal device.

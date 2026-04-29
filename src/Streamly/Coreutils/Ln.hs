@@ -22,6 +22,8 @@ import Control.Monad (when)
 import Streamly.Coreutils.FileTest (test, doesItExist)
 
 import qualified System.PosixCompat.Files as Posix
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 
 data Ln = Ln
     { lnForce :: Bool
@@ -37,15 +39,15 @@ force opt cfg = cfg {lnForce = opt}
 symbolic :: Bool -> Ln -> Ln
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
-ln :: (Ln -> Ln) -> FilePath -> FilePath -> IO ()
+ln :: (Ln -> Ln) -> Path -> Path -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
     when (lnForce opt == False) $ do
         found <- test tgt doesItExist
         when found $ error msg
     case lnSymbolic opt of
-        False -> Posix.createLink src tgt
-        True -> Posix.createSymbolicLink src tgt
+        False -> Posix.createLink (Path.toString src) (Path.toString tgt)
+        True -> Posix.createSymbolicLink (Path.toString src) (Path.toString tgt)
 
     where
 

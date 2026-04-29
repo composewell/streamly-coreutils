@@ -64,11 +64,18 @@ import System.Posix.User (getRealUserID)
 import System.Posix.Types (FileMode)
 import Test.Hspec
 
-import Streamly.Coreutils.Rm
+import Streamly.Coreutils.Rm hiding (rm)
+import qualified Streamly.Coreutils.Rm as Rm
+import qualified Streamly.FileSystem.Path as Path
 
 -------------------------------------------------------------------------------
 -- Helpers
 -------------------------------------------------------------------------------
+
+rm :: (RmOptions -> RmOptions) -> FilePath -> IO ()
+rm f path = do
+    pathP <- Path.fromString path
+    Rm.rm f pathP
 
 -- | Run a test inside a fresh temporary directory, cleaning up afterwards.
 withTempDir :: (FilePath -> IO ()) -> IO ()

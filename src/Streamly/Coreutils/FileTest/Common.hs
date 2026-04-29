@@ -23,7 +23,7 @@
 --
 -- 'FileTest' predicates operate on 'FileState', which carries:
 --
---   * The 'FilePath' that was supplied to the runner ('test' / 'testl').
+--   * The 'Path' that was supplied to the runner ('test' / 'testl').
 --   * A lazily-populated 'IORef' that caches the 'FileStatus' after the
 --     first predicate that needs it fetches it.
 --   * The OS stat action to use ('getFileStatus' for 'test',
@@ -40,7 +40,7 @@
 --
 -- We could use a more restricted StatusTest predicates which consume only the
 -- file status argument. StatusTest can then be lifted into a FileTest which
--- passes a FilePath argument as well and maybe some others. StatusTest
+-- passes a Path argument as well and maybe some others. StatusTest
 -- predicates can be moved into a separate module. But does it buy us anything
 -- worthwhile?
 --
@@ -208,6 +208,8 @@ import System.Posix.Types (COff(..), FileMode)
 import qualified System.PosixCompat.Files as Files
 
 import Prelude hiding (and, or)
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 import Streamly.Internal.Data.Time.Clock
 import Streamly.Internal.Data.Time.Units
 
@@ -240,7 +242,7 @@ newtype Predicate m a =
 -- 'testl' supplies 'Files.getSymbolicLinkStatus' (examines the link itself).
 -- Storing the action here keeps the choice invisible to individual predicates.
 data FileState = FileState
-    { filepath    :: FilePath
+    { filepath    :: Path
       -- ^ The path supplied to 'test' \/ 'testl'.
     , fileStatus  :: IORef (Maybe FileStatus)
       -- XXX store it in IORef using Either type.
@@ -268,7 +270,7 @@ requireStatus fs = do
 -- @fetchFn@ is the OS stat action predicates will use. Pass
 -- 'Files.getFileStatus' for symlink-following behaviour, or
 -- 'Files.getSymbolicLinkStatus' to examine the link itself.
-newFileState :: FilePath -> IO FileStatus -> IO FileState
+newFileState :: Path -> IO FileStatus -> IO FileState
 newFileState path fetchFn = do
     ref <- newIORef Nothing
     pure $ FileState
@@ -282,7 +284,7 @@ newFileState path fetchFn = do
 -- is left empty because no path is available at this call site; 'fetchStatus'
 -- is set to an error thunk since it must never be called when the cache is
 -- already populated.
-mkFileState :: String -> FilePath -> FileStatus -> IO FileState
+mkFileState :: String -> Path -> FileStatus -> IO FileState
 mkFileState tag fp st = do
     ref <- newIORef (Just st)
     return $ FileState
@@ -400,8 +402,6 @@ or = foldr or_ false
 not_ :: FileTest -> FileTest
 not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 
--- XXX Use Path instead of filepath.
-
 applyCatchENOENT :: (t -> IO Bool) -> t -> IO Bool
 applyCatchENOENT f fs =
     f fs `catch` eatENOENT
@@ -415,7 +415,7 @@ applyCatchENOENT f fs =
 -- This can lead to silent bugs. We should raise an exception if the file does
 -- not exist unless the predicate is doesItExist.
 
--- | Apply a predicate to a 'FilePath', if the path is a symlink uses the link
+-- | Apply a predicate to a 'Path', if the path is a symlink uses the link
 -- target and not the link itself. See 'testl' for testing the link itself.
 --
 -- * 'test' returns 'True' if the file exists and the predicate is 'True'
@@ -427,10 +427,11 @@ applyCatchENOENT f fs =
 --  * test 'doesItExist' returns false if the path is symlink but it does not
 --  point to an existing file.
 --
-test :: FilePath -> FileTest -> IO Bool
+test :: Path -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) = do
     -- 'Files.getFileStatus' dereferences symlinks.
-    newFileState path (Files.getFileStatus path) >>= applyCatchENOENT f
+    newFileState path (Files.getFileStatus (Path.toString path))
+        >>= applyCatchENOENT f
 
 -- | Like 'test' but uses the path and not the link target if the path is a
 -- symlink.
@@ -442,24 +443,25 @@ test path (FileTest (Predicate f)) = do
 --  should not be used.
 --  * Predicates related to file owner, group, size, time stamps are relevant.
 --
-testl :: FilePath -> FileTest -> IO Bool
+testl :: Path -> FileTest -> IO Bool
 testl path (FileTest (Predicate f)) =
-    newFileState path (Files.getSymbolicLinkStatus path) >>= applyCatchENOENT f
+    newFileState path (Files.getSymbolicLinkStatus (Path.toString path))
+        >>= applyCatchENOENT f
 
 -- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
 -- predicates that require filepath when using apply.
-testWithStatus :: FilePath -> FileStatus -> FileTest -> IO Bool
+testWithStatus :: Path -> FileStatus -> FileTest -> IO Bool
 testWithStatus fp st (FileTest (Predicate f)) =
     mkFileState "FileTest.testWithStatus" fp st >>= f
 
 -- | Like 'withState' but the supplied function may perform IO.
-withStateM :: (FilePath -> FileStatus -> IO Bool) -> FileTest
+withStateM :: (Path -> FileStatus -> IO Bool) -> FileTest
 withStateM p =
     FileTest $ Predicate $ \fs -> requireStatus fs >>= p (filepath fs)
 
--- | Convert a @FilePath -> FileStatus -> Bool@ function into a 'FileTest'
+-- | Convert a @Path -> FileStatus -> Bool@ function into a 'FileTest'
 -- predicate.
-withState :: (FilePath -> FileStatus -> Bool) -> FileTest
+withState :: (Path -> FileStatus -> Bool) -> FileTest
 withState p = withStateM (\fp fs -> pure $ p fp fs)
 
 -- | Like 'withStatus' but the supplied function may perform IO.
@@ -471,11 +473,11 @@ withStatus :: (FileStatus -> Bool) -> FileTest
 withStatus p = withStatusM (pure . p)
 
 -- | Like 'withPath' but the supplied function may perform IO.
-withPathM :: (FilePath -> IO Bool) -> FileTest
+withPathM :: (Path -> IO Bool) -> FileTest
 withPathM p = FileTest $ Predicate $ \fs -> p (filepath fs)
 
--- | Convert a @FilePath -> Bool@ function into a 'FileTest' predicate.
-withPath :: (FilePath -> Bool) -> FileTest
+-- | Convert a @Path -> Bool@ function into a 'FileTest' predicate.
+withPath :: (Path -> Bool) -> FileTest
 withPath p = withPathM (pure . p)
 
 -- | A predicate which is always 'True'. Identity of 'and' style folds.
@@ -797,19 +799,17 @@ modifiedBefore t = modifyTime (<= t)
 modifiedAfter :: POSIXTime -> FileTest
 modifiedAfter t = modifyTime (>= t)
 
--- XXX Use Path instead of filepath.
---
 -- NOTE: The specified file path is always dereferenced. Time comparison of
 -- symlinks is rare, not provided here.
 
 timeComparedToWith ::
        (FileStatus -> POSIXTime)
-    -> FilePath
+    -> Path
     -> (POSIXTime -> POSIXTime -> Bool)
     -> FileTest
 timeComparedToWith getFileTime path cmp =
   withStatusM $ \st -> do
-    st1 <- Files.getFileStatus path
+    st1 <- Files.getFileStatus (Path.toString path)
     pure $ cmp (getFileTime st) (getFileTime st1)
 
 -- | Compare the modification time of the file with the modification time of
@@ -818,7 +818,7 @@ timeComparedToWith getFileTime path cmp =
 -- If specified file path is a symlink it is dereferenced.
 --
 modifyTimeComparedTo ::
-    FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
+    Path -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 
 -- | True if the file was modified strictly before the reference file.
@@ -827,7 +827,7 @@ modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 --
 -- If specified file path is a symlink it is dereferenced.
 --
-olderThanFile :: FilePath -> FileTest
+olderThanFile :: Path -> FileTest
 olderThanFile path = modifyTimeComparedTo path (<)
 
 -- | True if the file was modified strictly after the reference file.
@@ -836,7 +836,7 @@ olderThanFile path = modifyTimeComparedTo path (<)
 --
 -- If specified file path is a symlink it is dereferenced.
 --
-newerThanFile  :: FilePath -> FileTest
+newerThanFile  :: Path -> FileTest
 newerThanFile path = modifyTimeComparedTo path (>)
 
 -- | Compare the access time of the file with the access time of
@@ -844,7 +844,7 @@ newerThanFile path = modifyTimeComparedTo path (>)
 --
 -- If specified file path is a symlink it is dereferenced.
 accessTimeComparedTo ::
-    FilePath -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
+    Path -> (POSIXTime -> POSIXTime -> Bool) -> FileTest
 accessTimeComparedTo = timeComparedToWith Files.accessTimeHiRes
 
 -- | True if the file was accessed strictly before the reference file.
@@ -852,7 +852,7 @@ accessTimeComparedTo = timeComparedToWith Files.accessTimeHiRes
 -- >>> accessedBeforeFile path = accessTimeComparedTo path (<)
 --
 -- If specified file path is a symlink it is dereferenced.
-accessedBeforeFile :: FilePath -> FileTest
+accessedBeforeFile :: Path -> FileTest
 accessedBeforeFile path = accessTimeComparedTo path (<)
 
 -- | True if the file was accessed __strictly__ after the reference file.
@@ -860,7 +860,7 @@ accessedBeforeFile path = accessTimeComparedTo path (<)
 -- >>> accessedAfterFile path = accessTimeComparedTo path (>)
 --
 -- If specified file path is a symlink it is dereferenced.
-accessedAfterFile  :: FilePath -> FileTest
+accessedAfterFile  :: Path -> FileTest
 accessedAfterFile path = accessTimeComparedTo path (>)
 
 -----------------------------------
@@ -1083,10 +1083,10 @@ isNonEmptyFile = and_ isFile (size (> 0))
 -- >>> sameSizeAs path      = sizeComparedTo path (==)
 --
 -- If the supplied file path is a symlink it is dereferenced.
-sizeComparedTo :: FilePath -> (Int64 -> Int64 -> Bool) -> FileTest
+sizeComparedTo :: Path -> (Int64 -> Int64 -> Bool) -> FileTest
 sizeComparedTo path rel =
   withStatusM $ \st -> do
-    st1 <- Files.getFileStatus path
+    st1 <- Files.getFileStatus (Path.toString path)
     pure $ rel (getSize st) (getSize st1)
 
 -- | True if the file is __strictly__ larger than the given file. If specified
@@ -1096,7 +1096,7 @@ sizeComparedTo path rel =
 --
 -- >>> largerThanFile path = sizeComparedTo path (>)
 --
-largerThanFile :: FilePath -> FileTest
+largerThanFile :: Path -> FileTest
 largerThanFile path = sizeComparedTo path (>)
 
 -- | True if the file is __strictly__ smaller than the given file. If specified
@@ -1106,7 +1106,7 @@ largerThanFile path = sizeComparedTo path (>)
 --
 -- >>> smallerThanFile path = sizeComparedTo path (<)
 --
-smallerThanFile :: FilePath -> FileTest
+smallerThanFile :: Path -> FileTest
 smallerThanFile path = sizeComparedTo path (<)
 
 -- | True if the file has the same size as the given file. If specified file
@@ -1116,5 +1116,5 @@ smallerThanFile path = sizeComparedTo path (<)
 --
 -- >>> sameSizeAs path = sizeComparedTo path (==)
 --
-sameSizeAs :: FilePath -> FileTest
+sameSizeAs :: Path -> FileTest
 sameSizeAs path = sizeComparedTo path (==)

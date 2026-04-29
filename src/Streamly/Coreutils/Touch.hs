@@ -22,6 +22,8 @@ where
 import Control.Monad (unless)
 import Streamly.Coreutils.FileTest (test, doesItExist)
 import System.IO (openFile, IOMode(WriteMode), hClose)
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 
 #if !defined (CABAL_OS_WINDOWS)
 import qualified System.Posix.Files as Posix (touchSymbolicLink)
@@ -60,18 +62,19 @@ create opt cfg = cfg {createNew = opt}
 -- * create True
 -- * followLinks True
 --
-touch :: (Touch -> Touch) -> FilePath -> IO ()
+touch :: (Touch -> Touch) -> Path -> IO ()
 touch f path = do
     let opt = f defaultConfig
+        pathStr = Path.toString path
     if (createNew opt == True && deRef opt == True)
     then do
         found <- test path doesItExist
-        unless found $ openFile path WriteMode >>= hClose
+        unless found $ openFile pathStr WriteMode >>= hClose
     else
         case deRef opt of
-            True -> Posix.touchFile path
+            True -> Posix.touchFile pathStr
 #if !defined (CABAL_OS_WINDOWS)
-            False -> Posix.touchSymbolicLink path
+            False -> Posix.touchSymbolicLink pathStr
 #else
             -- XXX Is it possible to support this on Windows?
             False -> error "touch: followLinks=False not supported on Windows"

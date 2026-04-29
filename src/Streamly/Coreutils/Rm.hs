@@ -103,6 +103,8 @@ import System.Directory
     , writable
     )
 import System.FilePath ((</>))
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 
 -- TODO: backward compatibility for Rm, None, Nuke changes.
 
@@ -156,7 +158,7 @@ recursive opt cfg = cfg { rmRecursive = opt }
 -- Internal
 -------------------------------------------------------------------------------
 
-withWriteProtectionCheck :: FilePath -> (FilePath -> IO b) -> [Char] -> IO b
+withWriteProtectionCheck :: Path -> (Path -> IO b) -> String -> IO b
 withWriteProtectionCheck path f msg = do
     -- Note: there is an inherent TOCTOU race between this check and
     -- the call to the deletion function "f".
@@ -166,16 +168,18 @@ withWriteProtectionCheck path f msg = do
     else
         error
             $ "rm: cannot remove '"
-            ++ path ++ "': write-protected " ++ msg
+            ++ Path.toString path ++ "': write-protected " ++ msg
 
-rmdir :: RmOptions -> FilePath -> IO ()
+rmdir :: RmOptions -> Path -> IO ()
 rmdir options path =
+    let pathStr = Path.toString path
+     in
     case rmRecursive options of
         False ->
-            error $ "rm: cannot remove '" ++ path ++ "': Is a directory"
+            error $ "rm: cannot remove '" ++ pathStr ++ "': Is a directory"
         True ->
             case rmForce options of
-                FullForce -> removePathForcibly path
+                FullForce -> removePathForcibly pathStr
                 Force ->
 #if defined(CABAL_OS_WINDOWS)
                     -- On Unix removePathForcibly makes directories writable to
@@ -185,34 +189,45 @@ rmdir options path =
                     -- them deletable. This is exactly what we want for the
                     -- Force option. So FullForce and Force are essentially
                     -- same on Windows.
-                    removePathForcibly path
+                    removePathForcibly pathStr
 #else
-                    removeDirectoryRecursive path
+                    removeDirectoryRecursive pathStr
 #endif
                 NoForce -> do
-                    contents <- listDirectory path
+                    contents <- listDirectory pathStr
                     withWriteProtectionCheck path (const (pure ())) "directory"
-                    forM_ contents $ \item ->
+                    forM_ contents $ \item -> do
+                        itemPath <- Path.fromString (pathStr </> item)
                         rm (withForce (rmForce options) . recursive True)
-                           (path </> item)
-                    withWriteProtectionCheck path removeDirectory "directory"
+                           itemPath
+                    withWriteProtectionCheck
+                        path
+                        (removeDirectory . Path.toString)
+                        "directory"
 
 -- XXX implement and use "chmod"
 
 -- | Make a path writable by the owner. Used on Windows before deletion to
 -- clear FILE_ATTRIBUTE_READONLY. Compiled on all platforms so that it is
 -- tested on Unix too, but only called on Windows.
-_setWritable :: FilePath -> IO ()
+_setWritable :: Path -> IO ()
 _setWritable path = do
-    perms <- getPermissions path
+    let pathStr = Path.toString path
+    perms <- getPermissions pathStr
     when (not (writable perms)) $
-        setPermissions path (perms { writable = True })
+        setPermissions pathStr (perms { writable = True })
 
-rmfile :: RmOptions -> FilePath -> IO ()
+rmfile :: RmOptions -> Path -> IO ()
 rmfile options path =
+    let pathStr = Path.toString path
+     in
     case rmForce options of
-        FullForce -> removePathForcibly path
-        NoForce   -> withWriteProtectionCheck path removeFile "regular file"
+        FullForce -> removePathForcibly pathStr
+        NoForce   ->
+            withWriteProtectionCheck
+                path
+                (removeFile . Path.toString)
+                "regular file"
         Force     -> do
 #if defined(CABAL_OS_WINDOWS)
             -- On Windows, file deletability is tied to the file's own
@@ -220,9 +235,9 @@ rmfile options path =
             -- matters). Force must clear it before unlinking.
             _setWritable path
 #endif
-            removeFile path
+            removeFile pathStr
 
-performRm :: RmOptions -> FilePath -> IO ()
+performRm :: RmOptions -> Path -> IO ()
 performRm options path = do
     -- isDir returns false if path is symlink
     dir <- testl path isDir
@@ -237,7 +252,7 @@ performRm options path = do
                 FullForce -> _setWritable path
                 Force     -> _setWritable path
                 NoForce   -> return ()
-            removeDirectory path
+            removeDirectory (Path.toString path)
         else rmfile options path
 #else
         rmfile options path
@@ -255,7 +270,7 @@ performRm options path = do
 --
 -- Note: When 'recursive' is 'False' (the default), passing a directory path
 -- always results in an error, even under 'FullForce'.
-rm :: (RmOptions -> RmOptions) -> FilePath -> IO ()
+rm :: (RmOptions -> RmOptions) -> Path -> IO ()
 rm f path = do
     let options = f defaultConfig
     -- Note this test is required not just for existence check but also so that
@@ -267,7 +282,7 @@ rm f path = do
     else
         case rmForce options of
            NoForce ->
-               error $ "rm: cannot remove '" ++ path
+               error $ "rm: cannot remove '" ++ Path.toString path
                       ++ "': No such file or directory"
            _ -> return ()
 
@@ -286,7 +301,7 @@ rm f path = do
 -- @Note:@ Under 'NoForce', this fails if the path does not exist, is a
 -- broken symlink, or is a regular file. Under 'Force', these cases
 -- are silent no-ops.
-rmContents :: RmForce -> FilePath -> IO ()
+rmContents :: RmForce -> Path -> IO ()
 rmContents flevel path = do
     -- 'test' follows symlinks, unlike 'testl'.
     -- This checks if the *target* exists and is a directory.
@@ -294,13 +309,15 @@ rmContents flevel path = do
     if isTargetDir
     then
         do
-            contents <- listDirectory path
-            forM_ contents $ \item ->
-                rm (withForce flevel . recursive True) (path </> item)
+            let pathStr = Path.toString path
+            contents <- listDirectory pathStr
+            forM_ contents $ \item -> do
+                itemPath <- Path.fromString (pathStr </> item)
+                rm (withForce flevel . recursive True) itemPath
     else
         case flevel of
             NoForce ->
-                error $ "rmContents: cannot access '" ++ path
+                error $ "rmContents: cannot access '" ++ Path.toString path
                        ++ "': Not a directory or broken symlink"
             _ ->
                 return ()

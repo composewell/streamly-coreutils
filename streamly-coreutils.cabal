@@ -241,6 +241,7 @@ test-suite Streamly.Coreutils.Rm
     , directory
     , filepath
     , hspec
+    , streamly-core
     , streamly-coreutils
     , temporary
     , unix-compat

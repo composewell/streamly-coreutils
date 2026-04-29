@@ -34,6 +34,8 @@ import qualified System.PosixCompat.Files as Files
 import qualified System.Posix.User as User
 import qualified System.Posix.Terminal as Terminal
 
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 import Streamly.Coreutils.FileTest.Common
 
 -- XXX 'getFdStatus' is not implemented for Windows in unix-compat.
@@ -46,7 +48,7 @@ import Streamly.Coreutils.FileTest.Common
 --
 testFd :: Fd -> FileTest -> IO Bool
 testFd fd (FileTest (Predicate f)) =
-    -- XXX We should pass "Either Fd FilePath" in state.
+    -- XXX We should pass "Either Fd Path" in state.
     let fp = error $ "FileTest.testFd: filepath cannot be used"
      in Files.getFdStatus fd >>= mkFileState "FileTest.testFd" fp >>= f
 
@@ -59,10 +61,10 @@ testHandle = undefined
 --
 -- The supplied file path is dereferenced if it is a symlink.
 --
-sameFileAs :: FilePath -> FileTest
+sameFileAs :: Path -> FileTest
 sameFileAs path =
   withStatusM $ \st -> do
-    st1 <- Files.getFileStatus path
+    st1 <- Files.getFileStatus (Path.toString path)
     pure $
       Files.deviceID st == Files.deviceID st1 &&
       Files.fileID   st == Files.fileID   st1
@@ -106,20 +108,20 @@ isOwnedByCurrentGroup =
 -- getfacl x
 -- test -r x || echo "not readable"
 
-pathIsReadable :: FilePath -> IO Bool
-pathIsReadable path = Posix.fileAccess path True False False
+pathIsReadable :: Path -> IO Bool
+pathIsReadable path = Posix.fileAccess (Path.toString path) True False False
 
 isReadable :: FileTest
 isReadable = withPathM pathIsReadable
 
-pathIsWritable :: FilePath -> IO Bool
-pathIsWritable path = Posix.fileAccess path False True False
+pathIsWritable :: Path -> IO Bool
+pathIsWritable path = Posix.fileAccess (Path.toString path) False True False
 
 isWritable :: FileTest
 isWritable = withPathM pathIsWritable
 
-pathIsExecutable :: FilePath -> IO Bool
-pathIsExecutable path = Posix.fileAccess path False False True
+pathIsExecutable :: Path -> IO Bool
+pathIsExecutable path = Posix.fileAccess (Path.toString path) False False True
 
 isExecutable :: FileTest
 isExecutable = withPathM pathIsExecutable

@@ -81,6 +81,8 @@ import System.Win32.Types
 import qualified System.Win32.Types as Win32
 
 import Foreign
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 import Streamly.Coreutils.FileTest.Common
 
 -------------------------------------------------------------------------------
@@ -246,10 +248,10 @@ instance Storable GENERIC_MAPPING where
 -- Uses fILE_FLAG_BACKUP_SEMANTICS so that directories can be opened too.
 -- Uses 0 for desired access since only metadata is needed; this succeeds
 -- even when data-read access is restricted.
-withFileHandle :: FilePath -> (HANDLE -> IO a) -> IO a
+withFileHandle :: Path -> (HANDLE -> IO a) -> IO a
 withFileHandle path action =
     bracket
-        (createFile path 0
+        (createFile (Path.toString path) 0
             (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
             Nothing
             oPEN_EXISTING
@@ -260,7 +262,7 @@ withFileHandle path action =
 
 -- | Return a (volumeSerialNumber, fileIndex) pair that uniquely identifies
 -- a file on the local system, following the same-inode logic as POSIX.
-fileId :: FilePath -> IO (DWORD, Word64)
+fileId :: Path -> IO (DWORD, Word64)
 fileId path =
     withFileHandle path $ \h -> do
         info <- getFileInformationByHandle h
@@ -270,7 +272,7 @@ fileId path =
 
 -- | True if both paths refer to the same underlying file or directory,
 -- equivalent to POSIX inode comparison.
-sameFileAs :: FilePath -> FileTest
+sameFileAs :: Path -> FileTest
 sameFileAs path2 =
     withPathM $ \path1 -> do
         id1 <- fileId path1
@@ -318,9 +320,9 @@ isTerminalFd (Fd fd) =
 -- We bind c_GetFileSecurity directly (as Ptr ()) rather than using
 -- getFileSecurity, whose SecurityDescriptor newtype is opaque and
 -- incompatible with c_GetSecurityDescriptorOwner.
-withFileOwnerSID :: FilePath -> (PSID -> IO a) -> IO a
+withFileOwnerSID :: Path -> (PSID -> IO a) -> IO a
 withFileOwnerSID path action =
-    withFilePath path $ \pPath ->
+    withFilePath (Path.toString path) $ \pPath ->
     alloca $ \pLenNeeded -> do
         -- First call: get required buffer size
         _ <- c_GetFileSecurity
@@ -367,7 +369,7 @@ withEffectiveUserSID action = do
 -- Ownership
 -------------------------------------------------------------------------------
 
-isPathOwnedByCurrentUser :: FilePath -> IO Bool
+isPathOwnedByCurrentUser :: Path -> IO Bool
 isPathOwnedByCurrentUser path =
     withFileOwnerSID path $ \fileSid ->
         withEffectiveUserSID $ \userSid ->
@@ -380,7 +382,7 @@ isOwnedByCurrentUser = withPathM isPathOwnedByCurrentUser
 withFilePrimaryGroupSID = undefined
 withEffectiveGroupSID = undefined
 
-isPathOwnedByCurrentGroup :: FilePath -> IO Bool
+isPathOwnedByCurrentGroup :: Path -> IO Bool
 isPathOwnedByCurrentGroup path =
     withFilePrimaryGroupSID path $ \fileSid ->
         withEffectiveGroupSID $ \userSid ->
@@ -405,10 +407,11 @@ isOwnedByCurrentGroup = withPathM isPathOwnedByCurrentGroup
 --
 -- Returns false if the file is locked and not shared for reading.
 --
-isPathReadableNow :: FilePath -> IO Bool
+isPathReadableNow :: Path -> IO Bool
 isPathReadableNow path =
     (do h <- createFile
-                 path fILE_READ_DATA shareMode Nothing oPEN_EXISTING
+                 (Path.toString path)
+                 fILE_READ_DATA shareMode Nothing oPEN_EXISTING
                  flags Nothing
         closeHandle h
         return True
@@ -425,7 +428,7 @@ isReadableNow = withPathM isPathReadableNow
 --
 -- Returns false if the file is locked and not shared for writing.
 --
-isFileWritableNow :: FilePath -> FileStatus -> IO Bool
+isFileWritableNow :: Path -> FileStatus -> IO Bool
 isFileWritableNow path st = do
     isDirectory <- testWithStatus path st isDir
     -- Under unix-compat on Windows, ownerWriteMode corresponds to the
@@ -448,7 +451,8 @@ isFileWritableNow path st = do
                 | otherwise   = 0
         bracket
             (createFile
-                path desiredAccess shareMode Nothing oPEN_EXISTING
+                (Path.toString path)
+                desiredAccess shareMode Nothing oPEN_EXISTING
                 flags Nothing)
             closeHandle
             (\_ -> return True)
@@ -459,10 +463,11 @@ isWritableNow = withStateM isFileWritableNow
 
 -- | Returns true if file is executable.
 -- Returns false if the file is locked and not shared for execution.
-isPathExecutableNow :: FilePath -> IO Bool
+isPathExecutableNow :: Path -> IO Bool
 isPathExecutableNow path =
     (do h <- createFile
-                 path fILE_EXECUTE shareMode Nothing oPEN_EXISTING
+                 (Path.toString path)
+                 fILE_EXECUTE shareMode Nothing oPEN_EXISTING
                  flags Nothing
         closeHandle h
         return True
@@ -497,13 +502,13 @@ openCurrentProcessImpersonationToken = do
 
 -- | Checks the file's DACL against the current process token for the
 -- given access mask. Implements the Windows equivalent of POSIX access().
-pathAccess :: FilePath -> DWORD -> IO Bool
+pathAccess :: Path -> DWORD -> IO Bool
 pathAccess path mask =
     bracket
         openCurrentProcessImpersonationToken
         (\h -> c_CloseHandle h >> return ())
         $ \token ->
-            withFilePath path $ \pPath ->
+            withFilePath (Path.toString path) $ \pPath ->
             alloca $ \ppSd -> do
                 ret <- c_GetNamedSecurityInfo
                            pPath
@@ -549,15 +554,15 @@ pathAccess path mask =
         | otherwise = return False
 
 -- | Windows equivalent of POSIX: access(path, R_OK). Matches @test -r@.
-pathIsReadable :: FilePath -> IO Bool
+pathIsReadable :: Path -> IO Bool
 pathIsReadable path = pathAccess path fILE_GENERIC_READ
 
 -- | Windows equivalent of POSIX: access(path, W_OK). Matches @test -w@.
-pathIsWritable :: FilePath -> IO Bool
+pathIsWritable :: Path -> IO Bool
 pathIsWritable path = pathAccess path fILE_GENERIC_WRITE
 
 -- | Windows equivalent of POSIX: access(path, X_OK). Matches @test -x@.
-pathIsExecutable :: FilePath -> IO Bool
+pathIsExecutable :: Path -> IO Bool
 pathIsExecutable path = pathAccess path fILE_GENERIC_EXECUTE
 
 isReadable :: FileTest
@@ -574,14 +579,14 @@ fILE_ATTRIBUTE_DIRECTORY    = 0x10
 
 -- | True iff the path is a reparse point (symlink or junction) that the OS
 -- also marks as a directory object.
-isPathDirSymLink :: FilePath -> FileStatus -> IO Bool
+isPathDirSymLink :: Path -> FileStatus -> IO Bool
 isPathDirSymLink path st =
     -- XXX We should cache the raw attributes for multiple checks Currently we
     -- cache only the FileStatus from unix-compat which does not have full info
     -- for windows and we need to make additional calls.
     if isSymbolicLink st
     then do
-        attrs <- getFileAttributes path
+        attrs <- getFileAttributes (Path.toString path)
         return $ attrs .&. fILE_ATTRIBUTE_DIRECTORY /= 0
     else
         return False
