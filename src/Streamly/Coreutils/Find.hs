@@ -15,48 +15,42 @@
 -- Examples:
 -- List the current directory recursively using the internal traversal variants.
 --
--- >>> :{
--- main :: IO ()
--- main = do
---     hSetBuffering stdout LineBuffering
---     let path = fromJust $ Path.fromString "."
--- #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
---     Stream.fold (Handle.writeChunks stdout)
---         $ findByteChunked id path
--- #else
---     Stream.fold (Handle.writeWith 32000 stdout)
---         $ reEncode
---         $ Stream.unfoldEachEndBy 10 Array.reader
---         $ fmap Path.toArray
---         $ Stream.unfoldEach Unfold.fromList
---         $ findChunked id path
--- #endif
--- :}
+-- > main :: IO ()
+-- > main = do
+-- >     hSetBuffering stdout LineBuffering
+-- >     let path = fromJust $ Path.fromString "."
+-- > #if !defined(mingw32_HOST_OS) && !defined(__MINGW32__)
+-- >     Stream.fold (Handle.writeChunks stdout)
+-- >         $ findByteChunked id path
+-- > #else
+-- >     Stream.fold (Handle.writeWith 32000 stdout)
+-- >         $ reEncode
+-- >         $ Stream.unfoldEachEndBy 10 Array.reader
+-- >         $ fmap Path.toArray
+-- >         $ Stream.unfoldEach Unfold.fromList
+-- >         $ findChunked id path
+-- > #endif
 --
--- >>> :{
--- main :: IO ()
--- main = do
---     hSetBuffering stdout LineBuffering
---     let path = fromJust $ Path.fromString "."
---     Stream.fold (Handle.writeWith 32000 stdout)
---         $ reEncode
---         $ Stream.unfoldEachEndBy 10 Array.reader
---         $ fmap Path.toArray
---         $ Stream.unfoldEach Unfold.fromList
---         $ findChunked id path
--- :}
+-- > main :: IO ()
+-- > main = do
+-- >     hSetBuffering stdout LineBuffering
+-- >     let path = fromJust $ Path.fromString "."
+-- >     Stream.fold (Handle.writeWith 32000 stdout)
+-- >         $ reEncode
+-- >         $ Stream.unfoldEachEndBy 10 Array.reader
+-- >         $ fmap Path.toArray
+-- >         $ Stream.unfoldEach Unfold.fromList
+-- >         $ findChunked id path
 --
--- >>> :{
--- main :: IO ()
--- main = do
---     hSetBuffering stdout LineBuffering
---     let path = fromJust $ Path.fromString "."
---     Stream.fold (Handle.writeWith 32000 stdout)
---         $ reEncode
---         $ Stream.unfoldEachEndBy 10 Array.reader
---         $ fmap Path.toArray
---         $ find id path
--- :}
+-- > main :: IO ()
+-- > main = do
+-- >     hSetBuffering stdout LineBuffering
+-- >     let path = fromJust $ Path.fromString "."
+-- >     Stream.fold (Handle.writeWith 32000 stdout)
+-- >         $ reEncode
+-- >         $ Stream.unfoldEachEndBy 10 Array.reader
+-- >         $ fmap Path.toArray
+-- >         $ find id path
 --
 -- Compare the above example with GNU @find@ or rust @fd@. To compare listing
 -- the current directory recursively, use the following commands:
