@@ -36,6 +36,10 @@ extra-doc-files:
   , design/proposal.md
   , design/design-notes.md
 
+source-repository head
+    type: git
+    location: https://github.com/composewell/streamly-coreutils
+
 flag fusion-plugin
   description: Use fusion plugin for best performance
   manual: True
@@ -106,7 +110,7 @@ common default-extensions
 common exe-dependencies
   build-depends:
       base
-    , optparse-applicative >= 0.17 && < 0.19
+    , optparse-applicative >= 0.17 && < 0.20
     , streamly
     , streamly-core
     , streamly-coreutils
@@ -153,7 +157,7 @@ library
     , streamly >= 0.11 && < 0.12
     , streamly-core >= 0.3 && < 0.4
     , streamly-process >= 0.4 && < 0.5
-    , time >= 1.9 && < 1.15
+    , time >= 1.9 && < 1.16
     , unix-compat >= 0.5.4  && < 0.8
   if !os(windows)
       build-depends:  unix >= 2.7.0 && < 2.9
@@ -202,7 +206,7 @@ executable hfd
   import: compile-options, default-extensions, exe-options-threaded
   main-is: hfd.hs
   if os(windows)
-    buildable: false
+    buildable: False
 
 -------------------------------------------------------------------------------
 -- Benchmarks
