@@ -12,7 +12,7 @@ module Streamly.Coreutils.Cp
     ( cp
 
     -- * Cp options
-    , Cp
+    , CpOptions
     , CpOverwrite (..)
     -- , CpBackup
     , cpOverwrite
@@ -68,13 +68,13 @@ data CpMethod =
     | SymbolicLink
     | CopyClone     -- Use the cloning method if available on the platform
 
-data Cp = Cp
+data CpOptions = CpOptions
     { optOverwrite :: CpOverwrite
     , optCopyMethod :: CpMethod
     }
 
-defaultOptions :: Cp
-defaultOptions = Cp
+defaultOptions :: CpOptions
+defaultOptions = CpOptions
     { optOverwrite = OverwriteAlways
     , optCopyMethod = CopyContents
     }
@@ -83,14 +83,14 @@ defaultOptions = Cp
 --
 -- Default is 'OverwriteAlways'.
 --
-cpOverwrite :: CpOverwrite -> Cp -> Cp
+cpOverwrite :: CpOverwrite -> CpOptions -> CpOptions
 cpOverwrite opt options = options { optOverwrite = opt }
 
 -- | Specify the copy method.
 --
 -- Default is 'CopyContents'.
 --
-cpMethod :: CpMethod -> Cp -> Cp
+cpMethod :: CpMethod -> CpOptions -> CpOptions
 cpMethod opt options = options { optCopyMethod = opt }
 
 -- | Unconditionally copy the source to destination using the specified copy
@@ -121,7 +121,7 @@ cpShouldOverwrite option src dest =
             else return True
 
 -- | @cp option-modifier source destination@. Copy a file or directory.
-cp :: (Cp -> Cp) -> FilePath -> FilePath -> IO ()
+cp :: (CpOptions -> CpOptions) -> FilePath -> FilePath -> IO ()
 cp f src dest = do
     let options = f defaultOptions
     r <- cpShouldOverwrite (optOverwrite options) src dest
