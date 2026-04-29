@@ -209,19 +209,21 @@ jobs:
             #pack_options: >-
               #CABAL_PROJECT=cabal.project.d/master
 
+          # haddock fails with fusion-plugin
           - name: ci
             runner: ubuntu-latest
             command: cabal
             ghc_version: 9.4.7
-            #pack_options: >-
-              #CABAL_PROJECT=cabal.project.d/master
+            pack_options: >-
+              DISABLE_DOCS=y
 
+          # haddock fails with fusion-plugin
           - name: ci
             runner: ubuntu-latest
             command: cabal
             ghc_version: 9.2.8
-            #pack_options: >-
-              #CABAL_PROJECT=cabal.project.d/master
+            pack_options: >-
+              DISABLE_DOCS=y
 
           - name: no-docs
             runner: ubuntu-latest
