@@ -33,8 +33,7 @@ extra-doc-files:
     CHANGELOG.md
   , README.md
   , NOTICE
-  , design/proposal.md
-  , design/design-notes.md
+  , design/*.md
 
 source-repository head
     type: git

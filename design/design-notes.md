@@ -29,28 +29,6 @@ sugegsted above.
 We can basically wrap the Haskell functions in CLI parser and an output
 renderer to make a Unix like utility.
 
-## Module Naming
-
-We can either keep each utility in its own module or bundle them into a smaller
-set of modules. The latter would help reduce the imports. But it may be easier
-to remember the module names if they are based on the utility name.
-
-We should keep the naming non-conflicting such that if some wants to bundle
-them in a single module and re-export it should be possible. In fact we can
-provide a single coreutils module exporting everything.
-
-Each command must have its own module e.g. Coreutils.Cp for the cp command.
-
-The command options could be called "Options" in each module but then
-we may not be able to export all commands from a single module which is
-desirable. So we can choose to call the options of a command by the same
-name as the command itself e.g. "CpOptions".  We would not expose the
-CpOptions record outside the module but we would still need to export
-the type. Using a unique type for each command would help us use it
-unqualified.
-
-The command runner would be called "cp" so it would be "cp :: CpOptions -> IO ()".
-
 ## API for utilities
 
 There are two ways of writing the API, (1) use separate functions
