@@ -20,6 +20,9 @@ where
 
 import System.Directory (doesPathExist, renamePath)
 
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
+
 newtype Mv = Mv {mvForce :: Bool}
 
 defaultConfig :: Mv
@@ -28,16 +31,18 @@ defaultConfig = Mv False
 force :: Bool -> Mv -> Mv
 force opt cfg = cfg {mvForce = opt}
 
-mv :: (Mv -> Mv) -> FilePath -> FilePath -> IO ()
+mv :: (Mv -> Mv) -> Path -> Path -> IO ()
 mv f old new = do
     let opt = f defaultConfig
+        oldStr = Path.toString old
+        newStr = Path.toString new
     case mvForce opt of
-        True -> renamePath old new
+        True -> renamePath oldStr newStr
         False -> do
-            exists <- doesPathExist new
+            exists <- doesPathExist newStr
             if exists
             then error msg
-            else renamePath old new
+            else renamePath oldStr newStr
 
     where
 

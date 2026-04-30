@@ -18,11 +18,16 @@ where
 
 import System.Directory
 
-which :: String -> IO (Maybe FilePath)
-which = findExecutable
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
 
-whichAll :: String -> IO [FilePath]
-whichAll = findExecutables
+which :: String -> IO (Maybe Path)
+which name = findExecutable name >>= traverse Path.fromString
 
-whichAllIn :: [FilePath] -> String -> IO [FilePath]
-whichAllIn dirs = findExecutablesInDirectories dirs
+whichAll :: String -> IO [Path]
+whichAll name = findExecutables name >>= traverse Path.fromString
+
+whichAllIn :: [Path] -> String -> IO [Path]
+whichAllIn dirs name =
+    findExecutablesInDirectories (map Path.toString dirs) name
+        >>= traverse Path.fromString

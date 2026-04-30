@@ -14,5 +14,8 @@ where
 
 import System.FilePath (takeDirectory)
 
-dirname :: FilePath -> FilePath
-dirname = takeDirectory
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
+
+dirname :: Path -> IO Path
+dirname path = Path.fromString (takeDirectory (Path.toString path))

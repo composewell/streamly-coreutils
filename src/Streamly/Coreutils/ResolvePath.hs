@@ -49,13 +49,13 @@
 -- >>> _ = resolvePath (resolutionMode ResolveThenParent)   -- realpath -P
 -- >>> _ = resolvePath (resolutionMode ParentThenResolve)   -- realpath -L
 -- >>> _ = resolvePath (resolutionMode NoSymlinkResolution) -- realpath -s
--- >>> _ = resolvePath (relativeTo "/usr/bin")              -- realpath --relative-to=/usr/bin
--- >>> _ = resolvePath (relativeWithin "/usr")              -- realpath --relative-base=/usr
+-- >>> _ = resolvePath (relativeTo [path|/usr/bin|])              -- realpath --relative-to=/usr/bin
+-- >>> _ = resolvePath (relativeWithin [path|/usr|])              -- realpath --relative-base=/usr
 --
 -- Composed modifiers:
 --
 -- >>> -- realpath --relative-to=/usr/bin --relative-base=/usr
--- >>> _ = resolvePath (relativeTo "/usr/bin" . relativeWithin "/usr")
+-- >>> _ = resolvePath (relativeTo [path|/usr/bin|] . relativeWithin [path|/usr|])
 --
 -- == Caveats
 --
@@ -97,10 +97,16 @@ import System.FilePath
     (makeRelative, splitDirectories, joinPath, isAbsolute, takeDirectory)
 -- import System.IO.Error (ioError, userError)
 
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
+
 -- $setup
+-- >>> :set -XQuasiQuotes
 -- >>> import Control.Exception (try, SomeException)
 -- >>> import System.Directory (canonicalizePath, getCurrentDirectory, getTemporaryDirectory)
 -- >>> import System.FilePath ((</>), isAbsolute)
+-- >>> import Streamly.FileSystem.Path (path)
+-- >>> import qualified Streamly.FileSystem.Path as Path
 
 -- = Design notes
 --
@@ -240,8 +246,8 @@ data ResolutionMode
 data ResolvePathOptions = ResolvePathOptions
     { _existenceCheck :: ExistenceCheck
     , _resolutionMode :: ResolutionMode
-    , _relativeTo :: Maybe FilePath
-    , _relativeWithin :: Maybe FilePath
+    , _relativeTo :: Maybe Path
+    , _relativeWithin :: Maybe Path
     }
 
 -- Default configuration: the seed value that modifiers are composed
@@ -265,13 +271,13 @@ defaultConfig = ResolvePathOptions
 --
 -- 'RequirePath' rejects a path whose final component does not exist:
 --
--- >>> cwd <- getCurrentDirectory
+-- >>> cwd <- getCurrentDirectory >>= Path.fromString
 -- >>> r1 <- resolvePath (existenceCheck RequirePath) cwd
 -- >>> r2 <- resolvePath (existenceCheck RequirePath) r1
--- >>> r1 == r2
+-- >>> Path.toString r1 == Path.toString r2
 -- True
 --
--- >>> result <- try (resolvePath (existenceCheck RequirePath) "/definitely/does/not/exist/xyzzy") :: IO (Either SomeException FilePath)
+-- >>> result <- try (resolvePath (existenceCheck RequirePath) [path|/definitely/does/not/exist/xyzzy|]) :: IO (Either SomeException Path.Path)
 -- >>> either (const True) (const False) result
 -- True
 --
@@ -279,21 +285,21 @@ defaultConfig = ResolvePathOptions
 -- as its parent directory exists.
 --
 -- >>> tmp <- getTemporaryDirectory
--- >>> r1 <- resolvePath id (tmp </> "missing-leaf")
--- >>> r2 <- canonicalizePath (tmp </> "missing-leaf")
--- >>> r1 == r2
+-- >>> r1 <- resolvePath id =<< Path.fromString (tmp </> "missing-leaf")
+-- >>> r2 <- canonicalizePath (tmp </> "missing-leaf") >>= Path.fromString
+-- >>> Path.toString r1 == Path.toString r2
 -- True
 --
 -- 'RequireParents' rejects a path whose parent directory does not exist:
 --
--- >>> result <- try (resolvePath id "/definitely/does/not/exist/child") :: IO (Either SomeException FilePath)
+-- >>> result <- try (resolvePath id [path|/definitely/does/not/exist/child|]) :: IO (Either SomeException Path.Path)
 -- >>> either (const True) (const False) result
 -- True
 --
 -- 'RequireNone' accepts any path, whether it exists or not:
 --
--- >>> r <- resolvePath (existenceCheck RequireNone) "/definitely/does/not/exist/child"
--- >>> null r
+-- >>> r <- resolvePath (existenceCheck RequireNone) [path|/definitely/does/not/exist/child|]
+-- >>> null (Path.toString r)
 -- False
 existenceCheck :: ExistenceCheck -> ResolvePathOptions -> ResolvePathOptions
 existenceCheck check opts = opts { _existenceCheck = check }
@@ -314,20 +320,20 @@ existenceCheck check opts = opts { _existenceCheck = check }
 --
 -- >>> tmp <- getTemporaryDirectory
 -- >>> let opts m = resolutionMode m . existenceCheck RequireNone
--- >>> r1 <- resolvePath (opts ParentThenResolve) (tmp </> "a" </> ".." </> "b")
--- >>> r2 <- resolvePath (existenceCheck RequireNone) (tmp </> "b")
--- >>> r1 == r2
+-- >>> r1 <- resolvePath (opts ParentThenResolve) =<< Path.fromString (tmp </> "a" </> ".." </> "b")
+-- >>> r2 <- resolvePath (existenceCheck RequireNone) =<< Path.fromString (tmp </> "b")
+-- >>> Path.toString r1 == Path.toString r2
 -- True
 --
 -- 'NoSymlinkResolution' collapses @..@ and @.@ textually and performs no
 -- symlink resolution (so the base is not canonicalized - the result
 -- may differ from 'ResolveThenParent' when the base contains symlinks):
 --
--- >>> r <- resolvePath (opts NoSymlinkResolution) (tmp </> "a" </> ".." </> "b")
--- >>> r == tmp </> "b"
+-- >>> r <- resolvePath (opts NoSymlinkResolution) =<< Path.fromString (tmp </> "a" </> ".." </> "b")
+-- >>> Path.toString r == tmp </> "b"
 -- True
--- >>> r <- resolvePath (opts NoSymlinkResolution) (tmp </> "." </> "x")
--- >>> r == tmp </> "x"
+-- >>> r <- resolvePath (opts NoSymlinkResolution) =<< Path.fromString (tmp </> "." </> "x")
+-- >>> Path.toString r == tmp </> "x"
 -- True
 resolutionMode :: ResolutionMode -> ResolvePathOptions -> ResolvePathOptions
 resolutionMode mode opts = opts { _resolutionMode = mode }
@@ -346,9 +352,9 @@ resolutionMode mode opts = opts { _resolutionMode = mode }
 --
 -- A path relative to itself is @\".\"@:
 --
--- >>> resolvePath (relativeTo "/") "/"
+-- >>> Path.toString <$> resolvePath (relativeTo [path|/|]) [path|/|]
 -- "."
-relativeTo :: FilePath -> ResolvePathOptions -> ResolvePathOptions
+relativeTo :: Path -> ResolvePathOptions -> ResolvePathOptions
 relativeTo base opts = opts { _relativeTo = Just base }
 
 -- XXX realpath performs existence check for --relative-to path as well:
@@ -386,15 +392,15 @@ relativeTo base opts = opts { _relativeTo = Just base }
 --
 -- Inside the boundary, the path is relativized:
 --
--- >>> resolvePath (relativeWithin "/") "/missing-leaf"
+-- >>> Path.toString <$> resolvePath (relativeWithin [path|/|]) [path|/missing-leaf|]
 -- "missing-leaf"
 --
 -- Outside the boundary, the absolute path is returned unchanged:
 --
--- >>> tmp <- getTemporaryDirectory
--- >>> resolvePath (relativeWithin tmp) "/missing-leaf"
+-- >>> tmp <- getTemporaryDirectory >>= Path.fromString
+-- >>> Path.toString <$> resolvePath (relativeWithin tmp) [path|/missing-leaf|]
 -- "/missing-leaf"
-relativeWithin :: FilePath -> ResolvePathOptions -> ResolvePathOptions
+relativeWithin :: Path -> ResolvePathOptions -> ResolvePathOptions
 relativeWithin dir opts = opts { _relativeWithin = Just dir }
 
 -- Collapse @.@ and @..@ segments lexically. On absolute paths, @..@
@@ -403,7 +409,7 @@ relativeWithin dir opts = opts { _relativeWithin = Just dir }
 --
 -- Uses 'splitDirectories' / 'joinPath' from @filepath@ to stay
 -- platform-correct on separator handling.
-lexicalCollapse :: FilePath -> FilePath
+lexicalCollapse :: String -> String
 lexicalCollapse p =
     let parts = splitDirectories p
         absolute = isAbsolute p
@@ -428,7 +434,7 @@ lexicalCollapse p =
 
 -- Perform the pre-resolution existence check demanded by the given
 -- 'ExistenceCheck'. Throws 'IOError' on violation.
-checkExistence :: ExistenceCheck -> FilePath -> IO ()
+checkExistence :: ExistenceCheck -> String -> IO ()
 checkExistence check path = case check of
     RequireNone -> return ()
     RequirePath -> do
@@ -450,7 +456,7 @@ checkExistence check path = case check of
 -- Uses component-wise comparison via 'splitDirectories' so that
 -- partial-name matches (e.g. @\/foo@ vs @\/foobar@) don't register
 -- as containment.
-isPathUnder :: FilePath -> FilePath -> Bool
+isPathUnder :: String -> String -> Bool
 isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
 
 -- | Resolve a filesystem path to its canonical form, similar to the
@@ -467,21 +473,22 @@ isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
 -- In the default mode, the result for an existing directory is always
 -- an absolute path:
 --
--- >>> r <- resolvePath id "."
--- >>> isAbsolute r
+-- >>> r <- resolvePath id [path|.|]
+-- >>> isAbsolute (Path.toString r)
 -- True
 resolvePath
     :: (ResolvePathOptions -> ResolvePathOptions)
-    -> FilePath
-    -> IO FilePath
+    -> Path
+    -> IO Path
 resolvePath modifier path = do
     let opts = modifier defaultConfig
-    checkExistence (_existenceCheck opts) path
+        pathStr = Path.toString path
+    checkExistence (_existenceCheck opts) pathStr
     resolved <- case _resolutionMode opts of
-        ResolveThenParent -> canonicalizePath path
+        ResolveThenParent -> canonicalizePath pathStr
         ParentThenResolve ->
-            fmap lexicalCollapse (makeAbsolute path) >>= canonicalizePath
-        NoSymlinkResolution -> fmap lexicalCollapse (makeAbsolute path)
+            fmap lexicalCollapse (makeAbsolute pathStr) >>= canonicalizePath
+        NoSymlinkResolution -> fmap lexicalCollapse (makeAbsolute pathStr)
     -- Relativization and containment logic:
     --   * _relativeTo chooses the target to relativize against.
     --   * _relativeWithin gates whether relativization fires: if
@@ -493,13 +500,13 @@ resolvePath modifier path = do
             Just t -> Just t
             Nothing -> _relativeWithin opts
     case target of
-        Nothing -> return resolved
+        Nothing -> Path.fromString resolved
         Just t -> do
-            canonicalTarget <- canonicalizePath t
+            canonicalTarget <- canonicalizePath (Path.toString t)
             case _relativeWithin opts of
-                Nothing -> return (makeRelative canonicalTarget resolved)
+                Nothing -> Path.fromString (makeRelative canonicalTarget resolved)
                 Just boundary -> do
-                    canonicalBoundary <- canonicalizePath boundary
+                    canonicalBoundary <- canonicalizePath (Path.toString boundary)
                     if isPathUnder canonicalBoundary resolved
-                    then return (makeRelative canonicalTarget resolved)
-                    else return resolved
+                    then Path.fromString (makeRelative canonicalTarget resolved)
+                    else Path.fromString resolved

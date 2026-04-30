@@ -14,6 +14,9 @@ where
 
 import System.Directory (getSymbolicLinkTarget)
 
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
+
 -- | If the path is a symbolic link return the link target.
-readLink :: FilePath -> IO FilePath
-readLink = getSymbolicLinkTarget
+readLink :: Path -> IO Path
+readLink path = getSymbolicLinkTarget (Path.toString path) >>= Path.fromString

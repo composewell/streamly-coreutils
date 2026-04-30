@@ -34,6 +34,9 @@ where
 
 import System.Directory (createDirectory, createDirectoryIfMissing)
 
+import Streamly.FileSystem.Path (Path)
+import qualified Streamly.FileSystem.Path as Path
+
 -- Design Notes
 --
 -- No existOk: makeParents True implies exist-ok (matching coreutils -p behaviour).
@@ -74,16 +77,16 @@ makeParents opt cfg = cfg {mdParents = opt}
 parents :: Bool -> MkdirOptions -> MkdirOptions
 parents = makeParents
 
--- | Create a directory at the given 'FilePath'.
+-- | Create a directory at the given 'Path'.
 --
 -- The first argument is an options modifier applied to the default
 -- 'MkdirOptions'.  Pass 'id' to use all defaults.
 --
 -- >> mkdir id "a"                         -- create a single directory
 -- >> mkdir (makeParents True) "a/b/c"     -- create with missing parents
-mkdir :: (MkdirOptions -> MkdirOptions) -> FilePath -> IO ()
-mkdir f = do
+mkdir :: (MkdirOptions -> MkdirOptions) -> Path -> IO ()
+mkdir f path = do
   let opt = f defaultConfig
   case mdParents opt of
-      False -> createDirectory
-      True -> createDirectoryIfMissing True
+      False -> createDirectory (Path.toString path)
+      True -> createDirectoryIfMissing True (Path.toString path)
