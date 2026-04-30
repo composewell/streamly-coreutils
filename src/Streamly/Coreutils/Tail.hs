@@ -17,7 +17,7 @@ module Streamly.Coreutils.Tail
       tail
 
     -- * Options
-    , Tail
+    , TailOptions
     , follow
     , lines
     , bytes
@@ -38,14 +38,14 @@ import qualified Streamly.System.Command as Command
 
 import Prelude hiding (tail, lines)
 
-data Tail = Tail
+data TailOptions = TailOptions
     { _follow :: Bool
     , _offset :: Either Int Int -- Left = lines, Right = bytes
     , _reverse :: Bool
     }
 
-defaultConfig :: Tail
-defaultConfig = Tail
+defaultConfig :: TailOptions
+defaultConfig = TailOptions
     { _follow = False
     , _offset = Left 10
     , _reverse = False -- False means default i.e. from the end
@@ -54,7 +54,7 @@ defaultConfig = Tail
 -- | Run forever following any appends to the file.
 --
 -- Same as @--follow@ flag in the standard tail command.
-follow :: Bool -> Tail -> Tail
+follow :: Bool -> TailOptions -> TailOptions
 follow opt cfg = cfg {_follow = opt}
 
 -- Note we could have used negative offset to indicate from the end and
@@ -63,20 +63,20 @@ follow opt cfg = cfg {_follow = opt}
 
 -- | Read the specified number of lines at the end of the file.
 --
-lines :: Int -> Tail -> Tail
+lines :: Int -> TailOptions -> TailOptions
 lines x cfg = cfg {_offset = Left x, _reverse = False}
 
 -- | Read the specified number of bytes at the end of the file.
 --
-bytes :: Int -> Tail -> Tail
+bytes :: Int -> TailOptions -> TailOptions
 bytes x cfg = cfg {_offset = Right x, _reverse = False}
 
 -- | Read from the specified line number up to the end of file.
-fromLine :: Int -> Tail -> Tail
+fromLine :: Int -> TailOptions -> TailOptions
 fromLine x cfg = cfg {_offset = Left x, _reverse = True}
 
 -- | Read from the specified byte count up to the end of file.
-fromByte :: Int -> Tail -> Tail
+fromByte :: Int -> TailOptions -> TailOptions
 fromByte x cfg = cfg {_offset = Right x, _reverse = True}
 
 -- XXX Replace the "tail" shell command with Haskell native implementation. A
@@ -92,7 +92,7 @@ fromByte x cfg = cfg {_offset = Right x, _reverse = True}
 --
 -- Note: currently this function depends on the @tail@ executable being
 -- installed in the PATH.
-tail :: (Tail -> Tail) -> Path -> Stream IO (Array Word8)
+tail :: (TailOptions -> TailOptions) -> Path -> Stream IO (Array Word8)
 tail modifier path =
     let p = Path.toString path
         cfg = modifier defaultConfig

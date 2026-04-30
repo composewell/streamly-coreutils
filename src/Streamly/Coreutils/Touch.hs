@@ -13,7 +13,7 @@ module Streamly.Coreutils.Touch
       touch
 
     -- * Options
-    , Touch
+    , TouchOptions
     , create -- XXX rename for conflicts
     , followLinks -- XXX this is a common option in multiple commands
     )
@@ -30,21 +30,21 @@ import qualified System.Posix.Files as Posix (touchSymbolicLink)
 #endif
 import qualified System.PosixCompat.Files as Posix
 
-data Touch = Touch
+data TouchOptions = TouchOptions
     {
       createNew :: Bool
     , deRef :: Bool   -- touch the referenced file for symbolic link
     }
 
-defaultConfig :: Touch
-defaultConfig = Touch True True
+defaultConfig :: TouchOptions
+defaultConfig = TouchOptions True True
 
 -- | Default is 'True'.
-followLinks :: Bool -> Touch -> Touch
+followLinks :: Bool -> TouchOptions -> TouchOptions
 followLinks opt cfg = cfg {deRef = opt}
 
 -- | Default is 'True'.
-create :: Bool -> Touch -> Touch
+create :: Bool -> TouchOptions -> TouchOptions
 create opt cfg = cfg {createNew = opt}
 
 -- | If the file does not exist create it only if both followLinks and create
@@ -62,7 +62,7 @@ create opt cfg = cfg {createNew = opt}
 -- * create True
 -- * followLinks True
 --
-touch :: (Touch -> Touch) -> Path -> IO ()
+touch :: (TouchOptions -> TouchOptions) -> Path -> IO ()
 touch f path = do
     let opt = f defaultConfig
         pathStr = Path.toString path

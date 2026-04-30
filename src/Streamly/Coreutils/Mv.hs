@@ -13,7 +13,7 @@ module Streamly.Coreutils.Mv
       mv
 
     -- * Options
-    , Mv
+    , MvOptions
     , force
     )
 where
@@ -23,15 +23,15 @@ import System.Directory (doesPathExist, renamePath)
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-newtype Mv = Mv {mvForce :: Bool}
+newtype MvOptions = MvOptions {mvForce :: Bool}
 
-defaultConfig :: Mv
-defaultConfig = Mv False
+defaultConfig :: MvOptions
+defaultConfig = MvOptions False
 
-force :: Bool -> Mv -> Mv
+force :: Bool -> MvOptions -> MvOptions
 force opt cfg = cfg {mvForce = opt}
 
-mv :: (Mv -> Mv) -> Path -> Path -> IO ()
+mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
 mv f old new = do
     let opt = f defaultConfig
         oldStr = Path.toString old

@@ -12,7 +12,7 @@ module Streamly.Coreutils.Ln
     ( ln
 
     -- * Options
-    , Ln
+    , LnOptions
     , force
     , symbolic
     )
@@ -25,21 +25,21 @@ import qualified System.PosixCompat.Files as Posix
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-data Ln = Ln
+data LnOptions = LnOptions
     { lnForce :: Bool
     , lnSymbolic :: Bool
     }
 
-defaultConfig :: Ln
-defaultConfig = Ln False False
+defaultConfig :: LnOptions
+defaultConfig = LnOptions False False
 
-force :: Bool -> Ln -> Ln
+force :: Bool -> LnOptions -> LnOptions
 force opt cfg = cfg {lnForce = opt}
 
-symbolic :: Bool -> Ln -> Ln
+symbolic :: Bool -> LnOptions -> LnOptions
 symbolic opt cfg = cfg {lnSymbolic = opt}
 
-ln :: (Ln -> Ln) -> Path -> Path -> IO ()
+ln :: (LnOptions -> LnOptions) -> Path -> Path -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
     when (lnForce opt == False) $ do

@@ -16,7 +16,7 @@ module Streamly.Coreutils.Stat
       stat
 
     -- * Options
-    , Stat
+    , StatOptions
     , followLinks
     ) where
 
@@ -27,15 +27,15 @@ import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 import qualified System.PosixCompat.Files as Files
 
-newtype  Stat = Stat {deRef :: Bool}
+newtype  StatOptions = StatOptions {deRef :: Bool}
 
-defaultConfig :: Stat
-defaultConfig = Stat True
+defaultConfig :: StatOptions
+defaultConfig = StatOptions True
 
-followLinks :: Bool -> Stat -> Stat
+followLinks :: Bool -> StatOptions -> StatOptions
 followLinks opt cfg = cfg {deRef = opt}
 
-stat :: (Stat -> Stat) -> Path -> IO FileStatus
+stat :: (StatOptions -> StatOptions) -> Path -> IO FileStatus
 stat f path = do
     let opt = f defaultConfig
     case deRef opt of

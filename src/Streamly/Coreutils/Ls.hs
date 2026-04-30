@@ -13,7 +13,7 @@ module Streamly.Coreutils.Ls
       ls
 
     -- * Options
-    , Ls
+    , LsOptions
     , recursive
     )
 where
@@ -33,15 +33,15 @@ import qualified Streamly.Internal.FileSystem.DirIO as Dir
 -- with newlines and short or long info in this API which are directly
 -- printable. In the "find" API we can return Path and structured Stat data
 -- instead for programmatic control.
-newtype Ls = Ls {lsRecursive :: Bool}
+newtype LsOptions = LsOptions {lsRecursive :: Bool}
 
-defaultConfig :: Ls
-defaultConfig = Ls False
+defaultConfig :: LsOptions
+defaultConfig = LsOptions False
 
-recursive :: Bool -> Ls -> Ls
+recursive :: Bool -> LsOptions -> LsOptions
 recursive opt cfg = cfg {lsRecursive = opt}
 
-ls :: (Ls -> Ls) -> Path -> Stream IO (Either Path Path)
+ls :: (LsOptions -> LsOptions) -> Path -> Stream IO (Either Path Path)
 ls f dir = do
     case lsRecursive (f defaultConfig) of
         False -> Dir.readEitherPaths id dir
