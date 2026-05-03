@@ -167,9 +167,7 @@ library
 
   hs-source-dirs:      src
   exposed-modules:
-      Streamly.Coreutils
-    , Streamly.Coreutils.Chmod
-    , Streamly.Coreutils.Common
+      Streamly.Coreutils.Chmod
     , Streamly.Coreutils.Cp
     , Streamly.Coreutils.Cut
     , Streamly.Coreutils.Directory
@@ -197,7 +195,9 @@ library
           Streamly.Coreutils.FileTest.Posix
         , Streamly.Coreutils.Id
   other-modules:
-      Streamly.Coreutils.FileTest.Common
+      Streamly.Coreutils
+    , Streamly.Coreutils.Common
+    , Streamly.Coreutils.FileTest.Common
     , Streamly.Coreutils.String
     , Streamly.Coreutils.Uniq
 
