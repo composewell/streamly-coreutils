@@ -8,7 +8,7 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Tests for 'Streamly.Coreutils.Rm'. Behavior mirrors GNU @rm@ unless noted
+-- Tests for 'Coreutils.Rm'. Behavior mirrors GNU @rm@ unless noted
 -- otherwise in the module documentation.
 --
 -- = Test Structure
@@ -64,8 +64,8 @@ import System.Posix.User (getRealUserID)
 import System.Posix.Types (FileMode)
 import Test.Hspec
 
-import Streamly.Coreutils.Rm hiding (rm)
-import qualified Streamly.Coreutils.Rm as Rm
+import Coreutils.Rm hiding (rm)
+import qualified Coreutils.Rm as Rm
 import qualified Streamly.FileSystem.Path as Path
 
 -------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Ls
+-- Module      : Coreutils.Ls
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- List directory contents.
 
-module Streamly.Coreutils.Ls
+module Coreutils.Ls
     (
       ls
 

@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Cut
+-- Module      : Coreutils.Cut
 -- Copyright   : (c) 2025 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Functionality equivalent to the @cut@ command.
 
-module Streamly.Coreutils.Cut
+module Coreutils.Cut
     ( foldIndicesBy -- XXX rename to cut
 
     -- * Deprecated

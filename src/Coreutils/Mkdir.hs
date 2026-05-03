@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Mkdir
+-- Module      : Coreutils.Mkdir
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -18,7 +18,7 @@
 -- create the directories when doctest is run which is an unexpected side
 -- effect. We can do that in CIs though.
 --
-module Streamly.Coreutils.Mkdir
+module Coreutils.Mkdir
     (
       mkdir
 

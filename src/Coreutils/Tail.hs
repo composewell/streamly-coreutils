@@ -1,6 +1,6 @@
 {-# LANGUAGE QuasiQuotes #-}
 -- |
--- Module      : Streamly.Coreutils.Tail
+-- Module      : Coreutils.Tail
 -- Copyright   : (c) 2025 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -12,7 +12,7 @@
 -- TODO: we can add a tail1 or last to read the last line.
 -- TODO: tail/head can be replaced with a single file reading utility which can
 -- read lines or bytes in a range.
-module Streamly.Coreutils.Tail
+module Coreutils.Tail
     (
       tail
 

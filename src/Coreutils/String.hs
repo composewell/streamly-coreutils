@@ -1,12 +1,12 @@
 -- |
--- Module      : Streamly.Coreutils.String
+-- Module      : Coreutils.String
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
 -- Stability   : experimental
 -- Portability : GHC
 --
-module Streamly.Coreutils.String
+module Coreutils.String
     (
         deIndent
     )

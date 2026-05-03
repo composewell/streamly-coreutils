@@ -167,39 +167,39 @@ library
 
   hs-source-dirs:      src
   exposed-modules:
-      Streamly.Coreutils.Chmod
-    , Streamly.Coreutils.Cp
-    , Streamly.Coreutils.Cut
-    , Streamly.Coreutils.Directory
-    , Streamly.Coreutils.Dirname
-    , Streamly.Coreutils.FileTest
-    , Streamly.Coreutils.Find
-    , Streamly.Coreutils.Ln
-    , Streamly.Coreutils.Ls
-    , Streamly.Coreutils.Mkdir
-    , Streamly.Coreutils.Mv
-    , Streamly.Coreutils.ReadLink
-    , Streamly.Coreutils.ResolvePath
-    , Streamly.Coreutils.Rm
-    , Streamly.Coreutils.Sh
-    , Streamly.Coreutils.Sleep
-    , Streamly.Coreutils.Stat
-    , Streamly.Coreutils.Tail
-    , Streamly.Coreutils.Touch
-    , Streamly.Coreutils.Which
+      Coreutils.Chmod
+    , Coreutils.Cp
+    , Coreutils.Cut
+    , Coreutils.Directory
+    , Coreutils.Dirname
+    , Coreutils.FileTest
+    , Coreutils.Find
+    , Coreutils.Ln
+    , Coreutils.Ls
+    , Coreutils.Mkdir
+    , Coreutils.Mv
+    , Coreutils.ReadLink
+    , Coreutils.ResolvePath
+    , Coreutils.Rm
+    , Coreutils.Sh
+    , Coreutils.Sleep
+    , Coreutils.Stat
+    , Coreutils.Tail
+    , Coreutils.Touch
+    , Coreutils.Which
   if os(windows)
       exposed-modules:
-          Streamly.Coreutils.FileTest.Windows
+          Coreutils.FileTest.Windows
   else
       exposed-modules:
-          Streamly.Coreutils.FileTest.Posix
-        , Streamly.Coreutils.Id
+          Coreutils.FileTest.Posix
+        , Coreutils.Id
   other-modules:
-      Streamly.Coreutils
-    , Streamly.Coreutils.Common
-    , Streamly.Coreutils.FileTest.Common
-    , Streamly.Coreutils.String
-    , Streamly.Coreutils.Uniq
+      Coreutils
+    , Coreutils.Common
+    , Coreutils.FileTest.Common
+    , Coreutils.String
+    , Coreutils.Uniq
 
   default-language:    Haskell2010
 
@@ -230,7 +230,7 @@ executable hfd
 -- Test suites
 -------------------------------------------------------------------------------
 
-test-suite Streamly.Coreutils.Rm
+test-suite Coreutils.Rm
   import: compile-options
   type: exitcode-stdio-1.0
   main-is: Streamly/Test/Coreutils/Rm.hs

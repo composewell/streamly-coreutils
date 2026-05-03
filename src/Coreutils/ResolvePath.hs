@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.ResolvePath
+-- Module      : Coreutils.ResolvePath
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -77,7 +77,7 @@
 --   via @..@: @\/link\/..@ lexically resolves to @\/@, but physically
 --   resolves to the parent of the symlink's target.
 
-module Streamly.Coreutils.ResolvePath
+module Coreutils.ResolvePath
     ( ResolvePathOptions
     , ExistenceCheck (..)
     , ResolutionMode (..)

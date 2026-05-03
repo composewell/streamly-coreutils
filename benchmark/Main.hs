@@ -7,7 +7,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Gauge
 import Streamly.Data.Stream (Stream)
 import System.Random
-import Streamly.Coreutils.Uniq
+import Coreutils.Uniq
 
 import qualified Streamly.Data.Stream as S
 import qualified Streamly.Data.Fold as Fold

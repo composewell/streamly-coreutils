@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Ln
+-- Module      : Coreutils.Ln
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- create a link to TARGET with the given name
 
-module Streamly.Coreutils.Ln
+module Coreutils.Ln
     ( ln
 
     -- * Options
@@ -19,7 +19,7 @@ module Streamly.Coreutils.Ln
 where
 
 import Control.Monad (when)
-import Streamly.Coreutils.FileTest (test, doesItExist)
+import Coreutils.FileTest (test, doesItExist)
 
 import qualified System.PosixCompat.Files as Posix
 import Streamly.FileSystem.Path (Path)

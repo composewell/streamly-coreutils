@@ -2,7 +2,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 -- | This module is deprecated. Use 'Data.Bool' and 'Bool' instead.
-module Streamly.Coreutils.Common
+module Coreutils.Common
     {-# DEPRECATED "This module is deprecated. Please use 'Bool' from 'Data.Bool' instead." #-}
     ( Switch
 #if __GLASGOW_HASKELL__ >= 914

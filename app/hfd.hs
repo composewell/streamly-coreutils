@@ -25,7 +25,7 @@ import qualified Streamly.Data.Stream.Prelude as Stream
 import qualified Streamly.FileSystem.Handle as Handle
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.Find
+import Coreutils.Find
     ( FindOptions
     , findByteChunked
     , maxResults
@@ -114,7 +114,7 @@ parserInfo =
         (configParser <**> helper)
         (fullDesc
             <> briefDesc
-            <> progDesc "A basic fd-like driver for Streamly.Coreutils.Find."
+            <> progDesc "A basic fd-like driver for Coreutils.Find."
             <> header "hfd")
 
 main :: IO ()

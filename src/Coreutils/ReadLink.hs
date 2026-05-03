@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.ReadLink
+-- Module      : Coreutils.ReadLink
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Returns resolved symbolic link target.
 
-module Streamly.Coreutils.ReadLink
+module Coreutils.ReadLink
     (readLink)
 where
 

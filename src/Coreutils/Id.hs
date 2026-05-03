@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 -- |
--- Module      : Streamly.Coreutils.Id
+-- Module      : Coreutils.Id
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -12,7 +12,7 @@
 -- Provides the read-only functionality of the @id@, @whoami@, and @logname@
 -- coreutils commands, intended for programmatic use.
 
-module Streamly.Coreutils.Id
+module Coreutils.Id
     (
     -- * Options
     -- | Start from 'defaultConfig' (effective user) and compose modifiers.
@@ -76,7 +76,7 @@ import qualified System.Posix.User as Posix
 --   an arbitrary named user (i.e. @id \<username\>@) is a separate concern
 --   that requires reading the user/group database (@/etc/passwd@,
 --   @/etc/group@, NSS, etc.). That functionality will live in a separate
---   module (e.g. @Streamly.Coreutils.UserDB@) and is not implemented here.
+--   module (e.g. @Coreutils.UserDB@) and is not implemented here.
 --
 -- * __Scope: read-only.__ Setting the uid/gid of the current process
 --   (@setuid@, @setgid@) is the domain of @sudo@-style utilities and has
@@ -131,7 +131,7 @@ import qualified System.Posix.User as Posix
 ------------------------------------------------------------------------------
 
 -- These functions are user/group-DB lookups. They logically belong in a
--- future Streamly.Coreutils.UserDB module and will likely move there; a
+-- future Coreutils.UserDB module and will likely move there; a
 -- re-export from here may be kept for backwards compatibility when that
 -- happens.
 

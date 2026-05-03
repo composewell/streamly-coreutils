@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.FileTest
+-- Module      : Coreutils.FileTest
 -- Copyright   : (c) 2021 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -72,7 +72,7 @@
 -- >>> _ <- test [path|/usr/bin/ls|] (isReadable `and_` size (> 4096))
 -- >>> _ <- test [path|/usr/bin/ls|] (modifyTimeComparedTo [path|reference.txt|] (>))
 
-module Streamly.Coreutils.FileTest
+module Coreutils.FileTest
     (
     -- * File Test Predicate Type
       FileTest
@@ -249,13 +249,13 @@ import System.Posix.Types (Fd, FileMode)
 import qualified System.PosixCompat.Files as Files
 
 #if !defined(CABAL_OS_WINDOWS)
-import qualified Streamly.Coreutils.FileTest.Posix as FileTest
+import qualified Coreutils.FileTest.Posix as FileTest
 #else
-import qualified Streamly.Coreutils.FileTest.Windows as FileTest
+import qualified Coreutils.FileTest.Windows as FileTest
 #endif
 
 import Streamly.FileSystem.Path (Path)
-import Streamly.Coreutils.FileTest.Common
+import Coreutils.FileTest.Common
 import Prelude hiding (and, or)
 
 -- $setup

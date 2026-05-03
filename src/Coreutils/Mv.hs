@@ -1,5 +1,5 @@
 -- |
--- Module      : Streamly.Coreutils.Mv
+-- Module      : Coreutils.Mv
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Rename source to dest, or move source(s) to directory.
 
-module Streamly.Coreutils.Mv
+module Coreutils.Mv
     (
       mv
 

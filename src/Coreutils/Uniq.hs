@@ -1,4 +1,4 @@
-module Streamly.Coreutils.Uniq
+module Coreutils.Uniq
     ( Output(..)
     , UniqResult(..)
     , UniqOptions(..)
