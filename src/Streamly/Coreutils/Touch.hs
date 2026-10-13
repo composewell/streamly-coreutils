@@ -19,7 +19,6 @@ module Streamly.Coreutils.Touch
     )
 where
 
-import Control.Monad (unless)
 import Streamly.Coreutils.FileTest (test, doesItExist)
 import System.IO (openFile, IOMode(WriteMode), hClose)
 import Streamly.FileSystem.Path (Path)
@@ -69,7 +68,9 @@ touch f path = do
     if (createNew opt == True && deRef opt == True)
     then do
         found <- test path doesItExist
-        unless found $ openFile pathStr WriteMode >>= hClose
+        if found
+        then Posix.touchFile pathStr
+        else openFile pathStr WriteMode >>= hClose
     else
         case deRef opt of
             True -> Posix.touchFile pathStr
