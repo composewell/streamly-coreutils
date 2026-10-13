@@ -11,16 +11,21 @@
 module Streamly.Coreutils.Mv
     (
       mv
+    , mvMany
 
     -- * Options
     , MvOptions
     , Overwrite (..)
     , overwrite
+    , intoDirectory
     )
 where
 
-import Control.Monad (when)
-import System.Directory (renamePath)
+import Control.Exception (IOException, try)
+import Control.Monad (unless, when)
+import Data.Either (lefts)
+import System.Directory (doesDirectoryExist, renamePath)
+import System.FilePath (dropTrailingPathSeparator, takeFileName, (</>))
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
@@ -34,12 +39,27 @@ import Streamly.Coreutils.Overwrite (Overwrite(..), shouldOverwrite)
 --   'OverwriteNever' a destination created between the check and the rename
 --   is still replaced. GNU @mv@ avoids this race with @renameat2@ and
 --   @RENAME_NOREPLACE@ on Linux.
+--
+-- * 'mv' takes one source and 'mvMany' takes a list, instead of one function
+--   taking a list: with one source the destination may be a new name, with
+--   several it must be an existing directory.
+--
+-- * 'mvMany' raises one 'userError' listing every failure instead of
+--   rethrowing the first 'IOException': with several failures there is no
+--   single error type to keep. A caller that needs to handle each failure
+--   can call 'mv' per source.
 
--- | Options for 'mv'.
-newtype MvOptions = MvOptions {mvOverwrite :: Overwrite}
+-- | Options for 'mv' and 'mvMany'.
+data MvOptions = MvOptions
+    { mvOverwrite :: Overwrite
+    , mvIntoDirectory :: Bool
+    }
 
 defaultConfig :: MvOptions
-defaultConfig = MvOptions OverwriteAlways
+defaultConfig = MvOptions
+    { mvOverwrite = OverwriteAlways
+    , mvIntoDirectory = True
+    }
 
 -- | Specify what to do when the destination exists. See 'Overwrite'.
 --
@@ -60,10 +80,79 @@ defaultConfig = MvOptions OverwriteAlways
 overwrite :: Overwrite -> MvOptions -> MvOptions
 overwrite opt cfg = cfg {mvOverwrite = opt}
 
--- | @mv modifier source dest@ renames @source@ to @dest@. Pass 'id' for
--- defaults; each modifier documents its own default.
-mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
-mv f old new = do
+-- | The destination of 'mv' can be a file or a directory. When the
+-- destination is an existing directory, or a symlink to one, 'mv' can
+-- either move the source into the directory or rename the source to the
+-- directory's name. 'intoDirectory' chooses between the two.
+--
+-- With 'True', @mv id "a" "d"@ moves @a@ into the directory @d@, to @d/a@.
+--
+-- With 'False', @mv (intoDirectory False) "a" "d"@ renames @a@ to @d@,
+-- like GNU @mv -T@. On POSIX systems the rename succeeds only if @a@ is
+-- also a directory and @d@ is empty; @d@ is then replaced by @a@.
+-- When @d@ is a symlink to a directory and @a@ is not a directory, GNU
+-- @mv -T@ replaces the symlink with @a@. 'mv' does the same on POSIX
+-- systems, but on Windows the rename fails because @MoveFileEx@ cannot
+-- replace a directory symlink with a file.
+--
+-- When the destination does not exist or is not a directory, 'mv' renames
+-- the source to the destination and ignores this option. 'mvMany' always
+-- moves the sources into the directory and ignores this option.
+--
+-- Default (without this modifier): 'True', like GNU @mv@.
+intoDirectory :: Bool -> MvOptions -> MvOptions
+intoDirectory opt cfg = cfg {mvIntoDirectory = opt}
+
+-- Rename src to dest, subject to the overwrite option.
+moveTo :: MvOptions -> Path -> Path -> IO ()
+moveTo opt src dest = do
+    r <- shouldOverwrite testl (mvOverwrite opt) src dest
+    when r $ renamePath (Path.toString src) (Path.toString dest)
+
+-- The last component of src, ignoring trailing separators, under dir, like
+-- GNU mv. Path.takeFileName returns Nothing when there are trailing
+-- separators, so FilePath is used instead.
+targetInDir :: Path -> Path -> IO Path
+targetInDir dir src =
+    let name = takeFileName $ dropTrailingPathSeparator $ Path.toString src
+     in Path.fromString (Path.toString dir </> name)
+
+-- | @mvMany modifier sources dir@ moves each of @sources@ into the existing
+-- directory @dir@, like GNU @mv -t dir sources...@. Pass 'id' for defaults;
+-- each modifier documents its own default.
+--
+-- Raises an 'IOError' without moving anything if @dir@ is not a directory
+-- or a symlink to one. A source that fails to move does not stop the
+-- others, like GNU @mv@; after all sources are tried, an 'IOError' listing
+-- each failure is raised.
+mvMany :: (MvOptions -> MvOptions) -> [Path] -> Path -> IO ()
+mvMany f srcs dir = do
     let opt = f defaultConfig
-    r <- shouldOverwrite testl (mvOverwrite opt) old new
-    when r $ renamePath (Path.toString old) (Path.toString new)
+        dirStr = Path.toString dir
+    isDir <- doesDirectoryExist dirStr
+    unless isDir $
+        ioError (userError ("mv: target is not a directory: " ++ dirStr))
+    results <- mapM (moveOne opt) srcs
+    case lefts results of
+        [] -> return ()
+        errs -> ioError (userError (unlines (map show errs)))
+
+    where
+
+    moveOne :: MvOptions -> Path -> IO (Either IOException ())
+    moveOne opt src = try (targetInDir dir src >>= moveTo opt src)
+
+-- | @mv modifier source dest@ renames @source@ to @dest@. If @dest@ is an
+-- existing directory, or a symlink to one, @source@ is moved into it; see
+-- 'intoDirectory'. Pass 'id' for defaults; each modifier documents its own
+-- default.
+mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
+mv f src dest = do
+    let opt = f defaultConfig
+    isDir <-
+        if mvIntoDirectory opt
+        then doesDirectoryExist (Path.toString dest)
+        else return False
+    if isDir
+    then targetInDir dest src >>= moveTo opt src
+    else moveTo opt src dest
