@@ -21,6 +21,7 @@ where
 
 import Streamly.Coreutils.FileTest (test, doesItExist)
 import System.IO (IOMode(AppendMode))
+import System.IO.Error (catchIOError, isDoesNotExistError)
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
@@ -45,7 +46,10 @@ defaultConfig = TouchOptions True True
 followSymlinks :: Bool -> TouchOptions -> TouchOptions
 followSymlinks opt cfg = cfg {deRef = opt}
 
--- | Default is 'True'.
+-- | When 'False', do not create a missing file and do not report an error
+-- for it, like @touch -c@.
+--
+-- Default (without this modifier): 'True', a missing file is created.
 create :: Bool -> TouchOptions -> TouchOptions
 create opt cfg = cfg {createNew = opt}
 
@@ -77,7 +81,7 @@ touch f path = do
         -- AppendMode does not truncate a file created after the check.
         else File.withFile path AppendMode (\_ -> return ())
     else
-        case deRef opt of
+        ignoreMissing opt $ case deRef opt of
             True -> Posix.touchFile pathStr
 #if !defined (CABAL_OS_WINDOWS)
             False -> Posix.touchSymbolicLink pathStr
@@ -85,3 +89,12 @@ touch f path = do
             -- XXX Is it possible to support this on Windows?
             False -> error "touch: followSymlinks=False not supported on Windows"
 #endif
+
+    where
+
+    -- GNU touch -c ignores ENOENT, including a missing parent directory.
+    ignoreMissing opt action
+        | createNew opt = action
+        | otherwise =
+            action `catchIOError` \e ->
+                if isDoesNotExistError e then return () else ioError e
