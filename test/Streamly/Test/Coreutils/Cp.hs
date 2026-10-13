@@ -17,12 +17,16 @@ import Control.Exception (bracket, try, SomeException)
 import Control.Monad (void)
 import Data.Time.Clock (addUTCTime, getCurrentTime)
 import System.Directory
-    ( createFileLink
+    ( createDirectory
+    , createDirectoryLink
+    , createFileLink
+    , doesDirectoryExist
     , doesPathExist
     , getTemporaryDirectory
     , pathIsSymbolicLink
     , removePathForcibly
     , setModificationTime
+    , withCurrentDirectory
     )
 import System.FilePath ((</>))
 import System.IO.Temp (createTempDirectory)
@@ -173,6 +177,102 @@ main = hspec $ do
             modeOf (d </> "b") `shouldReturn` 0o600
             (d </> "b") `shouldContain'` "a"
 #endif
+
+    describe "cp (directory destination)" $ do
+
+        it "copies a file into an existing directory" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            cp id (d </> "a") (d </> "dir")
+            (d </> "dir" </> "a") `shouldContain'` "a"
+            (d </> "a") `shouldContain'` "a"
+
+        it "copies into a directory given with a trailing separator"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            cp id (d </> "a") (d </> "dir/")
+            (d </> "dir" </> "a") `shouldContain'` "a"
+
+        it "copies into the directory a symlink points to"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            createDirectoryLink "dir" (d </> "link")
+            cp id (d </> "a") (d </> "link")
+            (d </> "dir" </> "a") `shouldContain'` "a"
+
+        it "uses the last component of a source path"
+            $ withTempDir $ \d -> do
+            createDirectory (d </> "src")
+            writeFile (d </> "src" </> "a") "a"
+            createDirectory (d </> "dir")
+            cp id (d </> "src" </> "a") (d </> "dir")
+            (d </> "dir" </> "a") `shouldContain'` "a"
+            shouldNotExist (d </> "dir" </> "src")
+
+        it "overwrites a file of the same name in the directory"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            writeFile (d </> "dir" </> "a") "longer old content"
+            cp id (d </> "a") (d </> "dir")
+            (d </> "dir" </> "a") `shouldContain'` "a"
+
+        it "keeps a file of the same name with OverwriteNever"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            writeFile (d </> "dir" </> "a") "old"
+            cp (overwrite OverwriteNever) (d </> "a") (d </> "dir")
+            (d </> "dir" </> "a") `shouldContain'` "old"
+
+        it "fails to replace a directory in the destination with a file"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            createDirectory (d </> "dir" </> "a")
+            shouldFail (cp id (d </> "a") (d </> "dir"))
+            doesDirectoryExist (d </> "dir" </> "a") `shouldReturn` True
+
+        it "fails if the source is already in the directory"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            shouldFail (cp id (d </> "a") d)
+            (d </> "a") `shouldContain'` "a"
+
+        it "hard links into the directory with HardLink"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            cp (cpMethod HardLink) (d </> "a") (d </> "dir")
+            appendFile (d </> "a") "b"
+            (d </> "dir" </> "a") `shouldContain'` "ab"
+
+        it "works with relative paths" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            withCurrentDirectory d $ cp id "a" "dir"
+            (d </> "dir" </> "a") `shouldContain'` "a"
+
+        it "works with non-ASCII names" $ withTempDir $ \d -> do
+            writeFile (d </> nonAscii) "a"
+            createDirectory (d </> "dir")
+            cp id (d </> nonAscii) (d </> "dir")
+            (d </> "dir" </> nonAscii) `shouldContain'` "a"
+
+    describe "cp (intoDirectory False)" $ do
+
+        it "fails on an existing directory" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            shouldFail (cp (intoDirectory False) (d </> "a") (d </> "dir"))
+            shouldNotExist (d </> "dir" </> "a")
+
+        it "copies a file to a new name" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            cp (intoDirectory False) (d </> "a") (d </> "b")
+            (d </> "b") `shouldContain'` "a"
 
     describe "cp (overwrite OverwriteNever)" $ do
 

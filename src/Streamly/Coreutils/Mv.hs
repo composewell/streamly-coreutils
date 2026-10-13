@@ -24,15 +24,14 @@ where
 import Control.Exception (IOException, try)
 import Control.Monad (unless, void, when)
 import Data.Either (lefts)
-import System.Directory (doesDirectoryExist, renamePath)
-import System.FilePath (dropTrailingPathSeparator, takeFileName, (</>))
+import System.Directory (renamePath)
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.FileTest (testl)
+import Streamly.Coreutils.FileTest (and_, doesItExist, isDir, test, testl)
 import Streamly.Coreutils.Overwrite
-    (Overwrite(..), destinationExistsError, shouldOverwrite)
+    (Overwrite(..), destinationExistsError, shouldOverwrite, targetInDir)
 import Streamly.Coreutils.Rename (renameNoReplace)
 
 -- = Design notes
@@ -125,14 +124,6 @@ moveTo opt src dest =
             r <- shouldOverwrite testl option src dest
             when r $ renamePath (Path.toString src) (Path.toString dest)
 
--- The last component of src, ignoring trailing separators, under dir, like
--- GNU mv. Path.takeFileName returns Nothing when there are trailing
--- separators, so FilePath is used instead.
-targetInDir :: Path -> Path -> IO Path
-targetInDir dir src =
-    let name = takeFileName $ dropTrailingPathSeparator $ Path.toString src
-     in Path.fromString (Path.toString dir </> name)
-
 -- | @mvMany modifier sources dir@ moves each of @sources@ into the existing
 -- directory @dir@, like GNU @mv -t dir sources...@. Pass 'id' for defaults;
 -- each modifier documents its own default.
@@ -145,8 +136,8 @@ mvMany :: (MvOptions -> MvOptions) -> [Path] -> Path -> IO ()
 mvMany f srcs dir = do
     let opt = f defaultConfig
         dirStr = Path.toString dir
-    isDir <- doesDirectoryExist dirStr
-    unless isDir $
+    dirIsDir <- test dir (doesItExist `and_` isDir)
+    unless dirIsDir $
         ioError (userError ("mv: target is not a directory: " ++ dirStr))
     results <- mapM (moveOne opt) srcs
     case lefts results of
@@ -165,10 +156,10 @@ mvMany f srcs dir = do
 mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
 mv f src dest = do
     let opt = f defaultConfig
-    isDir <-
+    destIsDir <-
         if mvIntoDirectory opt
-        then doesDirectoryExist (Path.toString dest)
+        then test dest (doesItExist `and_` isDir)
         else return False
-    if isDir
+    if destIsDir
     then targetInDir dest src >>= moveTo opt src
     else moveTo opt src dest

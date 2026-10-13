@@ -18,6 +18,7 @@ module Streamly.Coreutils.Cp
     , overwrite
     , CpMethod (..)
     , cpMethod
+    , intoDirectory
     )
 where
 
@@ -38,7 +39,8 @@ import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.FileTest
-import Streamly.Coreutils.Overwrite (Overwrite(..), shouldOverwrite)
+import Streamly.Coreutils.Overwrite
+    (Overwrite(..), shouldOverwrite, targetInDir)
 
 -- Note: Recursive copy can be done using find.
 --
@@ -65,12 +67,14 @@ data CpMethod =
 data CpOptions = CpOptions
     { optOverwrite :: Overwrite
     , optCopyMethod :: CpMethod
+    , optIntoDirectory :: Bool
     }
 
 defaultOptions :: CpOptions
 defaultOptions = CpOptions
     { optOverwrite = OverwriteAlways
     , optCopyMethod = CopyContents
+    , optIntoDirectory = True
     }
 
 -- | Specify what to do when the destination exists. See 'Overwrite'.
@@ -86,6 +90,29 @@ overwrite opt options = options { optOverwrite = opt }
 --
 cpMethod :: CpMethod -> CpOptions -> CpOptions
 cpMethod opt options = options { optCopyMethod = opt }
+
+-- | The destination of 'cp' can be a file or a directory. When the
+-- destination is an existing directory, or a symlink to one, 'cp' can
+-- either copy the source into the directory or write the copy at the
+-- directory's path. 'intoDirectory' chooses between the two.
+--
+-- With 'True', @cp id "a" "d"@ copies @a@ into the directory @d@, to @d/a@.
+-- The name of the copy is the last component of the source path, ignoring
+-- trailing separators.
+--
+-- With 'False', @cp (intoDirectory False) "a" "d"@ writes the copy at @d@,
+-- like GNU @cp -T@. The source of 'cp' is never a directory, and a file
+-- cannot replace a directory, so the copy raises an exception. An
+-- 'Overwrite' option that skips an existing destination, such as
+-- 'OverwriteNever', skips the copy without an exception.
+--
+-- When the destination does not exist or is not a directory, 'cp' copies
+-- the source to the destination and ignores this option.
+--
+-- Default (without this modifier): 'True', like GNU @cp@.
+--
+intoDirectory :: Bool -> CpOptions -> CpOptions
+intoDirectory opt options = options { optIntoDirectory = opt }
 
 -- streamly-core has no stat and no way to give a new file a mode, so on
 -- POSIX we use the FilePath based functions from unix.
@@ -130,8 +157,17 @@ cpCopy method src dest =
         CopyClone -> error "Unimplemented"
 
 -- | @cp option-modifier source destination@. Copy a file or directory.
+--
+-- If @destination@ is an existing directory, or a symlink to one, @source@
+-- is copied into it; see 'intoDirectory'. Pass 'id' for defaults; each
+-- modifier documents its own default.
 cp :: (CpOptions -> CpOptions) -> Path -> Path -> IO ()
 cp f src dest = do
     let options = f defaultOptions
-    r <- shouldOverwrite test (optOverwrite options) src dest
-    when r $ cpCopy (optCopyMethod options) src dest
+    destIsDir <-
+        if optIntoDirectory options
+        then test dest (doesItExist `and_` isDir)
+        else return False
+    target <- if destIsDir then targetInDir dest src else return dest
+    r <- shouldOverwrite test (optOverwrite options) src target
+    when r $ cpCopy (optCopyMethod options) src target

@@ -6,13 +6,14 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Overwrite behavior shared by commands that write to a destination path
--- (@cp@, @mv@).
+-- Overwrite behavior and destination resolution shared by commands that
+-- write to a destination path (@cp@, @mv@).
 
 module Streamly.Coreutils.Overwrite
     ( Overwrite (..)
     , destinationExistsError
     , shouldOverwrite
+    , targetInDir
     )
 where
 
@@ -20,6 +21,8 @@ import System.IO.Error (alreadyExistsErrorType, mkIOError)
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
+import qualified Streamly.Internal.FileSystem.Path as Path
+    (dropTrailingSeparators)
 
 import Streamly.Coreutils.FileTest
 
@@ -65,3 +68,19 @@ shouldOverwrite runTest option src dest =
             if r
             then test src $ newerThanFile dest
             else return True
+
+-- Path.takeFileName returns Nothing when there are trailing separators, so
+-- they are dropped first. It also returns Nothing for a path ending in "."
+-- or "..", and for a root. GNU cp and mv fail for such a source too.
+
+-- | @targetInDir dir src@ is the last component of @src@, ignoring trailing
+-- separators, under @dir@, like GNU @cp@ and @mv@ with a directory
+-- destination. Raises an exception if @src@ ends in @.@ or @..@, or is a
+-- root.
+targetInDir :: Path -> Path -> IO Path
+targetInDir dir src =
+    case Path.takeFileName (Path.dropTrailingSeparators src) of
+        Just name -> return (Path.join dir name)
+        Nothing ->
+            ioError $ userError
+                $ "no file name in source path: " ++ Path.toString src
