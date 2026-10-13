@@ -24,12 +24,15 @@ where
 import Control.Exception (IOException, try)
 import Control.Monad (unless, void, when)
 import Data.Either (lefts)
-import System.Directory (renamePath)
+import System.Directory (canonicalizePath, renamePath)
+
+import qualified System.PosixCompat.Files as Files
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.FileTest (and_, doesItExist, isDir, test)
+import Streamly.Coreutils.FileTest
+    (and_, doesItExist, isDir, isSymLink, not_, sameFileAs, test, testl)
 import Streamly.Coreutils.Overwrite
     (Overwrite(..), destinationExistsError, shouldOverwrite, targetInDir)
 import Streamly.Coreutils.Rename (renameNoReplace)
@@ -114,6 +117,39 @@ overwrite opt cfg = cfg {mvOverwrite = opt}
 intoDirectory :: Bool -> MvOptions -> MvOptions
 intoDirectory opt cfg = cfg {mvIntoDirectory = opt}
 
+-- GNU mv refuses to move a file onto itself (same_file_ok in GNU copy.c).
+-- Without the check, rename(2) on two hard links of the same file succeeds and
+-- does nothing, and renaming a symlink onto its target replaces the only name
+-- of the target with a symlink to itself. A symlink at dest is replaced like
+-- any other file. A symlink at src may replace a hard link of its target if
+-- the link it resolves to is another one, which remains.
+
+-- | True if moving src to dest would move a file onto itself.
+isSameFile :: Path -> Path -> IO Bool
+isSameFile src dest = do
+    destIsFile <- testl dest (doesItExist `and_` not_ isSymLink)
+    same <-
+        if destIsFile
+        then test src (doesItExist `and_` sameFileAs dest)
+        else return False
+    if same
+    then do
+        srcIsLink <- testl src isSymLink
+        if srcIsLink
+        then do
+            st <- Files.getSymbolicLinkStatus (Path.toString dest)
+            -- dest is the only name of the file; moving would lose it.
+            if Files.linkCount st < 2
+            then return True
+            else
+                -- True if src resolves to the path dest itself; if it
+                -- resolves to another hard link of dest, the file survives
+                -- the move.
+                (==) <$> canonicalizePath (Path.toString src)
+                     <*> canonicalizePath (Path.toString dest)
+        else return True
+    else return False
+
 -- Rename src to dest, subject to the overwrite option.
 moveTo :: MvOptions -> Path -> Path -> IO ()
 moveTo opt src dest =
@@ -123,6 +159,11 @@ moveTo opt src dest =
             r <- renameNoReplace src dest
             unless r $ ioError (destinationExistsError dest)
         option -> do
+            same <- isSameFile src dest
+            when same
+                $ ioError $ userError
+                $ "mv: '" ++ Path.toString src ++ "' and '"
+                    ++ Path.toString dest ++ "' are the same file"
             r <- shouldOverwrite False option src dest
             when r $ renamePath (Path.toString src) (Path.toString dest)
 
@@ -155,6 +196,11 @@ mvMany f srcs dir = do
 -- existing directory, or a symlink to one, @source@ is moved into it; see
 -- 'intoDirectory'. Pass 'id' for defaults; each modifier documents its own
 -- default.
+--
+-- A symlink at @source@ is moved itself, not the file it points to, like GNU
+-- @mv@. Moving a file onto itself raises an exception, like GNU @mv@: when
+-- @source@ and @dest@ are hard links of one file, or @source@ is a symlink
+-- to @dest@. With 'OverwriteNever' the move is skipped instead.
 mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
 mv f src dest = do
     let opt = f defaultConfig

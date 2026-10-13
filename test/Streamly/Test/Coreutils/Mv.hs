@@ -34,6 +34,7 @@ import System.Directory
 import System.FilePath ((</>))
 import System.IO.Error (isAlreadyExistsError)
 import System.IO.Temp (createTempDirectory)
+import System.PosixCompat.Files (createLink)
 import Test.Hspec
 
 import Streamly.Coreutils.Mv hiding (mv, mvMany)
@@ -231,6 +232,152 @@ main = hspec $ do
             writeFile (deep </> "a") "a"
             mv id (deep </> "a") (deep </> "b")
             (deep </> "b") `shouldContain'` "a"
+
+    describe "mv (symlink source)" $ do
+
+        it "moves the symlink, not its target" $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            mv id (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+            (d </> "target") `shouldContain'` "a"
+
+        it "replaces an existing file with the symlink" $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            writeFile (d </> "b") "b"
+            mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+            (d </> "b") `shouldContain'` "a"
+
+        it "moves a dangling symlink" $ withTempDir $ \d -> do
+            createFileLink "nowhere" (d </> "a")
+            mv id (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "moves a symlink to a directory, not the directory"
+            $ withTempDir $ \d -> do
+            createDirectory (d </> "target")
+            createDirectoryLink "target" (d </> "a")
+            mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+            doesDirectoryExist (d </> "target") `shouldReturn` True
+
+        it "moves a symlink to a directory into a directory"
+            $ withTempDir $ \d -> do
+            createDirectory (d </> "target")
+            createDirectoryLink "target" (d </> "a")
+            createDirectory (d </> "dir")
+            mv id (d </> "a") (d </> "dir")
+            pathIsSymbolicLink (d </> "dir" </> "a") `shouldReturn` True
+            doesDirectoryExist (d </> "target") `shouldReturn` True
+
+        it "fails on a symlink to a directory with a trailing separator"
+            $ withTempDir $ \d -> do
+            createDirectory (d </> "target")
+            createDirectoryLink "target" (d </> "a")
+            createDirectory (d </> "dir")
+            shouldFail $ mv id (d </> "a" ++ "/") (d </> "dir")
+            pathIsSymbolicLink (d </> "a") `shouldReturn` True
+            shouldNotExist (d </> "dir" </> "a")
+
+        it "fails to replace an empty directory with a symlink to one"
+            $ withTempDir $ \d -> do
+            createDirectory (d </> "target")
+            createDirectoryLink "target" (d </> "a")
+            createDirectory (d </> "b")
+            shouldFail $ mv (intoDirectory False) (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "a") `shouldReturn` True
+            doesDirectoryExist (d </> "b") `shouldReturn` True
+
+        it "fails on a symlink to the destination" $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            createFileLink "b" (d </> "a")
+            shouldFail $ mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "a") `shouldReturn` True
+            pathIsSymbolicLink (d </> "b") `shouldReturn` False
+            (d </> "b") `shouldContain'` "b"
+
+        it "fails on a symlink to a hard link of the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            createLink (d </> "b") (d </> "other")
+            createFileLink "b" (d </> "a")
+            shouldFail $ mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` False
+
+        it "fails on a chain of symlinks to the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            createFileLink "b" (d </> "link")
+            createFileLink "link" (d </> "a")
+            shouldFail $ mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` False
+
+        it "replaces a symlink at the destination" $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "b")
+            createFileLink "b" (d </> "a")
+            mv id (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "fails with OverwriteUpdate on a symlink to the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            setAge (d </> "b") (-100)
+            createFileLink "b" (d </> "a")
+            shouldFail $ mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            (d </> "b") `shouldContain'` "b"
+
+        it "skips a symlink to the destination with OverwriteNever"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            createFileLink "b" (d </> "a")
+            mv (overwrite OverwriteNever) (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "a") `shouldReturn` True
+            (d </> "b") `shouldContain'` "b"
+
+        it "replaces a hard link of the target of the symlink"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createLink (d </> "target") (d </> "b")
+            createFileLink "target" (d </> "a")
+            mv id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+            (d </> "b") `shouldContain'` "a"
+
+        it "keeps an existing destination with OverwriteNever"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            writeFile (d </> "b") "b"
+            mv (overwrite OverwriteNever) (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "a") `shouldReturn` True
+            (d </> "b") `shouldContain'` "b"
+
+    describe "mv (hard links of one file)" $ do
+
+        it "fails" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createLink (d </> "a") (d </> "b")
+            shouldFail $ mv id (d </> "a") (d </> "b")
+            shouldFail $ mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            (d </> "a") `shouldContain'` "a"
+
+        it "fails on the same path" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            shouldFail $ mv (intoDirectory False) (d </> "a") (d </> "a")
+            (d </> "a") `shouldContain'` "a"
+
+        it "skips with OverwriteNever" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createLink (d </> "a") (d </> "b")
+            mv (overwrite OverwriteNever) (d </> "a") (d </> "b")
+            (d </> "a") `shouldContain'` "a"
+            (d </> "b") `shouldContain'` "a"
 
     describe "mv (overwrite OverwriteNever)" $ do
 

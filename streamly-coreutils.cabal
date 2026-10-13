@@ -315,6 +315,7 @@ test-suite Streamly.Coreutils.Mv
     , streamly-coreutils
     , temporary
     , time
+    , unix-compat
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.Mv.main
                -rtsopts "-with-rtsopts=-M512M"
