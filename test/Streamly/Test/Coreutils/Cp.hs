@@ -142,6 +142,17 @@ main = hspec $ do
             pathIsSymbolicLink (d </> "link") `shouldReturn` True
             (d </> "target") `shouldContain'` "a"
 
+        it "fails on a dangling symlink at the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createFileLink "missing" (d </> "link")
+            shouldFail (cp id (d </> "a") (d </> "link"))
+            shouldFail (cp (overwrite OverwriteNever) (d </> "a") (d </> "link"))
+            shouldFail
+                (cp (overwrite OverwriteUpdate) (d </> "a") (d </> "link"))
+            shouldNotExist (d </> "missing")
+            pathIsSymbolicLink (d </> "link") `shouldReturn` True
+
         it "fails on a missing source" $ withTempDir $ \d -> do
             shouldFail (cp id (d </> "missing") (d </> "b"))
             shouldNotExist (d </> "b")
@@ -321,6 +332,27 @@ main = hspec $ do
             writeFile (d </> "a") "a"
             cp (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
             (d </> "b") `shouldContain'` "a"
+
+        it "compares with the target of a symlink at the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            writeFile (d </> "target") "old"
+            setAge (d </> "target") (-200)
+            setAge (d </> "a") (-100)
+            createFileLink "target" (d </> "b")
+            cp (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+            (d </> "target") `shouldContain'` "a"
+
+        it "compares with the target of a symlink at the source"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            setAge (d </> "target") (-200)
+            createFileLink "target" (d </> "a")
+            writeFile (d </> "b") "b"
+            setAge (d </> "b") (-100)
+            cp (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            (d </> "b") `shouldContain'` "b"
 
     describe "cp (cpMethod HardLink)" $ do
 

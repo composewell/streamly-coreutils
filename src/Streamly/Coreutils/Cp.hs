@@ -79,6 +79,15 @@ defaultOptions = CpOptions
 
 -- | Specify what to do when the destination exists. See 'Overwrite'.
 --
+-- Symlinks at the source and the destination are followed, like GNU @cp@:
+-- a symlink at the destination is written through, and 'OverwriteUpdate'
+-- compares the modification times of the files the symlinks point to, not
+-- of the symlinks.
+--
+-- With 'CopyContents', a dangling symlink at the destination raises an
+-- exception with every 'Overwrite' option, including 'OverwriteNever', like
+-- GNU @cp@: @cp: not writing through dangling symlink@.
+--
 -- Default (without this modifier): 'OverwriteAlways', like GNU @cp@.
 --
 overwrite :: Overwrite -> CpOptions -> CpOptions
@@ -134,6 +143,17 @@ copyToNew src dest = do
         File.readChunks src & Stream.fold (Handle.writeChunks h)
 #endif
 
+-- GNU cp refuses to write through a dangling symlink unless POSIXLY_CORRECT
+-- is set; POSIX allows it. We follow the GNU default.
+
+-- | True if the path is a symlink whose target does not exist.
+isDanglingSymLink :: Path -> IO Bool
+isDanglingSymLink path = do
+    isLink <- testl path (doesItExist `and_` isSymLink)
+    if isLink
+    then not <$> test path doesItExist
+    else return False
+
 -- | Unconditionally copy the source to destination using the specified copy
 -- method.
 cpCopy :: CpMethod -> Path -> Path -> IO ()
@@ -169,5 +189,13 @@ cp f src dest = do
         then test dest (doesItExist `and_` isDir)
         else return False
     target <- if destIsDir then targetInDir dest src else return dest
+    case optCopyMethod options of
+        CopyContents -> do
+            dangling <- isDanglingSymLink target
+            when dangling
+                $ ioError $ userError
+                $ "cp: not writing through dangling symlink: "
+                    ++ Path.toString target
+        _ -> return ()
     r <- shouldOverwrite True (optOverwrite options) src target
     when r $ cpCopy (optCopyMethod options) src target

@@ -38,9 +38,11 @@ data Overwrite =
                       -- (@--update=all@).
     | OverwriteOnly   -- ^ Act only if the destination exists. No GNU
                       -- equivalent.
-    | OverwriteUpdate -- ^ Replace an existing destination only if it is
-                      -- older than the source, like GNU @-u@
-                      -- (@--update=older@).
+    | OverwriteUpdate -- ^ Replace an existing destination only if its
+                      -- modification time is earlier than that of the
+                      -- source, like GNU @-u@ (@--update=older@). Equal
+                      -- times keep the destination. Whether symlinks are
+                      -- followed depends on the command.
 
 -- | The error raised by 'OverwriteError' for an existing @dest@.
 destinationExistsError :: Path -> IOError
