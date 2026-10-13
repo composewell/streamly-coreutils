@@ -516,7 +516,10 @@ false = FileTest $ Predicate $ const (pure False)
 --
 -- Like coreutil @test -e file@
 doesItExist :: FileTest
-doesItExist = withStatus (const True)
+-- Catch ENOENT here, not only in the runner, so that a missing path gives
+-- False to the enclosing combinator: not_ doesItExist is True for it.
+doesItExist =
+    FileTest $ Predicate $ applyCatchENOENT (fmap (const True) . requireStatus)
 
 {-# DEPRECATED isExisting "Use doesItExist instead." #-}
 isExisting :: FileTest
