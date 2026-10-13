@@ -241,6 +241,10 @@ newtype Predicate m a =
 -- the runner: 'test' supplies 'Files.getFileStatus' (follows symlinks);
 -- 'testl' supplies 'Files.getSymbolicLinkStatus' (examines the link itself).
 -- Storing the action here keeps the choice invisible to individual predicates.
+--
+-- [@statusFollowsLinks@] 'True' when 'fetchStatus' follows symlinks ('test').
+-- 'isSymLink' needs the status of the path itself: it uses the cache when
+-- this is 'False' and issues its own @lstat@ call when it is 'True'.
 data FileState = FileState
     { filepath    :: Path
       -- ^ The path supplied to 'test' \/ 'testl'.
@@ -249,6 +253,8 @@ data FileState = FileState
       -- ^ Lazily-populated 'FileStatus' cache.
     , fetchStatus :: IO FileStatus
       -- ^ OS stat action; called at most once, on cache miss.
+    , statusFollowsLinks :: Bool
+      -- ^ Whether 'fetchStatus' follows symlinks.
     }
 
 -- | Obtain the cached 'FileStatus', fetching and caching it on first call.
@@ -267,23 +273,27 @@ requireStatus fs = do
 
 -- | Construct a fresh 'FileState' with an empty (unfetched) status cache.
 --
--- @fetchFn@ is the OS stat action predicates will use. Pass
--- 'Files.getFileStatus' for symlink-following behaviour, or
--- 'Files.getSymbolicLinkStatus' to examine the link itself.
-newFileState :: Path -> IO FileStatus -> IO FileState
-newFileState path fetchFn = do
+-- @followLinks@ selects the OS stat action predicates will use:
+-- 'Files.getFileStatus' when 'True', 'Files.getSymbolicLinkStatus' to
+-- examine the link itself when 'False'.
+newFileState :: Bool -> Path -> IO FileState
+newFileState followLinks path = do
     ref <- newIORef Nothing
     pure $ FileState
         { filepath    = path
         , fileStatus  = ref
-        , fetchStatus = fetchFn
+        , fetchStatus =
+            if followLinks
+            then Files.getFileStatus (Path.toString path)
+            else Files.getSymbolicLinkStatus (Path.toString path)
+        , statusFollowsLinks = followLinks
         }
 
 -- | Constructs a 'FileState' whose cache is pre-populated with the supplied
 -- 'FileStatus', so no additional @stat@ call is ever issued.  The 'filepath'
 -- is left empty because no path is available at this call site; 'fetchStatus'
 -- is set to an error thunk since it must never be called when the cache is
--- already populated.
+-- already populated. 'isSymLink' uses the supplied status as is.
 mkFileState :: String -> Path -> FileStatus -> IO FileState
 mkFileState tag fp st = do
     ref <- newIORef (Just st)
@@ -291,6 +301,7 @@ mkFileState tag fp st = do
         { filepath    = fp
         , fileStatus  = ref
         , fetchStatus = error $ tag ++ ": BUG. fetchStatus cannot be used here"
+        , statusFollowsLinks = False
         }
 
 ------------------------------------------------------------------------------
@@ -423,15 +434,14 @@ applyCatchENOENT f fs =
 -- * Fails with an IO exception if the path to the file is not accessible due
 -- to lack of permissions. The exception type can be used to determine the
 -- reason for failure.
---  * test 'isSymLink' always returns false.
+--  * test 'isSymLink' tests the path itself, like 'testl', see 'isSymLink'.
 --  * test 'doesItExist' returns false if the path is symlink but it does not
 --  point to an existing file.
 --
 test :: Path -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) = do
     -- 'Files.getFileStatus' dereferences symlinks.
-    newFileState path (Files.getFileStatus (Path.toString path))
-        >>= applyCatchENOENT f
+    newFileState True path >>= applyCatchENOENT f
 
 -- | Like 'test' but uses the path and not the link target if the path is a
 -- symlink.
@@ -445,8 +455,7 @@ test path (FileTest (Predicate f)) = do
 --
 testl :: Path -> FileTest -> IO Bool
 testl path (FileTest (Predicate f)) =
-    newFileState path (Files.getSymbolicLinkStatus (Path.toString path))
-        >>= applyCatchENOENT f
+    newFileState False path >>= applyCatchENOENT f
 
 -- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
 -- predicates that require filepath when using apply.
@@ -537,16 +546,27 @@ isFile :: FileTest
 isFile = withStatus Files.isRegularFile
 
 -- NOTE: On Windows true if FILE_ATTRIBUTE_REPARSE_POINT is set.
+--
+-- With 'testl' it uses the shared @lstat@ status. With 'test' the shared
+-- status is of the link target, so it makes a separate @lstat@ call.
 
--- | True if path is a symbolic link. This is meaningful only when 'testl' is
--- used, in case of 'test' it always returns false.
+-- | True if path is a symbolic link. The path itself is tested with both
+-- 'test' and 'testl', like @test -h@: a dangling symlink gives 'True'.
+--
+-- Other predicates in the same 'test' still test the link target, so
+-- @test path (isSymLink \`and_\` isDir)@ is 'True' for a symlink to a
+-- directory, like @test -h path -a -d path@.
 --
 -- On Windows it tells if the path is a reparse point i.e. it can be a symlink
 -- or a junction.
 --
 -- Like coreutil @test -h/-L file@
 isSymLink :: FileTest
-isSymLink = withStatus Files.isSymbolicLink
+isSymLink = FileTest $ Predicate $ \fs ->
+    if statusFollowsLinks fs
+    then Files.isSymbolicLink
+            <$> Files.getSymbolicLinkStatus (Path.toString (filepath fs))
+    else Files.isSymbolicLink <$> requireStatus fs
 
 -- Note: Device files are supported in Windows/NTFS.
 
