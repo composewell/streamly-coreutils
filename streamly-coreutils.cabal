@@ -192,8 +192,8 @@ library
     , exceptions >= 0.8  && < 0.11
     , filepath >= 1.4 && < 1.6
     -- We use internal modules of streamly.
-    , streamly >= 0.11 && < 0.12
-    , streamly-core >= 0.3 && < 0.4
+    , streamly >= 0.11.1 && < 0.12
+    , streamly-core >= 0.3.2 && < 0.4
     , streamly-process >= 0.4 && < 0.5
     , time >= 1.9 && < 1.16
     , unix-compat >= 0.5.4  && < 0.8

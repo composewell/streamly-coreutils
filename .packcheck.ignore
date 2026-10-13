@@ -12,3 +12,4 @@ flake.nix
 packages.nix
 stack.yaml
 test/Main.hs
+sources.nix

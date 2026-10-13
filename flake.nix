@@ -11,9 +11,8 @@
     basepkgs.nixpack.mkOutputs {
       inherit nixpkgs nixpkgs-darwin basepkgs;
       name = "streamly-coreutils";
-      sources = basepkgs.nixpack.lib.localSource "streamly-coreutils" ./.;
       #packages = basepkgs.nixpack.lib.devPackage "streamly-coreutils";
-      #sources = import ./sources.nix;
+      sources = import ./sources.nix;
       packages = import ./packages.nix;
     };
 }
