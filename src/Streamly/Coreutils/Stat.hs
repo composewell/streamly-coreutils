@@ -30,11 +30,18 @@ import qualified System.PosixCompat.Files as Files
 newtype  StatOptions = StatOptions {deRef :: Bool}
 
 defaultConfig :: StatOptions
-defaultConfig = StatOptions True
+defaultConfig = StatOptions False
 
+-- | If the path is a symbolic link, return the status of the file it points
+-- to instead of the link itself, like @stat -L@ (@--dereference@).
+--
+-- Default (without this modifier): 'False', the status of the link itself,
+-- like @stat@.
 followSymlinks :: Bool -> StatOptions -> StatOptions
 followSymlinks opt cfg = cfg {deRef = opt}
 
+-- | Return the status of a file, like the @stat@ command. Pass 'id' for the
+-- defaults; each modifier documents its own default.
 stat :: (StatOptions -> StatOptions) -> Path -> IO FileStatus
 stat f path = do
     let opt = f defaultConfig
