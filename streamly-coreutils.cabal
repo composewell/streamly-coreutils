@@ -216,6 +216,7 @@ library
       build-depends: Win32 >= 2.6 && < 2.15
 
   hs-source-dirs:      src
+  c-sources: cbits/rename_noreplace.c
   exposed-modules:
       Streamly.Coreutils.Chmod
     , Streamly.Coreutils.Cp
@@ -249,6 +250,7 @@ library
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.FileTest.Common
     , Streamly.Coreutils.Overwrite
+    , Streamly.Coreutils.Rename
     , Streamly.Coreutils.String
     , Streamly.Coreutils.Uniq
 

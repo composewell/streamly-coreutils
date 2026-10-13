@@ -22,7 +22,7 @@ module Streamly.Coreutils.Mv
 where
 
 import Control.Exception (IOException, try)
-import Control.Monad (unless, when)
+import Control.Monad (unless, void, when)
 import Data.Either (lefts)
 import System.Directory (doesDirectoryExist, renamePath)
 import System.FilePath (dropTrailingPathSeparator, takeFileName, (</>))
@@ -32,13 +32,14 @@ import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.FileTest (testl)
 import Streamly.Coreutils.Overwrite (Overwrite(..), shouldOverwrite)
+import Streamly.Coreutils.Rename (renameNoReplace)
 
 -- = Design notes
 --
--- * The destination is checked before 'renamePath' is called, so with
---   'OverwriteNever' a destination created between the check and the rename
---   is still replaced. GNU @mv@ avoids this race with @renameat2@ and
---   @RENAME_NOREPLACE@ on Linux.
+-- * 'OverwriteNever' uses 'renameNoReplace', which is atomic on Linux,
+--   macOS and Windows, like GNU @mv@. 'OverwriteOnly' and 'OverwriteUpdate'
+--   check the destination before 'renamePath' is called, so the destination
+--   can change in between; GNU @mv -u@ has the same race.
 --
 -- * 'mv' takes one source and 'mvMany' takes a list, instead of one function
 --   taking a list: with one source the destination may be a new name, with
@@ -76,6 +77,12 @@ defaultConfig = MvOptions
 -- not ask; use 'OverwriteNever' to keep every existing destination, or
 -- 'OverwriteUpdate' to replace only a destination older than the source.
 --
+-- With 'OverwriteNever' the check and the rename are one atomic operation on
+-- Linux, macOS and Windows, so a destination created concurrently is never
+-- replaced. On FreeBSD, and on file systems that do not support it, the
+-- destination is checked first and a destination created between the check
+-- and the rename is replaced.
+--
 -- Default (without this modifier): 'OverwriteAlways', like GNU @mv@.
 overwrite :: Overwrite -> MvOptions -> MvOptions
 overwrite opt cfg = cfg {mvOverwrite = opt}
@@ -105,9 +112,12 @@ intoDirectory opt cfg = cfg {mvIntoDirectory = opt}
 
 -- Rename src to dest, subject to the overwrite option.
 moveTo :: MvOptions -> Path -> Path -> IO ()
-moveTo opt src dest = do
-    r <- shouldOverwrite testl (mvOverwrite opt) src dest
-    when r $ renamePath (Path.toString src) (Path.toString dest)
+moveTo opt src dest =
+    case mvOverwrite opt of
+        OverwriteNever -> void $ renameNoReplace src dest
+        option -> do
+            r <- shouldOverwrite testl option src dest
+            when r $ renamePath (Path.toString src) (Path.toString dest)
 
 -- The last component of src, ignoring trailing separators, under dir, like
 -- GNU mv. Path.takeFileName returns Nothing when there are trailing
