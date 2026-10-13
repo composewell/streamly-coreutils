@@ -21,9 +21,20 @@ module Streamly.Coreutils.Cp
     )
 where
 
+import Control.Exception (bracket)
 import Control.Monad (when)
 import Data.Function ((&))
+import System.IO (Handle, hClose)
 import System.PosixCompat.Files (createLink)
+#if defined(CABAL_OS_WINDOWS)
+import System.IO (IOMode(WriteMode), openBinaryFile)
+#else
+import System.Posix.Files
+    (accessModes, fileMode, getFileStatus, intersectFileModes)
+import System.Posix.IO (createFile, fdToHandle)
+#endif
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.FileSystem.Handle as Handle
 import qualified Streamly.Internal.FileSystem.FileIO as File
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
@@ -85,12 +96,33 @@ cpOverwrite opt options = options { optOverwrite = opt }
 cpMethod :: CpMethod -> CpOptions -> CpOptions
 cpMethod opt options = options { optCopyMethod = opt }
 
+-- | Create the destination file, open for writing, with the permission bits
+-- of the source; the process umask applies. Like GNU cp without
+-- @--preserve@, special bits (setuid, setgid, sticky) are not copied. The
+-- returned handle is writable even if the new mode is read-only.
+createWithModeOf :: Path -> Path -> IO Handle
+#if defined(CABAL_OS_WINDOWS)
+createWithModeOf _ dest = openBinaryFile (Path.toString dest) WriteMode
+#else
+createWithModeOf src dest = do
+    st <- getFileStatus (Path.toString src)
+    let mode = intersectFileModes (fileMode st) accessModes
+    createFile (Path.toString dest) mode >>= fdToHandle
+#endif
+
 -- | Unconditionally copy the source to destination using the specified copy
 -- method.
 cpCopy :: CpMethod -> Path -> Path -> IO ()
 cpCopy method src dest =
     case method of
-        CopyContents -> File.readChunks src & File.fromChunks dest
+        CopyContents -> do
+            -- An existing destination keeps its own mode, like GNU cp.
+            exists <- test dest doesItExist
+            if exists
+            then File.readChunks src & File.fromChunks dest
+            else
+                bracket (createWithModeOf src dest) hClose $ \h ->
+                    File.readChunks src & Stream.fold (Handle.writeChunks h)
         HardLink -> createLink (Path.toString src) (Path.toString dest)
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
