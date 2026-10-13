@@ -248,6 +248,7 @@ library
       Streamly.Coreutils
     , Streamly.Coreutils.Common
     , Streamly.Coreutils.FileTest.Common
+    , Streamly.Coreutils.Overwrite
     , Streamly.Coreutils.String
     , Streamly.Coreutils.Uniq
 

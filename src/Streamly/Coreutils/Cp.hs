@@ -13,9 +13,9 @@ module Streamly.Coreutils.Cp
 
     -- * Cp options
     , CpOptions
-    , CpOverwrite (..)
+    , Overwrite (..)
     -- , CpBackup
-    , cpOverwrite
+    , overwrite
     , CpMethod (..)
     , cpMethod
     )
@@ -29,6 +29,7 @@ import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.FileTest
+import Streamly.Coreutils.Overwrite (Overwrite(..), shouldOverwrite)
 
 -- Note: Recursive copy can be done using find.
 --
@@ -42,14 +43,6 @@ import Streamly.Coreutils.FileTest
 -- Ideally, cp should not hard link as we have ln for hard linking, but it can
 -- be useful when we need to hard link recursively.
 
--- | Specify the overwrite behavior of copy.
-data CpOverwrite =
-      OverwriteNever  -- ^ Do not overwrite when destination file exists
-    | OverwriteAlways -- ^ Overwrite destination file if it exists
-    | OverwriteOnly   -- ^ Copy only if the destination exists
-    | OverwriteUpdate -- ^ Overwrite an existing destination file only if it is
-                      -- older than the source file.
-
 -- | When overwriting specify backup behavior.
 -- newtype CpBackup = Backup (Maybe String)
 
@@ -61,7 +54,7 @@ data CpMethod =
     | CopyClone     -- Use the cloning method if available on the platform
 
 data CpOptions = CpOptions
-    { optOverwrite :: CpOverwrite
+    { optOverwrite :: Overwrite
     , optCopyMethod :: CpMethod
     }
 
@@ -71,12 +64,12 @@ defaultOptions = CpOptions
     , optCopyMethod = CopyContents
     }
 
--- | Specify the overwrite behavior. See 'Overwrite'.
+-- | Specify what to do when the destination exists. See 'Overwrite'.
 --
--- Default is 'OverwriteAlways'.
+-- Default (without this modifier): 'OverwriteAlways', like GNU @cp@.
 --
-cpOverwrite :: CpOverwrite -> CpOptions -> CpOptions
-cpOverwrite opt options = options { optOverwrite = opt }
+overwrite :: Overwrite -> CpOptions -> CpOptions
+overwrite opt options = options { optOverwrite = opt }
 
 -- | Specify the copy method.
 --
@@ -95,23 +88,9 @@ cpCopy method src dest =
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
 
--- | Determine whether source should be copied to destination based on the
--- specified overwrite behavior option.
-cpShouldOverwrite :: CpOverwrite -> Path -> Path -> IO Bool
-cpShouldOverwrite option src dest =
-    case option of
-        OverwriteAlways -> return True
-        OverwriteOnly -> test dest doesItExist
-        OverwriteNever -> not <$> test dest doesItExist
-        OverwriteUpdate -> do
-            r <- test dest doesItExist
-            if r
-            then test src $ newerThanFile dest
-            else return True
-
 -- | @cp option-modifier source destination@. Copy a file or directory.
 cp :: (CpOptions -> CpOptions) -> Path -> Path -> IO ()
 cp f src dest = do
     let options = f defaultOptions
-    r <- cpShouldOverwrite (optOverwrite options) src dest
+    r <- shouldOverwrite test (optOverwrite options) src dest
     when r $ cpCopy (optCopyMethod options) src dest

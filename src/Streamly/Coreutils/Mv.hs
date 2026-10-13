@@ -14,36 +14,56 @@ module Streamly.Coreutils.Mv
 
     -- * Options
     , MvOptions
-    , force
+    , Overwrite (..)
+    , overwrite
     )
 where
 
-import System.Directory (doesPathExist, renamePath)
+import Control.Monad (when)
+import System.Directory (renamePath)
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-newtype MvOptions = MvOptions {mvForce :: Bool}
+import Streamly.Coreutils.FileTest (testl)
+import Streamly.Coreutils.Overwrite (Overwrite(..), shouldOverwrite)
+
+-- = Design notes
+--
+-- * The destination is checked before 'renamePath' is called, so with
+--   'OverwriteNever' a destination created between the check and the rename
+--   is still replaced. GNU @mv@ avoids this race with @renameat2@ and
+--   @RENAME_NOREPLACE@ on Linux.
+
+-- | Options for 'mv'.
+newtype MvOptions = MvOptions {mvOverwrite :: Overwrite}
 
 defaultConfig :: MvOptions
-defaultConfig = MvOptions False
+defaultConfig = MvOptions OverwriteAlways
 
-force :: Bool -> MvOptions -> MvOptions
-force opt cfg = cfg {mvForce = opt}
+-- | Specify what to do when the destination exists. See 'Overwrite'.
+--
+-- A symlink at the destination counts as an existing destination even if
+-- its target does not exist.
+--
+-- 'mv' never asks the user before replacing a destination. The default,
+-- 'OverwriteAlways', is equivalent to GNU @mv -f@. GNU @mv@ without @-f@
+-- asks before replacing a destination that is not writable, but only when
+-- the input is a terminal; otherwise it replaces the destination, like
+-- @mv -f@.
+--
+-- GNU @mv -i@ asks before replacing any existing destination. 'mv' does
+-- not ask; use 'OverwriteNever' to keep every existing destination, or
+-- 'OverwriteUpdate' to replace only a destination older than the source.
+--
+-- Default (without this modifier): 'OverwriteAlways', like GNU @mv@.
+overwrite :: Overwrite -> MvOptions -> MvOptions
+overwrite opt cfg = cfg {mvOverwrite = opt}
 
+-- | @mv modifier source dest@ renames @source@ to @dest@. Pass 'id' for
+-- defaults; each modifier documents its own default.
 mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
 mv f old new = do
     let opt = f defaultConfig
-        oldStr = Path.toString old
-        newStr = Path.toString new
-    case mvForce opt of
-        True -> renamePath oldStr newStr
-        False -> do
-            exists <- doesPathExist newStr
-            if exists
-            then error msg
-            else renamePath oldStr newStr
-
-    where
-
-    msg = "mv: Move target exists, use force to move anyway"
+    r <- shouldOverwrite testl (mvOverwrite opt) old new
+    when r $ renamePath (Path.toString old) (Path.toString new)
