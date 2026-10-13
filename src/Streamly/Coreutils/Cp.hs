@@ -23,6 +23,7 @@ module Streamly.Coreutils.Cp
 where
 
 import Control.Monad (when)
+import System.Directory (canonicalizePath)
 import System.PosixCompat.Files (createLink)
 #if !defined(CABAL_OS_WINDOWS)
 import Control.Exception (bracket)
@@ -60,7 +61,8 @@ import Streamly.Coreutils.Overwrite
 -- | How to copy the source to destination?
 data CpMethod =
       CopyContents
-    | HardLink
+    | HardLink      -- ^ Hard link the file a symlink at the source points
+                    -- to, not the symlink, like GNU @cp -l@.
     | SymbolicLink
     | CopyClone     -- Use the cloning method if available on the platform
 
@@ -172,11 +174,19 @@ cpCopy method src dest =
                         ++ Path.toString src
                 File.fromChunks dest (File.readChunks src)
             else copyToNew src dest
-        HardLink -> createLink (Path.toString src) (Path.toString dest)
+        HardLink -> do
+            -- link(2) does not follow a symlink on Linux; GNU cp -l uses
+            -- linkat with AT_SYMLINK_FOLLOW.
+            srcTarget <- canonicalizePath (Path.toString src)
+            createLink srcTarget (Path.toString dest)
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
 
--- | @cp option-modifier source destination@. Copy a file or directory.
+-- | @cp option-modifier source destination@. Copy a file.
+--
+-- A symlink at @source@ is followed: the file it points to is copied, like
+-- GNU @cp@ without @-P@. A directory @source@, or a symlink to one, raises an
+-- exception, like GNU @cp@ without @-r@.
 --
 -- If @destination@ is an existing directory, or a symlink to one, @source@
 -- is copied into it; see 'intoDirectory'. Pass 'id' for defaults; each
@@ -184,6 +194,10 @@ cpCopy method src dest =
 cp :: (CpOptions -> CpOptions) -> Path -> Path -> IO ()
 cp f src dest = do
     let options = f defaultOptions
+    srcIsDir <- test src isDir
+    when srcIsDir
+        $ ioError $ userError
+        $ "cp: -r not specified; omitting directory: " ++ Path.toString src
     destIsDir <-
         if optIntoDirectory options
         then test dest (doesItExist `and_` isDir)

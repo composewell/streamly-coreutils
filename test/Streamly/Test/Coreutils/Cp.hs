@@ -157,6 +157,12 @@ main = hspec $ do
             shouldFail (cp id (d </> "missing") (d </> "b"))
             shouldNotExist (d </> "b")
 
+        it "fails on a directory source" $ withTempDir $ \d -> do
+            createDirectory (d </> "dir")
+            shouldFail (cp id (d </> "dir") (d </> "b"))
+            shouldFail (cp (cpMethod HardLink) (d </> "dir") (d </> "b"))
+            shouldNotExist (d </> "b")
+
         it "fails if source and destination are the same file"
             $ withTempDir $ \d -> do
             writeFile (d </> "a") "a"
@@ -188,6 +194,73 @@ main = hspec $ do
             modeOf (d </> "b") `shouldReturn` 0o600
             (d </> "b") `shouldContain'` "a"
 #endif
+
+    describe "cp (symlink source)" $ do
+
+        it "copies the contents of the target to a new file"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            cp id (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` False
+            (d </> "b") `shouldContain'` "a"
+
+#if !defined(CABAL_OS_WINDOWS)
+        it "gives a new file the permission bits of the target"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            setFileMode (d </> "target") 0o640
+            createFileLink "target" (d </> "a")
+            cp id (d </> "a") (d </> "b")
+            modeOf (d </> "b") `shouldReturn` 0o640
+#endif
+
+        it "overwrites an existing file with the contents of the target"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            writeFile (d </> "b") "b"
+            cp id (d </> "a") (d </> "b")
+            (d </> "b") `shouldContain'` "a"
+
+        it "fails on a dangling symlink" $ withTempDir $ \d -> do
+            createFileLink "missing" (d </> "a")
+            shouldFail (cp id (d </> "a") (d </> "b"))
+            shouldNotExist (d </> "b")
+
+        it "fails on a symlink to a directory" $ withTempDir $ \d -> do
+            createDirectory (d </> "dir")
+            createDirectoryLink "dir" (d </> "a")
+            shouldFail (cp id (d </> "a") (d </> "b"))
+            shouldNotExist (d </> "b")
+
+        it "fails on a symlink to the destination" $ withTempDir $ \d -> do
+            writeFile (d </> "b") "b"
+            createFileLink "b" (d </> "a")
+            shouldFail (cp id (d </> "a") (d </> "b"))
+            (d </> "b") `shouldContain'` "b"
+
+        it "uses the name of the symlink in a directory destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            createDirectory (d </> "dir")
+            cp id (d </> "a") (d </> "dir")
+            pathIsSymbolicLink (d </> "dir" </> "a") `shouldReturn` False
+            (d </> "dir" </> "a") `shouldContain'` "a"
+
+        it "hard links the target with HardLink" $ withTempDir $ \d -> do
+            writeFile (d </> "target") "a"
+            createFileLink "target" (d </> "a")
+            cp (cpMethod HardLink) (d </> "a") (d </> "b")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` False
+            appendFile (d </> "target") "b"
+            (d </> "b") `shouldContain'` "ab"
+
+        it "fails on a dangling symlink with HardLink" $ withTempDir $ \d -> do
+            createFileLink "missing" (d </> "a")
+            shouldFail (cp (cpMethod HardLink) (d </> "a") (d </> "b"))
+            shouldNotExist (d </> "b")
 
     describe "cp (directory destination)" $ do
 
