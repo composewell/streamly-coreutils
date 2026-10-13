@@ -682,9 +682,9 @@ hasSetGid = hasMode Files.setGroupIDMode
 --
 -- Always false on Windows.
 --
--- /Unimplemented/
 hasStickyBit :: FileTest
-hasStickyBit = undefined
+-- unix and unix-compat have no named constant for S_ISVTX.
+hasStickyBit = hasMode 0o1000
 
 -----------------------------------
 -- Time
