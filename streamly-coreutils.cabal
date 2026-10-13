@@ -3,10 +3,42 @@ name:                streamly-coreutils
 version:             0.1.0
 synopsis:            Streaming Haskell implementations of GNU coreutils
 description:
-   Streaming Haskell implementations of GNU coreutils, built on
-   Streamly.  Provides familiar, composable, high-performance,
-   concurrent, streaming equivalents of common POSIX utilities, designed
-   for idiomatic Haskell scripting and systems programming.
+  Haskell functions that do the work of the GNU coreutils commands:
+  @cp@, @mv@, @rm@, @ln@, @mkdir@, @touch@, @chmod@, @ls@, @find@,
+  @stat@, @test@, @readlink@, @realpath@, @which@, @tail@ and others. Use
+  them in Haskell scripts and programs instead of calling the commands
+  through a shell, or instead of assembling the same behaviour from
+  @directory@, @filepath@ and @unix@.
+  .
+  * Each function is named after its command and its options after the
+    command's flags: @rm (recursive True . withForce Force)@ is @rm -rf@,
+    @mkdir (makeParents True)@ is @mkdir -p@. Translating a shell script
+    is mostly mechanical.
+  * Defaults and error behaviour follow GNU coreutils, including symbolic
+    links, trailing slashes, write-protected files and missing paths.
+    Where a function differs from GNU, the difference is documented.
+  * No subprocesses: no quoting of arguments, no parsing of text output.
+    Errors are Haskell exceptions, and the code also runs on Windows,
+    where the commands are not installed.
+  * @ls@, @find@ and @tail@ return streams. You can filter, map, take the
+    first few entries or fold them as they are produced, in constant
+    memory, even for a directory tree with millions of files.
+  * @find@ lists a directory tree faster than GNU @find@ and Rust @fd@,
+    even with a serial traversal. The README has the measurements.
+  * Where a utility's work can be done concurrently, it is, or will be in
+    a later release. @find@ already has concurrent traversals, which read
+    several directories at the same time: @find parallelUnordered@ instead
+    of @find id@. Other utilities that walk a directory tree, such as
+    recursive @ls@ and @rm@, will get concurrent versions. The results are
+    streams, so your own processing of them can be made concurrent too,
+    e.g. with @parMapM@ from streamly.
+  * File tests compose like the operands of @test@, and a combined test
+    makes a single @stat@ call: @test p (isFile \`and_\` size (> 10240))@.
+  * When you do need a shell command, "Streamly.Coreutils.Sh" runs it and
+    connects its input and output to Haskell streams.
+  .
+  Works on Linux, macOS, FreeBSD and Windows. The API is still changing
+  and later releases will have breaking changes.
 
 homepage:            https://github.com/composewell/streamly-coreutils
 bug-reports:         https://github.com/composewell/streamly-coreutils/issues

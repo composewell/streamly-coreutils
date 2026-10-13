@@ -1,47 +1,156 @@
-# Streamly Coreutils (Fast, Concurrent and Powerful)
+# streamly-coreutils
 
-This repository provides Haskell functions that reimplement common GNU
-`coreutils` commands, utilizing the `streamly` library for efficient,
-and concurrent streaming data processing where applicable. The goal is
-to offer a highly composable and performant alternative to traditional
-shell commands within Haskell applications, enabling complex data
-transformations, system programming and scripting using a pure
-functional paradigm. Where applicable, the implementation is designed
-to be concurrent, for example, the `find` equivalent can list directory
-contents concurrently for improved performance.
+Haskell functions that do the work of the GNU coreutils commands: `cp`,
+`mv`, `rm`, `ln`, `mkdir`, `touch`, `chmod`, `ls`, `find`, `stat`,
+`test`, `readlink`, `realpath`, `which`, `tail` and others. Use them in
+Haskell scripts and programs instead of calling the commands through a
+shell, or instead of assembling the same behaviour from `directory`,
+`filepath` and `unix`.
 
-# Fast, Concurrent and Powerful
+* Each function is named after its command and its options after the
+  command's flags: `rm (recursive True . withForce Force)` is `rm -rf`,
+  `mkdir (makeParents True)` is `mkdir -p`. Translating a shell script is
+  mostly mechanical.
+* Defaults and error behaviour follow GNU coreutils, including symbolic
+  links, trailing slashes, write-protected files and missing paths.
+  Where a function differs from GNU, for example `rm -r` on a symbolic
+  link with a trailing slash, which here deletes only the link, the
+  difference is documented.
+* No subprocesses: no quoting of arguments, no parsing of text output.
+  Errors are Haskell exceptions, and the code also runs on Windows, where
+  the commands are not installed.
+* `ls`, `find` and `tail` return [streamly](https://github.com/composewell/streamly)
+  streams. You can filter, map, take the first few entries or fold them as
+  they are produced, in constant memory, even for a directory tree with
+  millions of files.
+* `find` lists a directory tree faster than GNU `find` and Rust `fd`,
+  even with a serial traversal (see the table below).
+* Where a utility's work can be done concurrently, it is, or will be in a
+  later release. `find` already has concurrent traversals, which read
+  several directories at the same time: `find parallelUnordered` instead
+  of `find id`. Other utilities that walk a directory tree, such as
+  recursive `ls` and `rm`, will get concurrent versions. The results are
+  streams, so your own processing of them can be made concurrent too,
+  e.g. with `parMapM` from streamly.
+* File tests compose like the operands of `test`, and a combined test
+  makes a single `stat` call: ``test p (isFile `and_` size (> 10240))``.
+* When you do need a shell command, `Streamly.Coreutils.Sh` runs it and
+  connects its input and output to Haskell streams.
 
-How is it fast? For example, the serial implementation of `find` is
-faster than the fastest yet find implementation which is rust `fd`. How
-is it concurrent? Concurrency comes for free using the Haskell streamly
-library, so wherever possible the implementation is concurrent and if
-you need concurrency somewhere it can be made concurrent trivially. How
-is it powerful? For example, the `find` implementation has many choices
-like bfs, dfs, interleaved, concurrent unordered, concurrent ordered,
-concurrent interleaved, all these are trivial to implement thanks to
-Haskell streamly.
+## Example
 
-## Implemented Commands
+```haskell
+{-# LANGUAGE QuasiQuotes #-}
 
-Currently, this library provides implementations for the
-following coreutils-inspired as well as some additional commands:
+import Data.Function ((&))
+import Streamly.FileSystem.Path (path)
+import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Data.Stream as Stream
 
-* Dir traversal: `ls`, `cp -r`, `rm -r`
-* Dir modify: `touch`, `ln`, `cp`, `mkdir`, `rm`, `mv`
-* File stat: `test`, `stat`, `touch`
-* File read/write: `cp`
-* Symlinks: `readlink`, `realpath`
-* Processes: `cd`, `pwd`, `sleep`, `id`
-* UserDB: `id`, `home`
-* Text Processing: `cut`, `tail`
-* Shell: streaming composition of shell commands
-* Paths: `dirname`, `which`, `realpath`, `home`
+import Streamly.Coreutils.Cp (cp)
+import Streamly.Coreutils.FileTest (test, isFile, size, and_)
+import Streamly.Coreutils.Find (find, parallelUnordered)
+import Streamly.Coreutils.Mkdir (mkdir, makeParents)
+import Streamly.Coreutils.Rm (rm, recursive, withForce, RmForce(..))
 
-## Important API Notice
+main :: IO ()
+main = do
+    -- mkdir -p backup/src
+    mkdir (makeParents True) [path|backup/src|]
 
-**Please be aware that the API of this library is subject to heavy
-change in future releases.** This project is under active development,
-and function signatures, module organization, and overall design may
-evolve significantly. Users should expect breaking changes and plan
-accordingly.
+    -- cp README.md backup/README.md
+    cp id [path|README.md|] [path|backup/README.md|]
+
+    -- find src -type f -size +10k | wc -l
+    -- with directories read concurrently
+    n <- find parallelUnordered [path|src|]
+        & Stream.filterM (\p -> test p (isFile `and_` size (> 10240)))
+        & Stream.fold Fold.length
+    print n
+
+    -- rm -rf backup
+    rm (recursive True . withForce Force) [path|backup|]
+```
+
+Every function takes its options as a modifier: pass `id` for the GNU
+defaults, or compose modifiers with `.` as above. The Haddock of each
+modifier gives the default it changes.
+
+Shell commands can be used in the same way when there is no Haskell
+equivalent:
+
+```haskell
+import Data.Function ((&))
+import qualified Streamly.Console.Stdio as Stdio
+import qualified Streamly.Data.Stream as Stream
+import Streamly.Coreutils.Sh (toBytes, pipeBytes)
+
+-- echo hello | tr '[a-z]' '[A-Z]'
+main :: IO ()
+main =
+    toBytes "echo hello"
+        & pipeBytes "tr '[a-z]' '[A-Z]'"
+        & Stream.fold Stdio.write
+```
+
+## Performance
+
+Time to list a directory tree of 247,029 entries, best of 5 runs, with
+output to `/dev/null`. Symbolic links are not followed. The machine has
+2 CPUs, the file system is ext4 and the directory cache is warm.
+
+| Command | Traversal | Time |
+|---------|-----------|------|
+| `find .` (GNU findutils 4.10.0) | serial | 0.59 s |
+| `fd -u -j1 .` (fd 10.4.2) | serial | 0.74 s |
+| `fd -u .` | 2 threads | 0.41 s |
+| `hfd --dfs .` | serial | 0.36 s |
+| `hfd --parallel .` | concurrent | 0.30 s |
+
+`hfd` is a small command line driver for `Streamly.Coreutils.Find`,
+included in this package. Build it with `cabal build -f hfd hfd`.
+
+`find` has eight traversal orders: depth-first, breadth-first, reverse
+breadth-first, append and interleaved, which are serial, and unordered,
+ordered and interleaved, which read directories concurrently. Each is
+selected with one option, e.g. `find serialBfs` or
+`find parallelOrdered`. Streamly's stream combinators make each of them a
+few lines of code, so other orders can be added the same way.
+
+## Commands
+
+| Command | Module |
+|---------|--------|
+| `cp` | `Streamly.Coreutils.Cp` |
+| `mv` | `Streamly.Coreutils.Mv` |
+| `rm` | `Streamly.Coreutils.Rm` |
+| `ln` | `Streamly.Coreutils.Ln` |
+| `mkdir` | `Streamly.Coreutils.Mkdir` |
+| `touch` | `Streamly.Coreutils.Touch` |
+| `chmod` | `Streamly.Coreutils.Chmod` |
+| `ls` | `Streamly.Coreutils.Ls` |
+| `find` | `Streamly.Coreutils.Find` |
+| `stat` | `Streamly.Coreutils.Stat` |
+| `test`, `[ ... ]` | `Streamly.Coreutils.FileTest` |
+| `readlink` | `Streamly.Coreutils.ReadLink` |
+| `realpath` | `Streamly.Coreutils.ResolvePath` |
+| `dirname` | `Streamly.Coreutils.Dirname` |
+| `which` | `Streamly.Coreutils.Which` |
+| `tail` | `Streamly.Coreutils.Tail` |
+| `cut` | `Streamly.Coreutils.Cut` |
+| `cd`, `pwd`, `$HOME` | `Streamly.Coreutils.Directory` |
+| `id` | `Streamly.Coreutils.Id` (not on Windows) |
+| `sleep` | `Streamly.Coreutils.Sleep` |
+| `sh -c`, pipes | `Streamly.Coreutils.Sh` |
+
+Not every flag of every command is implemented yet. The module
+documentation lists the ones that are.
+
+The package builds on Linux, macOS, FreeBSD and Windows, with GHC 8.10.7
+to 9.14.1.
+
+## API stability
+
+The API is still changing, and later releases will have breaking
+changes: function signatures, option names and module organization may
+all change.
