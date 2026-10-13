@@ -360,6 +360,22 @@ test-suite Streamly.Coreutils.Touch
   ghc-options: -main-is Streamly.Test.Coreutils.Touch.main
                -rtsopts "-with-rtsopts=-M512M"
 
+test-suite Streamly.Coreutils.Dirname
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Dirname.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , filepath
+    , hspec
+    , QuickCheck
+    , streamly-core
+    , streamly-coreutils
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Dirname.main
+               -rtsopts "-with-rtsopts=-M512M"
+
 test-suite Streamly.Coreutils.FileTest
   import: compile-options
   type: exitcode-stdio-1.0
