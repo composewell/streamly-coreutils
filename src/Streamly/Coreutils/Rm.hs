@@ -239,7 +239,7 @@ rmfile options path =
 
 performRm :: RmOptions -> Path -> IO ()
 performRm options path = do
-    -- isDir returns false if path is symlink
+    -- testl isDir returns False if path is a symlink.
     dir <- testl path isDir
     if dir
     then rmdir options path

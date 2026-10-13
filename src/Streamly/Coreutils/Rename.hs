@@ -24,7 +24,7 @@ import System.Win32.Info (getFullPathName)
 import System.Win32.Types (DWORD, failWith)
 
 import Streamly.Coreutils.FileTest
-    (and_, doesItExist, sameFileAs, test, testl)
+    (doesItExist, sameFileAs, test, testl)
 #else
 import Foreign.C.Error
     (Errno, eEXIST, eINVAL, eNOSYS, eNOTSUP, errnoToIOError, getErrno)
@@ -103,7 +103,7 @@ renameNoReplace src dest = do
     srcExists <- test src doesItExist
     sameFile <-
         if srcExists
-        then testl dest (doesItExist `and_` sameFileAs src)
+        then testl dest (sameFileAs src)
         else return False
     if sameFile
     then return False

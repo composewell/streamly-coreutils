@@ -167,7 +167,7 @@ copyToNew src dest =
 -- | True if the path is a symlink whose target does not exist.
 isDanglingSymLink :: Path -> IO Bool
 isDanglingSymLink path = do
-    isLink <- testl path (doesItExist `and_` isSymLink)
+    isLink <- testl path isSymLink
     if isLink
     then not <$> test path doesItExist
     else return False
