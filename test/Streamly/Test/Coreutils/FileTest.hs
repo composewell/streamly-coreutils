@@ -71,7 +71,6 @@ withTempDir action = do
     removePathForcibly' p =
         void (try (removePathForcibly p) :: IO (Either SomeException ()))
 
-#if !defined(CABAL_OS_WINDOWS)
 shouldFail :: IO Bool -> IO ()
 shouldFail action = do
     r <- try action :: IO (Either SomeException Bool)
@@ -79,7 +78,6 @@ shouldFail action = do
         Left _ -> return ()
         Right _ ->
             expectationFailure "Expected an exception but none was thrown"
-#endif
 
 -- | Create the fixtures used by most tests in directory @d@:
 --
@@ -120,15 +118,13 @@ setOld path = do
     setModificationTime path oldTime
 
 #if !defined(CABAL_OS_WINDOWS)
--- | A path under a regular file. A stat of this path raises ENOTDIR, which
--- 'FileTest.test' does not catch, so a predicate on it shows whether it was
--- evaluated.
+-- | A path under a regular file. A stat of this path fails with ENOTDIR.
 notDirPath :: FilePath -> FilePath
 notDirPath d = d </> "file" </> "x"
 
 -- | Raises an exception if evaluated.
 raises :: FilePath -> FileTest
-raises d = withPath sameFileAs (notDirPath d)
+raises d = withPath largerThanFile (d </> "missing")
 
 isRoot :: IO Bool
 isRoot = (== 0) <$> getEffectiveUserID
@@ -199,6 +195,84 @@ existenceTests = do
                 , ("dangling", False), ("missing", False)
                 ]
 
+-- | The predicates that check access for the current process.
+accessPredicates :: [FileTest]
+accessPredicates = [isReadable, isWritable, isExecutable]
+
+missingPathTests :: Spec
+missingPathTests = do
+    describe "a predicate on a missing path" $ do
+        it "is False, like GNU test" $ withFixtures $ \d -> do
+            let missing = d </> "missing"
+            test missing isDir `shouldReturn` False
+            test missing isFile `shouldReturn` False
+            test missing (size (> 0)) `shouldReturn` False
+            testl missing isDir `shouldReturn` False
+            test missing isSymLink `shouldReturn` False
+            testl missing isSymLink `shouldReturn` False
+            test (d </> "dangling") isFile `shouldReturn` False
+            mapM (test missing) accessPredicates
+                `shouldReturn` [False, False, False]
+            mapM (testl missing) accessPredicates
+                `shouldReturn` [False, False, False]
+            mapM (test (d </> "dangling")) accessPredicates
+                `shouldReturn` [False, False, False]
+            test missing isOwnedByCurrentUser `shouldReturn` False
+            test missing (withPath sameFileAs (d </> "file"))
+                `shouldReturn` False
+
+        it "access predicates are False for a dangling symlink under testl"
+            $ withFixtures $ \d ->
+                mapM (testl (d </> "dangling")) accessPredicates
+                    `shouldReturn` [False, False, False]
+
+        it "is True under not_, like test ! -d" $ withFixtures $ \d -> do
+            test (d </> "missing") (not_ isDir) `shouldReturn` True
+            testl (d </> "missing") (not_ isDir) `shouldReturn` True
+
+        it "gives the same result in either order in and_"
+            $ withFixtures $ \d -> do
+            test (d </> "missing") (isDir `and_` doesItExist)
+                `shouldReturn` False
+            test (d </> "missing") (doesItExist `and_` isDir)
+                `shouldReturn` False
+
+    describe "comparison with a missing file" $ do
+        it "raises for size and time comparisons" $ withFixtures $ \d -> do
+            shouldFail $ test (d </> "file") (withPath largerThanFile
+                (d </> "missing"))
+            shouldFail $ test (d </> "file") (withPath newerThanFile
+                (d </> "missing"))
+
+#if !defined(CABAL_OS_WINDOWS)
+    describe "a path under a regular file" $ do
+        it "does not exist, like test -e file/x" $ withFixtures $ \d -> do
+            test (notDirPath d) doesItExist `shouldReturn` False
+            testl (notDirPath d) doesItExist `shouldReturn` False
+            test (notDirPath d) (not_ doesItExist) `shouldReturn` True
+            test (notDirPath d) (doesItExist `and_` isDir)
+                `shouldReturn` False
+
+        it "is False for other predicates" $ withFixtures $ \d -> do
+            test (notDirPath d) isDir `shouldReturn` False
+            testl (notDirPath d) isDir `shouldReturn` False
+
+        it "is not the same file as an existing file" $ withFixtures $ \d ->
+            test (d </> "file") (withPath sameFileAs (notDirPath d))
+                `shouldReturn` False
+
+    describe "a symlink loop" $
+        it "test raises" $ withFixtures $ \d -> do
+            createFileLink "loop" (d </> "loop")
+            shouldFail $ test (d </> "loop") doesItExist
+
+    describe "a parent directory without search permission" $
+        it "raises" $ needsNonRoot $ withFixtures $ \d ->
+            withMode (d </> "dir") 0o000 $ do
+                shouldFail $ test (d </> "dir" </> "x") doesItExist
+                shouldFail $ test (d </> "dir" </> "x") isFile
+#endif
+
 fileTypeTests :: Spec
 fileTypeTests = do
     describe "isDir" $ do
@@ -227,13 +301,13 @@ fileTypeTests = do
         it "test tests the path itself" $ withFixtures $ \d ->
             shouldGive test d isSymLink
                 [ ("file", False), ("dir", False), ("fileLink", True)
-                , ("dirLink", True), ("dangling", True), ("missing", False)
+                , ("dirLink", True), ("dangling", True)
                 ]
 
         it "testl tests the path itself" $ withFixtures $ \d ->
             shouldGive testl d isSymLink
                 [ ("file", False), ("dir", False), ("fileLink", True)
-                , ("dirLink", True), ("dangling", True), ("missing", False)
+                , ("dirLink", True), ("dangling", True)
                 ]
 
         it "test isSymLink `and_` isDir is True for a symlink to a directory"
@@ -499,6 +573,11 @@ sameFileTests =
 
 permissionTests :: Spec
 permissionTests = do
+    -- Not tested: isOwnedByCurrentUser on a symlink checks the owner of the
+    -- target under test and of the symlink itself under testl. The fixtures
+    -- are all created by the current user, so a symlink and its target have
+    -- the same owner and the two cases give the same result. Testing this
+    -- needs a symlink or target owned by another user.
     describe "ownership" $
         it "isOwnedByCurrentUser is True for a file we created"
             $ withFixtures $ \d ->
@@ -591,6 +670,7 @@ permissionTests = do
 main :: IO ()
 main = hspec $ do
     existenceTests
+    missingPathTests
     fileTypeTests
     combinatorTests
     sizeTests

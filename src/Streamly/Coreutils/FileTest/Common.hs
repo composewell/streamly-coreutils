@@ -23,8 +23,9 @@
 -- 'FileTest' predicates operate on 'FileState', which carries:
 --
 --   * The 'Path' that was supplied to the runner ('test' / 'testl').
---   * A lazily-populated 'IORef' that caches the 'FileStatus' after the
---     first predicate that needs it fetches it.
+--   * A lazily-populated 'IORef' that caches the 'FileStatus', or the fact
+--     that the path does not exist, after the first predicate that needs it
+--     fetches it.
 --   * The OS stat action to use ('getFileStatus' for 'test',
 --     'getSymbolicLinkStatus' for 'testl').  Storing it in 'FileState' means
 --     every predicate automatically uses the right variant without needing to
@@ -75,12 +76,14 @@ module Streamly.Coreutils.FileTest.Common
     , FileTest (..)
 
     -- * Creating FileTest Predicates
+    , catchNonExistent
     , withState
     , withStateM
     , withFollowStateM
     , withStatusM
     , withStatus
     , withPathM
+    , withExistingPathM
     , withPath
 
     -- * Predicate Combinators
@@ -194,12 +197,13 @@ module Streamly.Coreutils.FileTest.Common
 where
 
 import Control.Exception (catch, throwIO)
-import Control.Monad ((>=>))
 import Data.Bits ((.&.))
 import Data.Int (Int64)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Time.Clock.POSIX (POSIXTime)
 import Data.Time.Clock (NominalDiffTime)
+import Foreign.C.Error (Errno(..), eNOTDIR)
+import GHC.IO.Exception (IOException(..))
 import System.IO.Error (isDoesNotExistError)
 
 -- XXX Remove the dependency on unix-compat and directory
@@ -224,9 +228,37 @@ import Streamly.Coreutils.Time (seconds, minutes, hours, days)
 newtype Predicate m a =
     Predicate (a -> m Bool)
 
+-- A path does not exist if its stat fails with ENOENT or ENOTDIR, like GNU
+-- @test -e@. GHC maps ENOTDIR to InappropriateType, not NoSuchThing, so
+-- isDoesNotExistError alone misses it.
+--
+-- ELOOP is not included. stat fails with ELOOP if resolving the path
+-- follows more than 40 symlinks on Linux (32 on macOS): for a symlink loop,
+-- which reaches no file, and also for a chain of more than 40 symlinks that
+-- ends at an existing file. So ELOOP does not tell whether the path exists.
+
+-- | True if the exception means that the path does not exist.
+isNonExistentError :: IOException -> Bool
+isNonExistentError e =
+    isDoesNotExistError e || fmap Errno (ioe_errno e) == Just eNOTDIR
+
+-- | Return 'False' if the action fails because the path does not exist.
+catchNonExistent :: IO Bool -> IO Bool
+catchNonExistent action =
+    action `catch` handler
+
+    where
+
+    handler e
+        | isNonExistentError e = return False
+        | otherwise = throwIO e
+
 ------------------------------------------------------------------------------
 -- FileState
 ------------------------------------------------------------------------------
+
+-- | The result of the @stat@ call on the tested path.
+data PathStatus = Missing | Found FileStatus
 
 -- | Carries all the information a 'FileTest' predicate needs to evaluate.
 --
@@ -235,10 +267,11 @@ newtype Predicate m a =
 -- second stat call on a related file).
 --
 -- [@fileStatus@] A write-once lazy cache.  Starts as 'Nothing'.  The first
--- predicate that needs the 'FileStatus' calls 'requireStatus', which invokes
--- 'fetchStatus' and stores the result.  Every subsequent predicate in the same
--- composed expression reuses the cached value, so at most one @stat@ system
--- call is ever issued per runner invocation.
+-- predicate that needs the 'FileStatus' calls 'getPathStatus', which invokes
+-- 'fetchStatus' and stores the result, 'Missing' if the path does not exist.
+-- Every subsequent predicate in the same composed expression reuses the
+-- cached value, so at most one @stat@ system call is ever issued per runner
+-- invocation.
 --
 -- [@fetchStatus@] The OS stat action to use when the cache is empty.  Set by
 -- the runner: 'test' supplies 'Files.getFileStatus' (follows symlinks);
@@ -251,28 +284,44 @@ newtype Predicate m a =
 data FileState = FileState
     { filepath    :: Path
       -- ^ The path supplied to 'test' \/ 'testl'.
-    , fileStatus  :: IORef (Maybe FileStatus)
-      -- XXX store it in IORef using Either type.
-      -- ^ Lazily-populated 'FileStatus' cache.
+    , fileStatus  :: IORef (Maybe PathStatus)
+      -- ^ Lazily-populated 'PathStatus' cache.
     , fetchStatus :: IO FileStatus
       -- ^ OS stat action; called at most once, on cache miss.
     , statusFollowsLinks :: Bool
       -- ^ Whether 'fetchStatus' follows symlinks.
     }
 
--- | Obtain the cached 'FileStatus', fetching and caching it on first call.
+-- | Obtain the cached 'PathStatus', fetching and caching it on first call.
+-- Raises an exception if the @stat@ call fails for a reason other than a
+-- missing path, e.g. EACCES or ELOOP.
 --
 -- This is the single point through which all leaf predicates access the
 -- 'FileStatus'. It guarantees the "at most one @stat@ call" invariant.
-requireStatus :: FileState -> IO FileStatus
-requireStatus fs = do
+getPathStatus :: FileState -> IO PathStatus
+getPathStatus fs = do
     cached <- readIORef (fileStatus fs)
     case cached of
-        Just st -> pure st
+        Just r -> pure r
         Nothing -> do
-            st <- fetchStatus fs
-            writeIORef (fileStatus fs) (Just st)
-            pure st
+            r <- (Found <$> fetchStatus fs) `catch` handler
+            writeIORef (fileStatus fs) (Just r)
+            pure r
+
+    where
+
+    handler e
+        | isNonExistentError e = pure Missing
+        | otherwise = throwIO e
+
+-- | Apply the function to the cached 'FileStatus', or return 'False' if the
+-- path does not exist.
+withExistingStatus :: FileState -> (FileStatus -> IO Bool) -> IO Bool
+withExistingStatus fs p = do
+    r <- getPathStatus fs
+    case r of
+        Missing -> pure False
+        Found st -> p st
 
 -- | Construct a fresh 'FileState' with an empty (unfetched) status cache.
 --
@@ -299,7 +348,7 @@ newFileState followLinks path = do
 -- already populated. 'isSymLink' uses the supplied status as is.
 mkFileState :: String -> Path -> FileStatus -> IO FileState
 mkFileState tag fp st = do
-    ref <- newIORef (Just st)
+    ref <- newIORef (Just (Found st))
     return $ FileState
         { filepath    = fp
         , fileStatus  = ref
@@ -416,27 +465,17 @@ or = foldr or_ false
 not_ :: FileTest -> FileTest
 not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 
-applyCatchENOENT :: (t -> IO Bool) -> t -> IO Bool
-applyCatchENOENT f fs =
-    f fs `catch` eatENOENT
-  where
-    -- isDoesNotExistError covers NoSuchThing (ENOENT)
-    eatENOENT e
-        | isDoesNotExistError e = return False
-        | otherwise             = throwIO e
-
--- XXX * Returns 'False' if the file does not exist or the predicate is 'False'
--- This can lead to silent bugs. We should raise an exception if the file does
--- not exist unless the predicate is doesItExist.
-
 -- | Apply a predicate to a 'Path', if the path is a symlink uses the link
 -- target and not the link itself. See 'testl' for testing the link itself.
 --
 -- * 'test' returns 'True' if the file exists and the predicate is 'True'
--- * Returns 'False' if the file does not exist or the predicate is 'False'
--- * Fails with an IO exception if the path to the file is not accessible due
--- to lack of permissions. The exception type can be used to determine the
--- reason for failure.
+-- * Every predicate on the path is 'False' if the path does not exist, like
+-- the shell @test@: @test path isDir@ is 'False' and
+-- @test path (not_ isDir)@ is 'True' for a missing path.
+-- * Raises an IO exception if the path to the file is not accessible due
+-- to lack of permissions, or cannot be resolved, e.g. a symlink loop. The
+-- exception type can be used to determine the reason for failure. The shell
+-- @test@ returns false in these cases.
 --  * test 'isSymLink' tests the path itself, like 'testl', see 'isSymLink'.
 --  * test 'doesItExist' returns false if the path is symlink but it does not
 --  point to an existing file.
@@ -444,7 +483,7 @@ applyCatchENOENT f fs =
 test :: Path -> FileTest -> IO Bool
 test path (FileTest (Predicate f)) = do
     -- 'Files.getFileStatus' dereferences symlinks.
-    newFileState True path >>= applyCatchENOENT f
+    newFileState True path >>= f
 
 -- | Like 'test' but uses the path and not the link target if the path is a
 -- symlink.
@@ -455,10 +494,12 @@ test path (FileTest (Predicate f)) = do
 --  * Predicates related to file permission mode bits are meaningless, and
 --  should not be used.
 --  * Predicates related to file owner, group, size, time stamps are relevant.
+--  * Like 'test', every predicate on the path is 'False' if the path does
+--  not exist.
 --
 testl :: Path -> FileTest -> IO Bool
 testl path (FileTest (Predicate f)) =
-    newFileState False path >>= applyCatchENOENT f
+    newFileState False path >>= f
 
 -- | Apply a predicate to a pre-fetched 'FileStatus'. Note you cannot use
 -- predicates that require filepath when using apply.
@@ -469,31 +510,42 @@ testWithStatus fp st (FileTest (Predicate f)) =
 -- | Like 'withState' but the supplied function may perform IO.
 withStateM :: (Path -> FileStatus -> IO Bool) -> FileTest
 withStateM p =
-    FileTest $ Predicate $ \fs -> requireStatus fs >>= p (filepath fs)
+    FileTest $ Predicate $ \fs -> withExistingStatus fs (p (filepath fs))
 
 -- | Like 'withStateM' but the supplied function also gets whether the status
 -- follows symlinks: 'True' under 'test' and 'False' under 'testl'.
 withFollowStateM :: (Bool -> Path -> FileStatus -> IO Bool) -> FileTest
 withFollowStateM p =
     FileTest $ Predicate $ \fs ->
-        requireStatus fs >>= p (statusFollowsLinks fs) (filepath fs)
+        withExistingStatus fs (p (statusFollowsLinks fs) (filepath fs))
 
 -- | Convert a @Path -> FileStatus -> Bool@ function into a 'FileTest'
--- predicate.
+-- predicate. The predicate is 'False' if the path does not exist.
 withState :: (Path -> FileStatus -> Bool) -> FileTest
 withState p = withStateM (\fp fs -> pure $ p fp fs)
 
 -- | Like 'withStatus' but the supplied function may perform IO.
 withStatusM :: (FileStatus -> IO Bool) -> FileTest
-withStatusM p = FileTest $ Predicate $ requireStatus >=> p
+withStatusM p = FileTest $ Predicate $ \fs -> withExistingStatus fs p
 
 -- | Convert a @FileStatus -> Bool@ function into a 'FileTest' predicate.
+-- The predicate is 'False' if the path does not exist.
 withStatus :: (FileStatus -> Bool) -> FileTest
 withStatus p = withStatusM (pure . p)
 
 -- | Like 'withPath' but the supplied function may perform IO.
 withPathM :: (Path -> IO Bool) -> FileTest
 withPathM p = FileTest $ Predicate $ \fs -> p (filepath fs)
+
+-- | Like 'withPathM' but first gets the status of the path, so that it
+-- raises an exception for the same @stat@ errors as the predicates made with
+-- 'withStatus'. The result is 'False' if the path does not exist, or if the
+-- function fails because a file does not exist, e.g. the target of a
+-- dangling symlink under 'testl'.
+withExistingPathM :: (Path -> IO Bool) -> FileTest
+withExistingPathM p =
+    FileTest $ Predicate $ \fs ->
+        withExistingStatus fs (\_ -> catchNonExistent (p (filepath fs)))
 
 -- | Convert a @Path -> Bool@ function into a 'FileTest' predicate.
 withPath :: (Path -> Bool) -> FileTest
@@ -524,12 +576,13 @@ false = FileTest $ Predicate $ const (pure False)
 -- or the file pointed to by it depends on whether you use 'test' or 'testl' to
 -- execute the predicate.
 --
+-- 'test' on a symlink loop raises an exception: whether the path exists
+-- cannot be determined.
+--
 -- Like coreutil @test -e file@
 doesItExist :: FileTest
--- Catch ENOENT here, not only in the runner, so that a missing path gives
--- False to the enclosing combinator: not_ doesItExist is True for it.
 doesItExist =
-    FileTest $ Predicate $ applyCatchENOENT (fmap (const True) . requireStatus)
+    FileTest $ Predicate $ \fs -> withExistingStatus fs (\_ -> pure True)
 
 {-# DEPRECATED isExisting "Use doesItExist instead." #-}
 isExisting :: FileTest
@@ -545,7 +598,7 @@ isExisting = doesItExist
 -- False. Use the Windows specific isDirSymlink to test if the symlink has a
 -- dir attribute.
 --
--- Like @test -d file@
+-- Like @test -d file@.
 isDir :: FileTest
 isDir = withStatus Files.isDirectory
 
@@ -554,7 +607,7 @@ isDir = withStatus Files.isDirectory
 -- On Windows everything other a directory or a symlink is reported as a
 -- regular file.
 --
--- Like coreutil @test -f file@
+-- Like coreutil @test -f file@.
 isFile :: FileTest
 isFile = withStatus Files.isRegularFile
 
@@ -573,13 +626,13 @@ isFile = withStatus Files.isRegularFile
 -- On Windows it tells if the path is a reparse point i.e. it can be a symlink
 -- or a junction.
 --
--- Like coreutil @test -h/-L file@
+-- Like coreutil @test -h/-L file@.
 isSymLink :: FileTest
 isSymLink = FileTest $ Predicate $ \fs ->
     if statusFollowsLinks fs
-    then Files.isSymbolicLink
+    then catchNonExistent $ Files.isSymbolicLink
             <$> Files.getSymbolicLinkStatus (Path.toString (filepath fs))
-    else Files.isSymbolicLink <$> requireStatus fs
+    else withExistingStatus fs (pure . Files.isSymbolicLink)
 
 -- Note: Device files are supported in Windows/NTFS.
 
@@ -605,7 +658,7 @@ isCharDevice = withStatus Files.isCharacterDevice
 
 -- | True if file is a named pipe (FIFO).
 --
--- Like coreutil @test  -p file@.
+-- Like coreutil @test -p file@.
 --
 -- Always false on Windows.
 --
@@ -693,7 +746,7 @@ hasOtherExec = hasMode Files.otherExecuteMode
 
 -- | True if the file has set user ID flag is set.
 --
--- Like coreutil @test -u file@
+-- Like coreutil @test -u file@.
 --
 -- Always false on Windows.
 --
@@ -702,7 +755,7 @@ hasSetUid = hasMode Files.setUserIDMode
 
 -- | True if the file has set group ID flag is set.
 --
--- Like coreutil @test -g file@
+-- Like coreutil @test -g file@.
 --
 -- Always false on Windows.
 --
@@ -711,7 +764,7 @@ hasSetGid = hasMode Files.setGroupIDMode
 
 -- | True if file has sticky bit is set.
 --
--- Like coreutil @test -k file@
+-- Like coreutil @test -k file@.
 --
 -- Always false on Windows.
 --
@@ -964,7 +1017,7 @@ modifiedOlderThan age = modifyAge (> age)
 
 -- | True if the file has been modified since it was last accessed.
 --
--- Equivalent to GNU @test -N file@.
+-- Like GNU @test -N file@.
 --
 -- This checks whether the modification time is later than the access time.
 --
@@ -1046,7 +1099,7 @@ sizeEquals n = size (== n)
 -- directories, on Posix directories it will always be true because of \".\"
 -- and \"..\" entries.
 --
--- Like coreutil @test -s file@
+-- Like coreutil @test -s file@.
 --
 sizeNonZero :: FileTest
 sizeNonZero = size (> 0)

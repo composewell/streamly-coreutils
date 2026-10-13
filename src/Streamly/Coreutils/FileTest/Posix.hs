@@ -59,11 +59,12 @@ testHandle = undefined
 --
 -- Like coreutil @test file1 -ef file2@.
 --
--- The supplied file path is dereferenced if it is a symlink.
+-- The supplied file path is dereferenced if it is a symlink. Returns 'False'
+-- if either file does not exist.
 --
 sameFileAs :: Path -> FileTest
 sameFileAs path =
-  withStatusM $ \st -> do
+  withStatusM $ \st -> catchNonExistent $ do
     st1 <- Files.getFileStatus (Path.toString path)
     pure $
       Files.deviceID st == Files.deviceID st1 &&
@@ -112,16 +113,16 @@ pathIsReadable :: Path -> IO Bool
 pathIsReadable path = Posix.fileAccess (Path.toString path) True False False
 
 isReadable :: FileTest
-isReadable = withPathM pathIsReadable
+isReadable = withExistingPathM pathIsReadable
 
 pathIsWritable :: Path -> IO Bool
 pathIsWritable path = Posix.fileAccess (Path.toString path) False True False
 
 isWritable :: FileTest
-isWritable = withPathM pathIsWritable
+isWritable = withExistingPathM pathIsWritable
 
 pathIsExecutable :: Path -> IO Bool
 pathIsExecutable path = Posix.fileAccess (Path.toString path) False False True
 
 isExecutable :: FileTest
-isExecutable = withPathM pathIsExecutable
+isExecutable = withExistingPathM pathIsExecutable

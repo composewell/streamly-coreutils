@@ -27,10 +27,14 @@
 -- It offers greater composability and improved performance by allowing
 -- multiple predicates to share a single file status query.
 --
--- One important difference from the shell utility is that all the predicates
--- except 'doesItExist' raise an exception if the file does not exist so that
--- we can distinguish the cases when the predicate is actually false and when
--- the file does not exist. This is safer and avoids silent bugs.
+-- Like the shell utility, every predicate is 'False' if the path does not
+-- exist: @test missing isDir@ is 'False' and @test missing (not_ isDir)@ is
+-- 'True', like GNU @test -d missing@ and @test ! -d missing@.
+--
+-- One difference from the shell utility is that a @stat@ failure for any
+-- other reason, e.g. a permission error on a parent directory or a symlink
+-- loop, raises an exception. The shell utility returns false in these
+-- cases.
 --
 -- String comparison tests provided by GNU @test@ are intentionally omitted,
 -- as they can be expressed directly using standard Haskell operators.
@@ -418,7 +422,8 @@ isExecutableByMode =
 --
 -- Does not consider advisory or mandatory locks.
 --
--- Like coreutil @test -r file@
+-- Like coreutil @test -r file@.
+-- Under 'testl', a dangling symlink gives 'False'.
 --
 isReadable :: FileTest
 isReadable = FileTest.isReadable
@@ -437,7 +442,8 @@ isReadable = FileTest.isReadable
 --
 -- Does not consider advisory or mandatory locks.
 --
--- Like coreutil @test -w file@
+-- Like coreutil @test -w file@.
+-- Under 'testl', a dangling symlink gives 'False'.
 --
 isWritable :: FileTest
 isWritable = FileTest.isWritable
@@ -452,7 +458,8 @@ isWritable = FileTest.isWritable
 
 -- | True if the file is executable for the current user.
 --
--- Like coreutil @test -x file@ .
+-- Like coreutil @test -x file@.
+-- Under 'testl', a dangling symlink gives 'False'.
 --
 isExecutable :: FileTest
 isExecutable = FileTest.isExecutable

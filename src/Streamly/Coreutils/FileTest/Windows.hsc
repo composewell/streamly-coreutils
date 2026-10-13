@@ -62,6 +62,7 @@ import System.Win32.File
     , getFileInformationByHandle
     , getFileType
     , oPEN_EXISTING
+    , rEAD_CONTROL
     )
 import System.Win32.Security
     ( PSID
@@ -139,25 +140,6 @@ foreign import WINDOWS_CCONV unsafe "windows.h DuplicateToken"
 foreign import WINDOWS_CCONV unsafe "windows.h CloseHandle"
     c_CloseHandle :: HANDLE -> IO BOOL
 
--- GetFileSecurityW is used directly so we can work with the raw
--- PSECURITY_DESCRIPTOR (Ptr ()) rather than the opaque SecurityDescriptor
--- newtype returned by getFileSecurity.
-foreign import WINDOWS_CCONV unsafe "windows.h GetFileSecurityW"
-    c_GetFileSecurity
-        :: Win32.LPCWSTR -- lpFileName
-        -> DWORD         -- RequestedInformation (SECURITY_INFORMATION)
-        -> Ptr ()        -- pSecurityDescriptor
-        -> DWORD         -- nLength
-        -> LPDWORD       -- lpnLengthNeeded
-        -> IO BOOL
-
-foreign import WINDOWS_CCONV unsafe "windows.h GetSecurityDescriptorOwner"
-    c_GetSecurityDescriptorOwner
-        :: Ptr ()   -- pSecurityDescriptor
-        -> Ptr PSID -- pOwner
-        -> Ptr BOOL -- lpbOwnerDefaulted
-        -> IO BOOL
-
 foreign import WINDOWS_CCONV unsafe "windows.h EqualSid"
     c_EqualSid :: PSID -> PSID -> IO BOOL
 
@@ -165,6 +147,19 @@ foreign import WINDOWS_CCONV unsafe "windows.h EqualSid"
 foreign import WINDOWS_CCONV unsafe "aclapi.h GetNamedSecurityInfoW"
     c_GetNamedSecurityInfo
         :: Win32.LPWSTR -- pObjectName
+        -> DWORD        -- ObjectType (SE_OBJECT_TYPE)
+        -> DWORD        -- SecurityInfo
+        -> Ptr PSID     -- ppsidOwner  (out, optional)
+        -> Ptr PSID     -- ppsidGroup  (out, optional)
+        -> Ptr (Ptr ()) -- ppDacl      (out, optional)
+        -> Ptr (Ptr ()) -- ppSacl      (out, optional)
+        -> Ptr (Ptr ()) -- ppSecurityDescriptor (out)
+        -> IO DWORD     -- ERROR_SUCCESS (0) on success
+
+-- Like GetNamedSecurityInfoW but takes a handle, in aclapi.h
+foreign import WINDOWS_CCONV unsafe "aclapi.h GetSecurityInfo"
+    c_GetSecurityInfo
+        :: HANDLE       -- handle
         -> DWORD        -- ObjectType (SE_OBJECT_TYPE)
         -> DWORD        -- SecurityInfo
         -> Ptr PSID     -- ppsidOwner  (out, optional)
@@ -248,16 +243,14 @@ instance Storable GENERIC_MAPPING where
 -- Same file
 -------------------------------------------------------------------------------
 
--- | Open a file handle suitable for metadata queries. If the first argument
--- is 'False' and the path is a symlink, open the symlink itself instead of
--- its target, like @lstat@.
+-- | Open a file handle suitable for metadata queries, with the given desired
+-- access. If the second argument is 'False' and the path is a symlink, open
+-- the symlink itself instead of its target, like @lstat@.
 -- Uses fILE_FLAG_BACKUP_SEMANTICS so that directories can be opened too.
--- Uses 0 for desired access since only metadata is needed; this succeeds
--- even when data-read access is restricted.
-withFileHandle :: Bool -> Path -> (HANDLE -> IO a) -> IO a
-withFileHandle followLinks path action =
+withFileHandle :: DWORD -> Bool -> Path -> (HANDLE -> IO a) -> IO a
+withFileHandle access followLinks path action =
     bracket
-        (createFile (Path.toString path) 0
+        (createFile (Path.toString path) access
             (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
             Nothing
             oPEN_EXISTING
@@ -275,23 +268,30 @@ withFileHandle followLinks path action =
 -- a file on the local system, following the same-inode logic as POSIX.
 fileId :: Bool -> Path -> IO (DWORD, Word64)
 fileId followLinks path =
-    withFileHandle followLinks path $ \h -> do
+    -- 0 desired access: only metadata is needed, so this succeeds even when
+    -- data-read access is restricted.
+    withFileHandle 0 followLinks path $ \h -> do
         info <- getFileInformationByHandle h
         let vol = bhfiVolumeSerialNumber info
             idx = bhfiFileIndex info
         pure (vol, idx)
 
--- Under 'testl' path1 is not dereferenced, like the lstat used by the POSIX
--- implementation; path2 is always dereferenced.
+-- A missing path1 or path2 gives False, as in the POSIX implementation. The
+-- status of path1 is fetched first, so that the result for a missing path1
+-- and the exceptions for other errors are the same as for the other
+-- predicates. Under 'testl' path1 is not dereferenced, like the lstat used by
+-- the POSIX implementation; path2 is always dereferenced.
 
 -- | True if both paths refer to the same underlying file or directory,
--- equivalent to POSIX inode comparison.
+-- equivalent to POSIX inode comparison. Returns 'False' if either path does
+-- not exist.
 sameFileAs :: Path -> FileTest
 sameFileAs path2 =
     withFollowStateM $ \followLinks path1 _ -> do
         id1 <- fileId followLinks path1
-        id2 <- fileId True path2
-        pure (id1 == id2)
+        catchNonExistent $ do
+            id2 <- fileId True path2
+            pure (id1 == id2)
 
 -------------------------------------------------------------------------------
 -- Terminal
@@ -331,27 +331,26 @@ isTerminalFd (Fd fd) =
 -- withFileOwnerSID
 -------------------------------------------------------------------------------
 
--- We bind c_GetFileSecurity directly (as Ptr ()) rather than using
--- getFileSecurity, whose SecurityDescriptor newtype is opaque and
--- incompatible with c_GetSecurityDescriptorOwner.
-withFileOwnerSID :: Path -> (PSID -> IO a) -> IO a
-withFileOwnerSID path action =
-    withFilePath (Path.toString path) $ \pPath ->
-    alloca $ \pLenNeeded -> do
-        -- First call: get required buffer size
-        _ <- c_GetFileSecurity
-                 pPath oWNER_SECURITY_INFORMATION nullPtr 0 pLenNeeded
-        needed <- peek pLenNeeded
-        allocaBytes (fromIntegral needed) $ \pSd -> do
-            failIfFalse_ "GetFileSecurityW" $
-                c_GetFileSecurity
-                    pPath oWNER_SECURITY_INFORMATION pSd needed pLenNeeded
-            alloca $ \ppSid ->
-                alloca $ \pDefaulted -> do
-                    failIfFalse_ "GetSecurityDescriptorOwner" $
-                        c_GetSecurityDescriptorOwner pSd ppSid pDefaulted
-                    sid <- peek ppSid
-                    action sid
+-- GetFileSecurityW always reads the symlink itself, not its target. To get
+-- the owner of the target under 'test', like stat on POSIX, we read the
+-- owner from a handle, opened with or without FILE_FLAG_OPEN_REPARSE_POINT.
+
+-- | Run an action on the owner SID of a file. If the first argument is
+-- 'False' and the path is a symlink, use the owner of the symlink itself.
+withFileOwnerSID :: Bool -> Path -> (PSID -> IO a) -> IO a
+withFileOwnerSID followLinks path action =
+    withFileHandle rEAD_CONTROL followLinks path $ \h ->
+    alloca $ \ppSid ->
+    alloca $ \ppSd -> do
+        Win32.failUnlessSuccess "GetSecurityInfo" $
+            c_GetSecurityInfo
+                h sE_FILE_OBJECT oWNER_SECURITY_INFORMATION
+                ppSid nullPtr nullPtr nullPtr ppSd
+        pSd <- peek ppSd
+        -- The owner SID points into the security descriptor allocated by
+        -- GetSecurityInfo; free the descriptor with LocalFree.
+        bracket (return pSd) (\p -> c_LocalFree p >> return ()) $ \_ ->
+            peek ppSid >>= action
 
 -------------------------------------------------------------------------------
 -- withEffectiveUserSID
@@ -383,14 +382,16 @@ withEffectiveUserSID action = do
 -- Ownership
 -------------------------------------------------------------------------------
 
-isPathOwnedByCurrentUser :: Path -> IO Bool
-isPathOwnedByCurrentUser path =
-    withFileOwnerSID path $ \fileSid ->
+isPathOwnedByCurrentUser :: Bool -> Path -> IO Bool
+isPathOwnedByCurrentUser followLinks path =
+    withFileOwnerSID followLinks path $ \fileSid ->
         withEffectiveUserSID $ \userSid ->
             c_EqualSid fileSid userSid
 
 isOwnedByCurrentUser :: FileTest
-isOwnedByCurrentUser = withPathM isPathOwnedByCurrentUser
+isOwnedByCurrentUser =
+    withFollowStateM $ \followLinks path _ ->
+        isPathOwnedByCurrentUser followLinks path
 
 {-
 withFilePrimaryGroupSID = undefined
@@ -436,7 +437,7 @@ isPathReadableNow path =
     flags     = fILE_FLAG_BACKUP_SEMANTICS
 
 isReadableNow :: FileTest
-isReadableNow = withPathM isPathReadableNow
+isReadableNow = withExistingPathM isPathReadableNow
 
 -- | True if the file is writable by the current process.
 --
@@ -491,7 +492,7 @@ isPathExecutableNow path =
     flags     = fILE_FLAG_BACKUP_SEMANTICS
 
 isExecutableNow :: FileTest
-isExecutableNow = withPathM isPathExecutableNow
+isExecutableNow = withExistingPathM isPathExecutableNow
 
 -------------------------------------------------------------------------------
 -- ACL-based checks (POSIX access() equivalent)
@@ -580,13 +581,13 @@ pathIsExecutable :: Path -> IO Bool
 pathIsExecutable path = pathAccess path fILE_GENERIC_EXECUTE
 
 isReadable :: FileTest
-isReadable = withPathM pathIsReadable
+isReadable = withExistingPathM pathIsReadable
 
 isWritable :: FileTest
-isWritable = withPathM pathIsWritable
+isWritable = withExistingPathM pathIsWritable
 
 isExecutable :: FileTest
-isExecutable = withPathM pathIsExecutable
+isExecutable = withExistingPathM pathIsExecutable
 
 fILE_ATTRIBUTE_DIRECTORY    :: DWORD
 fILE_ATTRIBUTE_DIRECTORY    = 0x10
