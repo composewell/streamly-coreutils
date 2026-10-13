@@ -1,4 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
 -- |
 -- Module      : Streamly.Coreutils.Tail
 -- Copyright   : (c) 2025 Composewell Technologies
@@ -30,10 +29,9 @@ import Data.Word (Word8)
 import Streamly.Data.Array (Array)
 import Streamly.Data.Stream.Prelude (Stream)
 import Streamly.FileSystem.Path (Path)
-import Streamly.Unicode.String (str)
 
 import qualified Streamly.FileSystem.Path as Path
-import qualified Streamly.System.Command as Command
+import qualified Streamly.System.Process as Process
 
 
 import Prelude hiding (tail, lines)
@@ -94,16 +92,18 @@ fromByte x cfg = cfg {_offset = Right x, _reverse = True}
 -- installed in the PATH.
 tail :: (TailOptions -> TailOptions) -> Path -> Stream IO (Array Word8)
 tail modifier path =
-    let p = Path.toString path
-        cfg = modifier defaultConfig
+    let cfg = modifier defaultConfig
         -- XXX make portable
-        foll = if _follow cfg then "-f" else ""
+        foll = ["-f" | _follow cfg]
         dir = if _reverse cfg then "+" else ""
         loc =
             case _offset cfg of
-                Left x -> "-n " ++ dir ++ show x
-                Right x -> "-c " ++ dir ++ show x
-        in Command.toChunks [str|tail #{foll} #{loc} #{p}|]
+                Left x -> ["-n", dir ++ show x]
+                Right x -> ["-c", dir ++ show x]
+        -- Arguments are passed as a list, not through a shell command line,
+        -- so the path needs no quoting. "--" ends option parsing in case the
+        -- path starts with "-".
+        in Process.toChunks "tail" (foll ++ loc ++ ["--", Path.toString path])
      {-
         if _follow cfg
         then Command.toChunks [str|tail #{foll} #{loc} #{p}|]
