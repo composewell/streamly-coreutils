@@ -22,10 +22,10 @@ module Streamly.Coreutils.Cp
 where
 
 import Control.Monad (when)
-import Data.Function ((&))
 import System.PosixCompat.Files (createLink)
 #if !defined(CABAL_OS_WINDOWS)
 import Control.Exception (bracket)
+import Data.Function ((&))
 import System.IO (hClose)
 import System.Posix.Files
     (accessModes, fileMode, getFileStatus, intersectFileModes)
@@ -116,7 +116,14 @@ cpCopy method src dest =
             -- An existing destination keeps its own mode, like GNU cp.
             exists <- test dest doesItExist
             if exists
-            then File.readChunks src & File.fromChunks dest
+            then do
+                -- Writing would truncate the source before it is read.
+                same <- test src (sameFileAs dest)
+                when same
+                    $ ioError $ userError
+                    $ "cp: source and destination are the same file: "
+                        ++ Path.toString src
+                File.fromChunks dest (File.readChunks src)
             else copyToNew src dest
         HardLink -> createLink (Path.toString src) (Path.toString dest)
         SymbolicLink -> error "Unimplemented"
