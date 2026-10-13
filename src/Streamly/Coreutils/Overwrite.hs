@@ -19,6 +19,8 @@ where
 
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
 
+import qualified System.PosixCompat.Files as Files
+
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 import qualified Streamly.Internal.FileSystem.Path as Path
@@ -47,13 +49,18 @@ destinationExistsError dest =
         alreadyExistsErrorType "not replacing" Nothing
         (Just (Path.toString dest))
 
--- | @shouldOverwrite runTest option src dest@ returns 'True' if the command
--- should write @src@ to @dest@, and raises 'destinationExistsError' for
--- 'OverwriteError' if @dest@ exists. @runTest@ ('test' or 'testl') decides
--- whether a symlink at @dest@ is followed when checking that @dest@ exists.
-shouldOverwrite ::
-    (Path -> FileTest -> IO Bool) -> Overwrite -> Path -> Path -> IO Bool
-shouldOverwrite runTest option src dest =
+-- The modification times are compared with the same follow mode as the
+-- existence check. newerThanFile always follows a symlink at dest, so with
+-- followLinks False it would compare with the target of the symlink, and
+-- raise for a dangling one, whereas GNU mv -u compares with the symlink.
+
+-- | @shouldOverwrite followLinks option src dest@ returns 'True' if the
+-- command should write @src@ to @dest@, and raises 'destinationExistsError'
+-- for 'OverwriteError' if @dest@ exists. @followLinks@ decides whether a
+-- symlink at @src@ or @dest@ is followed when checking that @dest@ exists and
+-- when comparing modification times: 'True' for @cp@, 'False' for @mv@.
+shouldOverwrite :: Bool -> Overwrite -> Path -> Path -> IO Bool
+shouldOverwrite followLinks option src dest =
     case option of
         OverwriteAlways -> return True
         OverwriteOnly -> runTest dest doesItExist
@@ -66,8 +73,18 @@ shouldOverwrite runTest option src dest =
         OverwriteUpdate -> do
             r <- runTest dest doesItExist
             if r
-            then test src $ newerThanFile dest
+            then do
+                destTime <-
+                    Files.modificationTimeHiRes <$> getStatus (Path.toString dest)
+                runTest src $ modifyTime (> destTime)
             else return True
+
+    where
+
+    (runTest, getStatus) =
+        if followLinks
+        then (test, Files.getFileStatus)
+        else (testl, Files.getSymbolicLinkStatus)
 
 -- Path.takeFileName returns Nothing when there are trailing separators, so
 -- they are dropped first. It also returns Nothing for a path ending in "."

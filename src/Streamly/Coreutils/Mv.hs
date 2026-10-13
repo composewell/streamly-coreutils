@@ -29,7 +29,7 @@ import System.Directory (renamePath)
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.FileTest (and_, doesItExist, isDir, test, testl)
+import Streamly.Coreutils.FileTest (and_, doesItExist, isDir, test)
 import Streamly.Coreutils.Overwrite
     (Overwrite(..), destinationExistsError, shouldOverwrite, targetInDir)
 import Streamly.Coreutils.Rename (renameNoReplace)
@@ -66,7 +66,9 @@ defaultConfig = MvOptions
 -- | Specify what to do when the destination exists. See 'Overwrite'.
 --
 -- A symlink at the destination counts as an existing destination even if
--- its target does not exist.
+-- its target does not exist. 'OverwriteUpdate' compares the modification
+-- time of the source with that of the symlink, not of its target, like GNU
+-- @mv -u@. A symlink at the source is not followed either.
 --
 -- 'mv' never asks the user before replacing a destination. The default,
 -- 'OverwriteAlways', is equivalent to GNU @mv -f@. GNU @mv@ without @-f@
@@ -121,7 +123,7 @@ moveTo opt src dest =
             r <- renameNoReplace src dest
             unless r $ ioError (destinationExistsError dest)
         option -> do
-            r <- shouldOverwrite testl option src dest
+            r <- shouldOverwrite False option src dest
             when r $ renamePath (Path.toString src) (Path.toString dest)
 
 -- | @mvMany modifier sources dir@ moves each of @sources@ into the existing

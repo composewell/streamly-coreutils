@@ -169,5 +169,5 @@ cp f src dest = do
         then test dest (doesItExist `and_` isDir)
         else return False
     target <- if destIsDir then targetInDir dest src else return dest
-    r <- shouldOverwrite test (optOverwrite options) src target
+    r <- shouldOverwrite True (optOverwrite options) src target
     when r $ cpCopy (optCopyMethod options) src target

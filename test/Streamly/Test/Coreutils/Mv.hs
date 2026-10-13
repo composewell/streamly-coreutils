@@ -394,6 +394,53 @@ main = hspec $ do
             (d </> "a") `shouldContain'` "a"
             (d </> "dir" </> "a") `shouldContain'` "old"
 
+        it "replaces an older dangling symlink" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createFileLink "nowhere" (d </> "b")
+            setAge (d </> "a") 100
+            mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            (d </> "b") `shouldContain'` "a"
+
+        it "keeps a newer dangling symlink" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createFileLink "nowhere" (d </> "b")
+            setAge (d </> "a") (-100)
+            mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            (d </> "a") `shouldContain'` "a"
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "compares a symlink at the source, not its target"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "target") "old"
+            setAge (d </> "target") (-200)
+            createFileLink "target" (d </> "a")
+            writeFile (d </> "b") "b"
+            setAge (d </> "b") (-100)
+            mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "moves a newer dangling symlink at the source"
+            $ withTempDir $ \d -> do
+            createFileLink "nowhere" (d </> "a")
+            writeFile (d </> "b") "b"
+            setAge (d </> "b") (-100)
+            mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "compares with a symlink, not with its target"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            writeFile (d </> "target") "old"
+            setAge (d </> "target") (-200)
+            setAge (d </> "a") (-100)
+            createFileLink "target" (d </> "b")
+            mv (overwrite OverwriteUpdate) (d </> "a") (d </> "b")
+            (d </> "a") `shouldContain'` "a"
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
     describe "mv (intoDirectory False)" $ do
 
         it "fails to replace a directory with a file" $ withTempDir $ \d -> do
