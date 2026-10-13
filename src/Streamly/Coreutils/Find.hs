@@ -12,6 +12,10 @@
 --
 -- Similar to GNU find. Not all options are implemented yet.
 --
+-- Symbolic links are listed but not followed: a symlink to a directory is
+-- reported as an entry and its target is not traversed, like the GNU find
+-- default (@find -P@). Use 'followSymlinks' to follow them.
+--
 -- Examples:
 -- List the current directory recursively using the internal traversal variants.
 --
@@ -80,6 +84,7 @@ module Streamly.Coreutils.Find
     -- * Options
     , FindOptions
     , maxResults
+    , followSymlinks
     )
 where
 
@@ -157,6 +162,7 @@ data FindTraversal
 data FindOptions = FindOptions
     { findTraversal :: FindTraversal
     , findMaxResults :: Maybe Int
+    , findFollowSymlinks :: Bool
     }
 
 defaultConfig :: FindOptions
@@ -164,6 +170,7 @@ defaultConfig =
     FindOptions
         { findTraversal = FindSerialDfs
         , findMaxResults = Nothing
+        , findFollowSymlinks = False
         }
 
 serialDfs :: FindOptions -> FindOptions
@@ -193,18 +200,32 @@ parallelOrdered cfg = cfg {findTraversal = FindParallelOrdered}
 maxResults :: Int -> FindOptions -> FindOptions
 maxResults n cfg = cfg {findMaxResults = Just (max 0 n)}
 
+-- | Descend into directories reached through symbolic links, like @find -L@.
+--
+-- Default (without this modifier): symbolic links are listed but not
+-- followed, like @find -P@.
+--
+-- There is no loop detection: a symbolic link to an ancestor directory makes
+-- the traversal fail with "Too many levels of symbolic links". Broken
+-- symbolic links are left out of the output. Has no effect on Windows.
+followSymlinks :: Bool -> FindOptions -> FindOptions
+followSymlinks x cfg = cfg {findFollowSymlinks = x}
+
 {-# INLINE recReadOpts #-}
-recReadOpts :: ReadOptions -> ReadOptions
+recReadOpts :: Bool -> ReadOptions -> ReadOptions
 {-# INLINE reEncode #-}
 reEncode :: Stream IO OsWord -> Stream IO Word8
 #if defined(mingw32_HOST_OS) || defined(__MINGW32__)
-recReadOpts = id
+recReadOpts _ = id
 
 reEncode =
       Stream.encodeUtf8
     . Stream.decodeUtf16le
 #else
-recReadOpts =
+-- Without followSymlinks, like GNU find -P, do not descend into symlinked
+-- directories.
+recReadOpts False = DirIO.followSymlinks False
+recReadOpts True =
       DirIO.followSymlinks True
     . DirIO.ignoreSymlinkLoops False
     . DirIO.ignoreMissing True
@@ -312,6 +333,8 @@ findByteChunked f path =
 
     opts = f defaultConfig
 
+    readOpts = recReadOpts (findFollowSymlinks opts)
+
     concatIterateWith combine =
           StreamK.toStream
         . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
@@ -324,10 +347,10 @@ findByteChunked f path =
 
     -- cfg = Stream.eager False . Stream.maxBuffer 2000 . Stream.maxThreads 2
     streamDir :: Either [Path] b -> Stream IO (Either [Path] (Array Word8))
-    streamDir = either (Dir.readEitherByteChunks recReadOpts) (const Stream.nil)
+    streamDir = either (Dir.readEitherByteChunks readOpts) (const Stream.nil)
 
     streamDirMaybe :: Either [Path] b -> Maybe (Stream IO (Either [Path] (Array Word8)))
-    streamDirMaybe = either (Just . Dir.readEitherByteChunks recReadOpts) (const Nothing)
+    streamDirMaybe = either (Just . Dir.readEitherByteChunks readOpts) (const Nothing)
 #endif
 
 -- Faster than the find implementation below
@@ -335,7 +358,7 @@ findChunked :: (FindOptions -> FindOptions) -> Path -> Stream IO [Path]
 findChunked f path =
         -- XXX implement maxResults
         Stream.catRights $
-            case findTraversal (f defaultConfig) of
+            case findTraversal opts of
                 FindSerialDfs ->
                     Stream.concatIterate streamDirMaybe -- 264 ms
                     $ Stream.fromPure (Left [path])
@@ -363,6 +386,10 @@ findChunked f path =
 
     where
 
+    opts = f defaultConfig
+
+    readOpts = recReadOpts (findFollowSymlinks opts)
+
     concatIterateWith combine =
           StreamK.toStream
         . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
@@ -374,16 +401,16 @@ findChunked f path =
         . StreamK.fromStream
 
     streamDir :: Either [Path] b -> Stream IO (Either [Path] [Path])
-    streamDir = either (Dir.readEitherChunks recReadOpts) (const Stream.nil)
+    streamDir = either (Dir.readEitherChunks readOpts) (const Stream.nil)
 
     streamDirMaybe :: Either [Path] b -> Maybe (Stream IO (Either [Path] [Path]))
-    streamDirMaybe = either (Just . Dir.readEitherChunks recReadOpts) (const Nothing)
+    streamDirMaybe = either (Just . Dir.readEitherChunks readOpts) (const Nothing)
 
 find :: (FindOptions -> FindOptions) -> Path -> Stream IO Path
 find f path =
         -- XXX implement maxResults
         Stream.catRights $
-            case findTraversal (f defaultConfig) of
+            case findTraversal opts of
                 FindSerialDfs ->
                     --  Stream.unfoldIterateDfs unfoldDir -- 284 ms
                     Stream.concatIterate streamDirMaybe -- 274 ms
@@ -415,6 +442,10 @@ find f path =
 
     where
 
+    opts = f defaultConfig
+
+    readOpts = recReadOpts (findFollowSymlinks opts)
+
     concatIterateWith combine =
           StreamK.toStream
         . StreamK.concatIterateWith combine (StreamK.fromStream . streamDir)
@@ -426,10 +457,10 @@ find f path =
         . StreamK.fromStream
 
     streamDir :: Either Path b -> Stream IO (Either Path Path)
-    streamDir = either (Dir.readEitherPaths recReadOpts) (const Stream.nil)
+    streamDir = either (Dir.readEitherPaths readOpts) (const Stream.nil)
 
     unfoldDir :: Unfold IO (Either Path b) (Either Path Path)
-    unfoldDir = Unfold.either (Dir.eitherReaderPaths recReadOpts) Unfold.nil
+    unfoldDir = Unfold.either (Dir.eitherReaderPaths readOpts) Unfold.nil
 
     streamDirMaybe :: Either Path b -> Maybe (Stream IO (Either Path Path))
-    streamDirMaybe = either (Just . Dir.readEitherPaths recReadOpts) (const Nothing)
+    streamDirMaybe = either (Just . Dir.readEitherPaths readOpts) (const Nothing)

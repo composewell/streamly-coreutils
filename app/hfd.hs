@@ -28,6 +28,7 @@ import qualified Streamly.FileSystem.Path as Path
 import Streamly.Coreutils.Find
     ( FindOptions
     , findByteChunked
+    , followSymlinks
     , maxResults
     , parallelInterleaved
     , parallelOrdered
@@ -43,6 +44,7 @@ data Config = Config
     { cfgTraversal :: FindOptions -> FindOptions
     , cfgRoot :: FilePath
     , cfgMaxResults :: Maybe Int
+    , cfgFollowSymlinks :: Bool
     }
 
 data Traversal
@@ -67,12 +69,13 @@ toTraversalConfig traversal =
         TraversalParallelInterleaved -> parallelInterleaved
         TraversalParallelOrdered -> parallelOrdered
 
-mkConfig :: Traversal -> Maybe Int -> Maybe FilePath -> Config
-mkConfig traversal mMaxResults mPath =
+mkConfig :: Traversal -> Bool -> Maybe Int -> Maybe FilePath -> Config
+mkConfig traversal follow mMaxResults mPath =
     Config
         { cfgTraversal = toTraversalConfig traversal
         , cfgRoot = maybe "." id mPath
         , cfgMaxResults = mMaxResults
+        , cfgFollowSymlinks = follow
         }
 
 traversalParser :: Parser Traversal
@@ -99,6 +102,10 @@ configParser :: Parser Config
 configParser =
     mkConfig
         <$> traversalParser
+        <*> OA.switch
+                (OA.short 'L'
+                    <> long "follow"
+                    <> help "Descend into symlinked directories")
         <*> optional
                 (option (OA.eitherReader parsePositiveInt)
                     (long "max-results"
@@ -123,6 +130,7 @@ main = do
     path <- Path.fromString (cfgRoot cfg)
     let applyConfig opts =
             maybe id maxResults (cfgMaxResults cfg) $
+                followSymlinks (cfgFollowSymlinks cfg) $
                 cfgTraversal cfg opts
     Stream.fold (Handle.writeChunks stdout)
         $ findByteChunked applyConfig path
