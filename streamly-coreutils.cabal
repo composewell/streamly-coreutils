@@ -377,6 +377,19 @@ test-suite Streamly.Coreutils.Dirname
   ghc-options: -main-is Streamly.Test.Coreutils.Dirname.main
                -rtsopts "-with-rtsopts=-M512M"
 
+test-suite Streamly.Coreutils.Sleep
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Sleep.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , hspec
+    , streamly-coreutils
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Sleep.main
+               -rtsopts "-with-rtsopts=-M512M"
+
 test-suite Streamly.Coreutils.FileTest
   import: compile-options
   type: exitcode-stdio-1.0
