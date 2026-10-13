@@ -84,7 +84,7 @@ module Streamly.Coreutils.Rm
     )
 where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, unless)
 import Streamly.Coreutils.FileTest
     (doesItExist, test, testl, isDir, isWritableByMode)
 #if defined(CABAL_OS_WINDOWS)
@@ -214,7 +214,7 @@ _setWritable :: Path -> IO ()
 _setWritable path = do
     let pathStr = Path.toString path
     perms <- getPermissions pathStr
-    when (not (writable perms)) $
+    unless (writable perms) $
         setPermissions pathStr (perms { writable = True })
 
 rmfile :: RmOptions -> Path -> IO ()

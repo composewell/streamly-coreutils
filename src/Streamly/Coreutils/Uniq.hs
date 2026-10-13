@@ -118,9 +118,6 @@ compareUsingOptions opt =
     compareXYZ (ignoreCase opt) (skipFields opt) (skipChar opt) (checkChar opt)
     where
 
-    compareWith :: (String -> String -> Bool) -> String -> String -> Bool
-    compareWith eq s1 s2 = eq s1 s2
-
     -- Gives the number of characters to be deleted from the beginning of the
     -- string to skip @n@ non-space fields\/strings
     indexAfterSkippingNWords :: Int -> String -> Int
@@ -149,13 +146,11 @@ compareUsingOptions opt =
             compareFunc = if ignCase then compareIgnCase else (==)
          in case mz of
                 Just z ->
-                    compareWith
-                        compareFunc
+                    compareFunc
                         (slice (ix1 + y) z str1)
                         (slice (ix2 + y) z str2)
                 _ ->
-                    compareWith
-                        compareFunc
+                    compareFunc
                         (drop (ix1 + y) str1)
                         (drop (ix2 + y) str2)
 
@@ -190,9 +185,9 @@ getRepetition comparator =
 {-# INLINE uniq #-}
 uniq :: MonadThrow m => UniqOptions -> Stream m String -> Stream m UniqResult
 uniq opt strm =
-    case (output opt) of
+    case output opt of
         Unique -> extract (eq 1)
-        All -> extract (\_ -> True)
+        All -> extract (const True)
         Duplicate -> extract (ge 1)
         Repeated -> (\(UniqResult _ x) -> UniqResult 1 x) <$> extract (ge 1)
   where

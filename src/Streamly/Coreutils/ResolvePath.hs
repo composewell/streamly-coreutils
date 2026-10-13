@@ -89,7 +89,7 @@ module Streamly.Coreutils.ResolvePath
     )
 where
 
-import Control.Monad (when)
+import Control.Monad (unless)
 import Data.List (isPrefixOf)
 import System.Directory
     (canonicalizePath, doesDirectoryExist, doesPathExist, makeAbsolute)
@@ -422,7 +422,7 @@ lexicalCollapse p =
         step acc "." = acc
         step acc ".." = case acc of
             -- Relative path: preserve leading ..
-            [] -> if absolute then [] else [".."]
+            [] -> [".." | not absolute]
             (x:xs)
                 | x == ".." -> "..":x:xs
                 | otherwise -> xs
@@ -439,13 +439,13 @@ checkExistence check path = case check of
     RequireNone -> return ()
     RequirePath -> do
         exists <- doesPathExist path
-        when (not exists) $
+        unless exists $
             ioError
                 (userError ("resolvePath: path does not exist: " ++ path))
     RequireParents -> do
         let parent = takeDirectory path
         parentExists <- doesDirectoryExist parent
-        when (not parentExists) $
+        unless parentExists $
             ioError
                 (userError
                     ("resolvePath: parent directory does not exist: "
@@ -487,7 +487,7 @@ resolvePath modifier path = do
     resolved <- case _resolutionMode opts of
         ResolveThenParent -> canonicalizePath pathStr
         ParentThenResolve ->
-            fmap lexicalCollapse (makeAbsolute pathStr) >>= canonicalizePath
+            makeAbsolute pathStr >>= canonicalizePath . lexicalCollapse
         NoSymlinkResolution -> fmap lexicalCollapse (makeAbsolute pathStr)
     -- Relativization and containment logic:
     --   * _relativeTo chooses the target to relativize against.

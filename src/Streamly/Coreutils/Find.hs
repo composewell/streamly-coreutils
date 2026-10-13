@@ -329,7 +329,7 @@ findByteChunked f path =
     where
 
     {-# INLINE transform #-}
-    transform s = maybe s (\n -> takeN n s) (findMaxResults opts)
+    transform s = maybe s (`takeN` s) (findMaxResults opts)
 
     opts = f defaultConfig
 

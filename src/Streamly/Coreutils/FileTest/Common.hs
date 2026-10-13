@@ -1,4 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -194,6 +193,7 @@ module Streamly.Coreutils.FileTest.Common
 where
 
 import Control.Exception (catch, throwIO)
+import Control.Monad ((>=>))
 import Data.Bits ((.&.))
 import Data.Int (Int64)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -466,7 +466,7 @@ withState p = withStateM (\fp fs -> pure $ p fp fs)
 
 -- | Like 'withStatus' but the supplied function may perform IO.
 withStatusM :: (FileStatus -> IO Bool) -> FileTest
-withStatusM p = FileTest $ Predicate $ \fs -> requireStatus fs >>= p
+withStatusM p = FileTest $ Predicate $ requireStatus >=> p
 
 -- | Convert a @FileStatus -> Bool@ function into a 'FileTest' predicate.
 withStatus :: (FileStatus -> Bool) -> FileTest
@@ -724,7 +724,7 @@ hours n = n * 3600
 -- >>> let _ = accessedOlderThan (days 1)
 --
 days :: NominalDiffTime -> NominalDiffTime
-days n = n * 86400
+days n = n * 86_400
 
 -----------------------------------
 -- Comparing times
@@ -884,7 +884,7 @@ ageSatisfiesWith
   -> (NominalDiffTime -> Bool)
   -> FileTest
 ageSatisfiesWith getFileTime p =
-  withStatusM $ \st -> p <$> ageOfWith getFileTime st
+  withStatusM $ fmap p . ageOfWith getFileTime
 
 -- | True if the access age of the file satisfies the supplied predicate.
 --
@@ -1026,7 +1026,7 @@ getSize st = let COff sz = Files.fileSize st in sz
 -- directory may still have a non-zero size. On POSIX systems, the size
 -- typically accounts for the mandatory "." and ".." entries.
 size :: (Int64 -> Bool) -> FileTest
-size cmp = withStatus (\st -> cmp (getSize st))
+size cmp = withStatus (cmp . getSize)
 
 -- | True if file size is strictly greater than the given size in bytes.
 --
