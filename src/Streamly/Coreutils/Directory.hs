@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Directory
+-- Module      : Streamly.Coreutils.Directory
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Perform directory related operations.
 
-module Coreutils.Directory
+module Streamly.Coreutils.Directory
     ( home
     , pwd
     , cd

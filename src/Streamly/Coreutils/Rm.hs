@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Rm
+-- Module      : Streamly.Coreutils.Rm
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -69,7 +69,7 @@
 
 -- TODO: replace the error calls with exceptions
 
-module Coreutils.Rm
+module Streamly.Coreutils.Rm
     ( rm
     , rmContents
 
@@ -85,10 +85,10 @@ module Coreutils.Rm
 where
 
 import Control.Monad (forM_, when)
-import Coreutils.FileTest
+import Streamly.Coreutils.FileTest
     (doesItExist, test, testl, isDir, isWritableByMode)
 #if defined(CABAL_OS_WINDOWS)
-import Coreutils.FileTest.Windows (isDirSymLink)
+import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
 import System.Directory
     ( getPermissions

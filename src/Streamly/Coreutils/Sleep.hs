@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Sleep
+-- Module      : Streamly.Coreutils.Sleep
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Delay for a number of seconds.
 
-module Coreutils.Sleep
+module Streamly.Coreutils.Sleep
     (sleep)
 where
 

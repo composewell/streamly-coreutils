@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Touch
+-- Module      : Streamly.Coreutils.Touch
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Update the access and modification times of a file to the current time.
 
-module Coreutils.Touch
+module Streamly.Coreutils.Touch
     (
       touch
 
@@ -20,7 +20,7 @@ module Coreutils.Touch
 where
 
 import Control.Monad (unless)
-import Coreutils.FileTest (test, doesItExist)
+import Streamly.Coreutils.FileTest (test, doesItExist)
 import System.IO (openFile, IOMode(WriteMode), hClose)
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path

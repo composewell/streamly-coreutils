@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Chmod
+-- Module      : Streamly.Coreutils.Chmod
 -- Copyright   : (c) 2026 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -17,7 +17,7 @@
 -- >>> _ = chmod (additive True) (groupWrite False)                        -- chmod g-w FILE
 -- >>> _ = chmod (modeFrom file) (groupWrite True)                         -- chmod --reference=ref FILE
 
-module Coreutils.Chmod
+module Streamly.Coreutils.Chmod
     ( -- * Runner
       chmod
 
@@ -60,7 +60,7 @@ import qualified Streamly.FileSystem.Path as Path
 
 -- $setup
 -- >>> :set -XQuasiQuotes
--- >>> import Coreutils.Chmod
+-- >>> import Streamly.Coreutils.Chmod
 -- >>> import Streamly.FileSystem.Path (path)
 -- >>> file = [path|a.txt|]
 

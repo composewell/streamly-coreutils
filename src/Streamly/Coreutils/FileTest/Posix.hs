@@ -1,16 +1,16 @@
 -- |
--- Module      : Coreutils.FileTest.Posix
+-- Module      : Streamly.Coreutils.FileTest.Posix
 -- Copyright   : (c) 2021 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
 -- Stability   : experimental
 -- Portability : GHC
 --
--- See "Coreutils.FileTest" module for general module level
+-- See "Streamly.Coreutils.FileTest" module for general module level
 -- documentation. This is a posix specific version of
--- "Coreutils.FileTest" with some additional posix specific functions.
+-- "Streamly.Coreutils.FileTest" with some additional posix specific functions.
 
-module Coreutils.FileTest.Posix
+module Streamly.Coreutils.FileTest.Posix
     ( testFd
     , testHandle
     , sameFileAs
@@ -36,7 +36,7 @@ import qualified System.Posix.Terminal as Terminal
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
-import Coreutils.FileTest.Common
+import Streamly.Coreutils.FileTest.Common
 
 -- XXX 'getFdStatus' is not implemented for Windows in unix-compat.
 

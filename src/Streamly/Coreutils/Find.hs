@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wno-unused-binds #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 -- |
--- Module      : Coreutils.Find
+-- Module      : Streamly.Coreutils.Find
 -- Copyright   : (c) 2026 Composewell Technologies
 -- License     : BSD-3-Clause
 -- Maintainer  : streamly@composewell.com
@@ -61,7 +61,7 @@
 -- time hfind > /dev/null # This, Haskell implementation
 -- @
 
-module Coreutils.Find
+module Streamly.Coreutils.Find
     (
       find
     , findChunked

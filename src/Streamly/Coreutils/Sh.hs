@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 -- |
--- Module      : Coreutils.Sh
+-- Module      : Streamly.Coreutils.Sh
 -- Copyright   : (c) 2021 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -29,7 +29,7 @@
 -- This example demonstrates piping the output of @echo@ shell command into
 -- the @tr@ command, using Streamly's streaming abstractions.
 --
-module Coreutils.Sh
+module Streamly.Coreutils.Sh
     (
     -- * Generation
       toBytes
@@ -73,7 +73,7 @@ import qualified Streamly.Internal.System.Process as Process
 -- >>> import qualified Streamly.Data.Fold as Fold
 -- >>> import qualified Streamly.Data.Stream as Stream
 -- >>> import qualified Streamly.Internal.System.Process as Process
--- >>> import qualified Coreutils.Sh as Sh
+-- >>> import qualified Streamly.Coreutils.Sh as Sh
 -- >>> import qualified Streamly.Unicode.Stream as Unicode
 
 -- | A modifier for stream generation APIs in "Streamly.System.Process" to

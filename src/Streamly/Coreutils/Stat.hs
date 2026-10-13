@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Stat
+-- Module      : Streamly.Coreutils.Stat
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -11,7 +11,7 @@
 
 -- XXX Reexport the required Posix types?
 
-module Coreutils.Stat
+module Streamly.Coreutils.Stat
     (
       stat
 

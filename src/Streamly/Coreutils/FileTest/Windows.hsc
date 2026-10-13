@@ -2,7 +2,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Coreutils.FileTest.Windows
+module Streamly.Coreutils.FileTest.Windows
     ( sameFileAs
     , isTerminalFd
     {-
@@ -83,7 +83,7 @@ import qualified System.Win32.Types as Win32
 import Foreign
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
-import Coreutils.FileTest.Common
+import Streamly.Coreutils.FileTest.Common
 
 -------------------------------------------------------------------------------
 -- Types

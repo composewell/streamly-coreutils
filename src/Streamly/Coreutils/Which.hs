@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Which
+-- Module      : Streamly.Coreutils.Which
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Find an executable in a given search PATH.
 
-module Coreutils.Which
+module Streamly.Coreutils.Which
     (
       which
     , whichAll

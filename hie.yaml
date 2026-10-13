@@ -7,7 +7,7 @@ cradle:
             - path: "./src"
               component: "lib:streamly-coreutils"
             - path: "./test"
-              component: "test:Coreutils.Rm"
+              component: "test:Streamly.Coreutils.Rm"
 dependencies:
   - streamly-coreutils.cabal
   - hie.yaml

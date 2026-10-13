@@ -3,14 +3,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
--- Module      : Coreutils.FileTest.Common
+-- Module      : Streamly.Coreutils.FileTest.Common
 -- Copyright   : (c) 2021 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
 -- Stability   : experimental
 -- Portability : GHC
 --
--- See "Coreutils.FileTest" module for general module level
+-- See "Streamly.Coreutils.FileTest" module for general module level
 -- documentation. This module provides both posix and windows implementations.
 --
 -- Design Notes:
@@ -68,7 +68,7 @@
 -- XXX Need tests for Windows. Especially for file access permissions. How do
 -- ACLs affect it? Also file times.
 
-module Coreutils.FileTest.Common
+module Streamly.Coreutils.FileTest.Common
     (
     -- * File Test Predicate Type
       Predicate (..)

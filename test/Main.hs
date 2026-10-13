@@ -5,7 +5,7 @@ where
 import qualified Streamly.Data.Stream as S
 import qualified Streamly.Data.Fold as FL
 
-import Coreutils.Uniq
+import Streamly.Coreutils.Uniq
 
 import Control.Monad.IO.Class (MonadIO)
 import Streamly.Data.Stream (Stream)

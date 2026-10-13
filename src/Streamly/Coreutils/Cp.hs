@@ -1,5 +1,5 @@
 -- |
--- Module      : Coreutils.Cp
+-- Module      : Streamly.Coreutils.Cp
 -- Copyright   : (c) 2022 Composewell Technologies
 -- License     : Apache-2.0
 -- Maintainer  : streamly@composewell.com
@@ -8,7 +8,7 @@
 --
 -- Copy a file or directory.
 
-module Coreutils.Cp
+module Streamly.Coreutils.Cp
     ( cp
 
     -- * Cp options
@@ -28,7 +28,7 @@ import qualified Streamly.Internal.FileSystem.FileIO as File
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
-import Coreutils.FileTest
+import Streamly.Coreutils.FileTest
 
 -- Note: Recursive copy can be done using find.
 --
