@@ -318,3 +318,23 @@ test-suite Streamly.Coreutils.Mv
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.Mv.main
                -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Cp
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Cp.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+    , time
+  if !os(windows)
+    build-depends: unix-compat
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Cp.main
+               -rtsopts "-with-rtsopts=-M512M"
