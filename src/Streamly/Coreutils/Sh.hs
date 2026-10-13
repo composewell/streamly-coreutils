@@ -8,9 +8,14 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- This module allows you to run shell commands from Haskell using
--- @/bin/sh@ as the command interpreter. Haskell program interacts with shell
+-- This module allows you to run shell commands from Haskell using a POSIX
+-- shell as the command interpreter. Haskell program interacts with shell
 -- processes via their standard input and output streams.
+--
+-- On POSIX systems the shell is @/bin/sh@. On Windows it is @sh@ found on the
+-- @PATH@, e.g. the one installed by Git for Windows, MSYS2 or Cygwin; if
+-- there is none, running a command fails. The commands are POSIX shell
+-- commands on all platforms; @cmd.exe@ is not used.
 --
 -- The functions in this module are just convenience wrappers over
 -- "Streamly.System.Process", specialized for shell-based workflows.
@@ -65,6 +70,10 @@ import qualified Streamly.Internal.System.Process as Process
 -- The APIs are named/designed such that we can replace the sh module with
 -- another module for bash or any other shells without requiring API name
 -- changes.
+--
+-- On Windows we use sh from the PATH instead of cmd.exe so that the same
+-- command strings work on all platforms; cmd.exe has a different syntax and
+-- quoting rules. A separate module can provide cmd.exe if needed.
 
 -- $setup
 -- >>> :set -XFlexibleContexts
@@ -76,11 +85,22 @@ import qualified Streamly.Internal.System.Process as Process
 -- >>> import qualified Streamly.Coreutils.Sh as Sh
 -- >>> import qualified Streamly.Unicode.Stream as Unicode
 
+-- The shell used to run commands: /bin/sh on POSIX systems, sh found on the
+-- PATH on Windows.
+shell :: FilePath
+#if defined(CABAL_OS_WINDOWS)
+shell = "sh"
+#else
+shell = "/bin/sh"
+#endif
+
 -- | A modifier for stream generation APIs in "Streamly.System.Process" to
--- generate streams from shell scripts with "\/bin/sh" as the shell
--- interpreter. Defined as:
+-- generate streams from shell scripts. Defined as:
 --
--- >>> streamWith f cmd = f "/bin/sh" ["-c", cmd]
+-- > streamWith f cmd = f sh ["-c", cmd]
+--
+-- where @sh@ is @/bin/sh@ on POSIX systems and @sh@ found on the @PATH@ on
+-- Windows.
 --
 -- For example:
 --
@@ -90,7 +110,7 @@ import qualified Streamly.Internal.System.Process as Process
 -- hello
 --
 streamWith :: (FilePath -> [String] -> Stream m a) -> String -> Stream m a
-streamWith f cmd = f "/bin/sh" ["-c", cmd]
+streamWith f cmd = f shell ["-c", cmd]
 
 -- | A modifier for process running APIs in "Streamly.System.Process" to run
 -- shell commands.
@@ -105,7 +125,7 @@ streamWith f cmd = f "/bin/sh" ["-c", cmd]
 -- /Internal/
 {-# INLINE runWith #-}
 runWith :: (FilePath -> [String] -> m a) -> String -> m a
-runWith f cmd = f "/bin/sh" ["-c", cmd]
+runWith f cmd = f shell ["-c", cmd]
 
 -- | A modifier for process piping APIs in "Streamly.System.Process" to pipe
 -- data through shell scripts:
@@ -125,7 +145,7 @@ pipeWith ::
     -> String
     -> Stream m a
     -> Stream m b
-pipeWith f cmd = f "/bin/sh" ["-c", cmd]
+pipeWith f cmd = f shell ["-c", cmd]
 
 -- | @pipeChunks command input@ runs the executable with arguments specified by
 -- @command@ and supplying @input@ stream as its standard input.  Returns the

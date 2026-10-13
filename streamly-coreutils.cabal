@@ -17,9 +17,10 @@ description:
   * Defaults and error behaviour follow GNU coreutils, including symbolic
     links, trailing slashes, write-protected files and missing paths.
     Where a function differs from GNU, the difference is documented.
-  * No subprocesses: no quoting of arguments, no parsing of text output.
-    Errors are Haskell exceptions, and the code also runs on Windows,
-    where the commands are not installed.
+  * The utilities run no subprocesses: no quoting of arguments, no
+    parsing of text output. Errors are Haskell exceptions, and the code
+    also runs on Windows, where the commands are not installed.
+    "Streamly.Coreutils.Sh" is the exception: it runs shell commands.
   * @ls@, @find@ and @tail@ return streams. You can filter, map, take the
     first few entries or fold them as they are produced, in constant
     memory, even for a directory tree with millions of files.
@@ -35,7 +36,8 @@ description:
   * File tests compose like the operands of @test@, and a combined test
     makes a single @stat@ call: @test p (isFile \`and_\` size (> 10240))@.
   * When you do need a shell command, "Streamly.Coreutils.Sh" runs it and
-    connects its input and output to Haskell streams.
+    connects its input and output to Haskell streams. It uses @/bin/sh@,
+    and on Windows @sh@ from the @PATH@, e.g. from Git for Windows.
   .
   Works on Linux, macOS, FreeBSD and Windows. The API is still changing
   and later releases will have breaking changes.

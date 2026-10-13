@@ -16,9 +16,10 @@ shell, or instead of assembling the same behaviour from `directory`,
   Where a function differs from GNU, for example `rm -r` on a symbolic
   link with a trailing slash, which here deletes only the link, the
   difference is documented.
-* No subprocesses: no quoting of arguments, no parsing of text output.
-  Errors are Haskell exceptions, and the code also runs on Windows, where
-  the commands are not installed.
+* The utilities run no subprocesses: no quoting of arguments, no parsing
+  of text output. Errors are Haskell exceptions, and the code also runs on
+  Windows, where the commands are not installed. `Streamly.Coreutils.Sh` is
+  the exception: it runs shell commands.
 * `ls`, `find` and `tail` return [streamly](https://github.com/composewell/streamly)
   streams. You can filter, map, take the first few entries or fold them as
   they are produced, in constant memory, even for a directory tree with
@@ -35,7 +36,8 @@ shell, or instead of assembling the same behaviour from `directory`,
 * File tests compose like the operands of `test`, and a combined test
   makes a single `stat` call: ``test p (isFile `and_` size (> 10240))``.
 * When you do need a shell command, `Streamly.Coreutils.Sh` runs it and
-  connects its input and output to Haskell streams.
+  connects its input and output to Haskell streams. It uses `/bin/sh`, and
+  on Windows `sh` from the `PATH`, e.g. from Git for Windows.
 
 ## Example
 
