@@ -377,6 +377,27 @@ test-suite Streamly.Coreutils.Touch
   ghc-options: -main-is Streamly.Test.Coreutils.Touch.main
                -rtsopts "-with-rtsopts=-M512M"
 
+test-suite Streamly.Coreutils.Chmod
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Chmod.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+    , unix-compat
+  -- File mode bits do not apply on Windows.
+  if os(windows)
+    buildable: False
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Chmod.main
+               -rtsopts "-with-rtsopts=-M512M"
+
 test-suite Streamly.Coreutils.Cut
   import: compile-options
   type: exitcode-stdio-1.0
