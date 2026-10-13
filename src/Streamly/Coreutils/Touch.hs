@@ -15,7 +15,7 @@ module Streamly.Coreutils.Touch
     -- * Options
     , TouchOptions
     , create -- XXX rename for conflicts
-    , followLinks -- XXX this is a common option in multiple commands
+    , followSymlinks -- XXX this is a common option in multiple commands
     )
 where
 
@@ -40,18 +40,18 @@ defaultConfig :: TouchOptions
 defaultConfig = TouchOptions True True
 
 -- | Default is 'True'.
-followLinks :: Bool -> TouchOptions -> TouchOptions
-followLinks opt cfg = cfg {deRef = opt}
+followSymlinks :: Bool -> TouchOptions -> TouchOptions
+followSymlinks opt cfg = cfg {deRef = opt}
 
 -- | Default is 'True'.
 create :: Bool -> TouchOptions -> TouchOptions
 create opt cfg = cfg {createNew = opt}
 
--- | If the file does not exist create it only if both followLinks and create
+-- | If the file does not exist create it only if both followSymlinks and create
 -- are set to 'True'.
 --
 -- If the file or symbolic link exists then update the access and modification
--- times. If 'followLinks' is 'True' then the link target is updated otherwise
+-- times. If 'followSymlinks' is 'True' then the link target is updated otherwise
 -- the symbolic link itself is updated.
 --
 -- Fails if the parent directories in the path do not exist or if there is no
@@ -60,7 +60,7 @@ create opt cfg = cfg {createNew = opt}
 -- Defaults:
 --
 -- * create True
--- * followLinks True
+-- * followSymlinks True
 --
 touch :: (TouchOptions -> TouchOptions) -> Path -> IO ()
 touch f path = do
@@ -77,5 +77,5 @@ touch f path = do
             False -> Posix.touchSymbolicLink pathStr
 #else
             -- XXX Is it possible to support this on Windows?
-            False -> error "touch: followLinks=False not supported on Windows"
+            False -> error "touch: followSymlinks=False not supported on Windows"
 #endif

@@ -17,7 +17,7 @@ module Streamly.Coreutils.Stat
 
     -- * Options
     , StatOptions
-    , followLinks
+    , followSymlinks
     ) where
 
 
@@ -32,8 +32,8 @@ newtype  StatOptions = StatOptions {deRef :: Bool}
 defaultConfig :: StatOptions
 defaultConfig = StatOptions True
 
-followLinks :: Bool -> StatOptions -> StatOptions
-followLinks opt cfg = cfg {deRef = opt}
+followSymlinks :: Bool -> StatOptions -> StatOptions
+followSymlinks opt cfg = cfg {deRef = opt}
 
 stat :: (StatOptions -> StatOptions) -> Path -> IO FileStatus
 stat f path = do
