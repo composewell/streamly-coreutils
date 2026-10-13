@@ -49,7 +49,7 @@ import Streamly.Coreutils.FileTest.Common
 testFd :: Fd -> FileTest -> IO Bool
 testFd fd (FileTest (Predicate f)) =
     -- XXX We should pass "Either Fd Path" in state.
-    let fp = error $ "FileTest.testFd: filepath cannot be used"
+    let fp = error "FileTest.testFd: filepath cannot be used"
      in Files.getFdStatus fd >>= mkFileState "FileTest.testFd" fp >>= f
 
 testHandle :: Handle -> FileTest -> IO Bool

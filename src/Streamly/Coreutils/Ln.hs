@@ -18,7 +18,7 @@ module Streamly.Coreutils.Ln
     )
 where
 
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Data.Maybe (fromMaybe)
 import Streamly.Coreutils.FileTest (test, testl, doesItExist, sameFileAs)
 import System.Directory (removeFile)
@@ -51,7 +51,7 @@ ln f src tgt = do
     -- target can be a symlink or non-symlink
     found <- testl tgt doesItExist
     when found $ do
-        when (lnForce opt == False) $ error msg
+        unless (lnForce opt) $ error msg
         -- Do not remove the source itself.
         srcFound <- test src doesItExist
         same <- if srcFound then isSameEntry else pure False

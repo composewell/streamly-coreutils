@@ -67,6 +67,7 @@ where
 
 import Control.Exception (try, SomeException)
 import Data.List (nub)
+import Data.Maybe (catMaybes)
 import qualified System.Posix.User as Posix
 
 -- = Design notes
@@ -225,7 +226,7 @@ groupNamesFromUserId i = do
         Nothing   -> return Nothing
         Just gids -> do
             mNames <- mapM groupNameFromId gids
-            return $ Just [ n | Just n <- mNames ]
+            return $ Just (catMaybes mNames)
 
 ------------------------------------------------------------------------------
 -- Current process: numeric ids
@@ -299,7 +300,7 @@ groupNames :: IO [String]
 groupNames = do
     gs <- groupIds
     mNames <- mapM groupNameFromId gs
-    return [ n | Just n <- mNames ]
+    return (catMaybes mNames)
 
 -- | Original login name of the session the current process belongs to.
 --

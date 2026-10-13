@@ -138,6 +138,7 @@ needsRoot action = do
 #endif
 
 -- Convenience mode constants
+{- HLINT ignore "Use camelCase" -}
 modeRWX, modeRW_, modeR_X, modeR__, mode___ :: FileMode
 modeRWX = ownerReadMode `unionFileModes` ownerWriteMode `unionFileModes` ownerExecuteMode
 modeRW_ = ownerReadMode `unionFileModes` ownerWriteMode

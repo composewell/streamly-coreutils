@@ -66,7 +66,7 @@ touch :: (TouchOptions -> TouchOptions) -> Path -> IO ()
 touch f path = do
     let opt = f defaultConfig
         pathStr = Path.toString path
-    if (createNew opt == True && deRef opt == True)
+    if createNew opt && deRef opt
     then do
         found <- test path doesItExist
         unless found $ openFile pathStr WriteMode >>= hClose
