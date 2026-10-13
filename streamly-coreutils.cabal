@@ -83,6 +83,11 @@ flag hfd
   manual: True
   default: False
 
+flag limit-build-mem
+  description: Limits memory when building
+  manual: True
+  default: False
+
 common compile-options
     default-language: Haskell2010
 
@@ -110,6 +115,12 @@ common compile-options
                       -Wno-missing-kind-signatures
     if impl(ghc >= 9.8)
       ghc-options:    -Wno-missing-role-annotations
+
+    if flag(limit-build-mem)
+      if impl(ghc < 9.0)
+        ghc-options:  +RTS -M1000M -RTS
+      else
+        ghc-options:  +RTS -M512M -RTS
 
 common default-extensions
     default-extensions:
@@ -283,3 +294,4 @@ test-suite Streamly.Coreutils.Rm
     , unix-compat
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.Rm.main
+               -rtsopts "-with-rtsopts=-M512M"

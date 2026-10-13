@@ -1,5 +1,7 @@
 packages: .
 
+flags: +limit-build-mem
+
 package streamly-coreutils
   ghc-options: -Werror
 

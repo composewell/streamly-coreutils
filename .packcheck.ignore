@@ -12,4 +12,5 @@ flake.nix
 packages.nix
 stack.yaml
 test/Main.hs
+cabal.project
 sources.nix
