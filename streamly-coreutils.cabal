@@ -1,7 +1,7 @@
 cabal-version:       2.4
 name:                streamly-coreutils
 version:             0.1.0
-synopsis:            GNU Coreutils like API for Haskell
+synopsis:            Streaming Haskell implementations of GNU coreutils
 description:
    Streaming Haskell implementations of GNU coreutils, built on
    Streamly.  Provides familiar, composable, high-performance,
@@ -15,7 +15,7 @@ license-file:        LICENSE
 author:              Composewell Technologies
 maintainer:          streamly@composewell.com
 copyright:           2020 Composewell Technologies
-category:            Streamly, Streaming
+category:            Streamly, Streaming, System
 stability:           Experimental
 build-type:          Simple
 
@@ -43,6 +43,11 @@ source-repository head
 -- haddock will work correctly.
 flag fusion-plugin
   description: Use fusion plugin for best performance
+  manual: True
+  default: False
+
+flag hfd
+  description: Build the hfd executable, a parallel find
   manual: True
   default: False
 
@@ -206,7 +211,7 @@ library
 executable hfd
   import: compile-options, default-extensions, exe-options-threaded
   main-is: hfd.hs
-  if os(windows)
+  if !flag(hfd) || os(windows)
     buildable: False
 
 -------------------------------------------------------------------------------
