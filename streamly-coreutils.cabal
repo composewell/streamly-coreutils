@@ -252,6 +252,7 @@ library
     , Streamly.Coreutils.Overwrite
     , Streamly.Coreutils.Rename
     , Streamly.Coreutils.String
+    , Streamly.Coreutils.Time
     , Streamly.Coreutils.Uniq
 
   default-language:    Haskell2010

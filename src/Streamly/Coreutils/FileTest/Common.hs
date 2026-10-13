@@ -213,6 +213,8 @@ import qualified Streamly.FileSystem.Path as Path
 import Streamly.Internal.Data.Time.Clock
 import Streamly.Internal.Data.Time.Units
 
+import Streamly.Coreutils.Time (seconds, minutes, hours, days)
+
 -- $setup
 -- >>> import Prelude hiding (or, and)
 -- >>> import Data.Time.Clock (NominalDiffTime)
@@ -708,46 +710,6 @@ hasSetGid = hasMode Files.setGroupIDMode
 hasStickyBit :: FileTest
 -- unix and unix-compat have no named constant for S_ISVTX.
 hasStickyBit = hasMode 0o1000
-
------------------------------------
--- Time
------------------------------------
-
--- XXX Use the streamly time module with improvements
-
--- NOTES: NominalDiffTime is actually time duration in seconds possibly
--- fractional. In contrast to DiffTime it ignores the leap seconds, so it is
--- the actual elapsed time duration. A more specific and intuitive name for
--- this would be NominalDiffSeconds or Duration or simply Seconds.
---
--- We could use (Integer -> NominalDiffTime) in the APIs below and that would
--- disallow nesting of units e.g. (seconds (minutes 5)). But that is unlikely
--- error and NominalDiffTime allows fractional seconds which is a good thing.
-
--- | Time duration in seconds.
---
--- >>> let _ = modifiedOlderThan (seconds 30)
---
-seconds :: NominalDiffTime -> NominalDiffTime
-seconds = id
-
--- | Time duration in minutes.
---
--- >>> let _ = modifiedWithin (minutes 5)
---
-minutes :: NominalDiffTime -> NominalDiffTime
-minutes n = n * 60
-
--- | Time duration in hours.
-hours :: NominalDiffTime -> NominalDiffTime
-hours n = n * 3600
-
--- | Time duration in days.
---
--- >>> let _ = accessedOlderThan (days 1)
---
-days :: NominalDiffTime -> NominalDiffTime
-days n = n * 86_400
 
 -----------------------------------
 -- Comparing times
