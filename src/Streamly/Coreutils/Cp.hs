@@ -24,6 +24,15 @@ where
 import Control.Monad (when)
 import Data.Function ((&))
 import System.PosixCompat.Files (createLink)
+#if !defined(CABAL_OS_WINDOWS)
+import Control.Exception (bracket)
+import System.IO (hClose)
+import System.Posix.Files
+    (accessModes, fileMode, getFileStatus, intersectFileModes)
+import System.Posix.IO (createFile, fdToHandle)
+import qualified Streamly.Data.Stream as Stream
+import qualified Streamly.FileSystem.Handle as Handle
+#endif
 import qualified Streamly.Internal.FileSystem.FileIO as File
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
@@ -78,12 +87,37 @@ overwrite opt options = options { optOverwrite = opt }
 cpMethod :: CpMethod -> CpOptions -> CpOptions
 cpMethod opt options = options { optCopyMethod = opt }
 
+-- streamly-core has no stat and no way to give a new file a mode, so on
+-- POSIX we use the FilePath based functions from unix.
+
+-- | Copy the source to a destination that does not exist. On POSIX the
+-- destination is created with the permission bits of the source; the process
+-- umask applies. Like GNU cp without @--preserve@, special bits (setuid,
+-- setgid, sticky) are not copied. The destination is written even if the new
+-- mode is read-only.
+copyToNew :: Path -> Path -> IO ()
+#if defined(CABAL_OS_WINDOWS)
+copyToNew src dest = File.fromChunks dest (File.readChunks src)
+#else
+copyToNew src dest = do
+    st <- getFileStatus (Path.toString src)
+    let mode = intersectFileModes (fileMode st) accessModes
+        create = createFile (Path.toString dest) mode >>= fdToHandle
+    bracket create hClose $ \h ->
+        File.readChunks src & Stream.fold (Handle.writeChunks h)
+#endif
+
 -- | Unconditionally copy the source to destination using the specified copy
 -- method.
 cpCopy :: CpMethod -> Path -> Path -> IO ()
 cpCopy method src dest =
     case method of
-        CopyContents -> File.readChunks src & File.fromChunks dest
+        CopyContents -> do
+            -- An existing destination keeps its own mode, like GNU cp.
+            exists <- test dest doesItExist
+            if exists
+            then File.readChunks src & File.fromChunks dest
+            else copyToNew src dest
         HardLink -> createLink (Path.toString src) (Path.toString dest)
         SymbolicLink -> error "Unimplemented"
         CopyClone -> error "Unimplemented"
