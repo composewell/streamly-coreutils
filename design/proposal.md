@@ -43,6 +43,7 @@ stream processing pipeline.
 
 ## References
 
+* https://pubs.opengroup.org/onlinepubs/007904975/utilities/ POSIX utilities
 * https://github.com/coreutils/coreutils
 * http://hackage.haskell.org/package/turtle
 * https://github.com/mrak/coreutils.hs
