@@ -410,3 +410,178 @@ test-suite Streamly.Coreutils.FileTest
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.FileTest.main
                -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Directory
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Directory.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Directory.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Id
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Id.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , hspec
+    , streamly-coreutils
+    , streamly-process
+  -- The module is POSIX only.
+  if os(windows)
+    buildable: False
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Id.main
+               -threaded
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Ln
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Ln.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+    , unix-compat
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Ln.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Mkdir
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Mkdir.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Mkdir.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.ReadLink
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/ReadLink.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.ReadLink.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.ResolvePath
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/ResolvePath.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.ResolvePath.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Sh
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Sh.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , streamly-process
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Sh.main
+               -threaded
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Stat
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Stat.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+    , unix-compat
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Stat.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Tail
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Tail.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , filepath
+    , hspec
+    , QuickCheck
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  if !os(windows)
+    build-depends: unix
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Tail.main
+               -threaded
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Which
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Which.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Which.main
+               -rtsopts "-with-rtsopts=-M512M"
