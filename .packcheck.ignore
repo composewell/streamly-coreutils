@@ -1,4 +1,4 @@
-.cirrus.yml
+.github/workflows/freebsd.yml
 .packcheck.ignore
 .github/workflows/haskell.yml
 .gitignore
