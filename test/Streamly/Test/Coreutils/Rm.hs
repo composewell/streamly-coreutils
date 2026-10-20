@@ -29,7 +29,8 @@
 -- Permission tests that require a different owning user are marked
 -- @needsRoot@ and skipped unless the test suite is run as root.  Tests that
 -- merely restrict parent-directory permissions are safe to run as a normal
--- user.
+-- user; they are marked pending when run as root, because root bypasses
+-- directory permission bits.
 --
 -- All temporary files and directories are created under @/tmp@ and cleaned up
 -- after each test, even on failure, using 'bracket'.
@@ -55,15 +56,12 @@ import System.PosixCompat.Files
     , nullFileMode
     , unionFileModes
     )
--- TODO
-#if 0
-#if !defined(CABAL_OS_WINDOWS)
-import System.Posix.User (getRealUserID)
-#endif
-#endif
 import System.Posix.Types (FileMode)
 import Test.Hspec
 
+#if !defined(CABAL_OS_WINDOWS)
+import Streamly.Coreutils.Id (idNum)
+#endif
 import Streamly.Coreutils.Rm hiding (rm)
 import qualified Streamly.Coreutils.Rm as Rm
 import qualified Streamly.FileSystem.Path as Path
@@ -120,13 +118,15 @@ shouldThrow' action = do
         Left _  -> return ()
         Right _ -> expectationFailure "Expected an exception but none was thrown"
 
+#if !defined(CABAL_OS_WINDOWS)
+-- | Check whether we are running as root (effective uid 0).
+isRoot :: IO Bool
+isRoot = (== 0) <$> idNum id
+#endif
+
 -- TODO
 #if 0
 #if !defined(CABAL_OS_WINDOWS)
--- | Check whether we are running as root.
-isRoot :: IO Bool
-isRoot = (== 0) <$> getRealUserID
-
 -- | Skip a test when not running as root.
 needsRoot :: IO () -> IO ()
 needsRoot action = do
@@ -148,15 +148,20 @@ mode___ = nullFileMode
 
 -- | On Unix, assert that an action fails due to directory permission
 -- restrictions. On Windows, directory permission bits are not enforced;
--- the action is run but its result is ignored.
+-- the action is run but its result is ignored. As root, permission bits are
+-- not enforced and the action succeeds, as GNU rm does; the test is marked
+-- pending without running the action.
 parentDirPermCheck :: IO () -> IO ()
-parentDirPermCheck =
 #if defined(CABAL_OS_WINDOWS)
-    -- On Windows, we do not check parent dir permission as they are controlled
-    -- by ACLs, not permission modes.
-    id
+-- On Windows, we do not check parent dir permission as they are controlled
+-- by ACLs, not permission modes.
+parentDirPermCheck = id
 #else
-    shouldThrow'
+parentDirPermCheck action = do
+    root <- isRoot
+    if root
+    then pendingWith "Root bypasses directory permission bits"
+    else shouldThrow' action
 #endif
 
 -------------------------------------------------------------------------------
