@@ -32,6 +32,7 @@ import System.Directory
     , withCurrentDirectory
     )
 import System.FilePath ((</>))
+import System.IO.Error (isAlreadyExistsError)
 import System.IO.Temp (createTempDirectory)
 import Test.Hspec
 
@@ -91,6 +92,14 @@ shouldFail action = do
 
 -- | Assert that the action raises an 'IOException' whose message contains
 -- each of the given strings.
+shouldFailExists :: IO () -> IO ()
+shouldFailExists action = do
+    r <- try action
+    case r of
+        Left e -> e `shouldSatisfy` isAlreadyExistsError
+        Right _ ->
+            expectationFailure "Expected an exception but none was thrown"
+
 shouldFailMentioning :: IO () -> [String] -> IO ()
 shouldFailMentioning action names = do
     r <- try action :: IO (Either IOException ())
@@ -300,6 +309,41 @@ main = hspec $ do
             shouldNotExist (deep </> "a")
             (deep </> "c") `shouldContain'` "a"
 
+    describe "mv (overwrite OverwriteError)" $ do
+
+        it "fails and keeps an existing destination" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            writeFile (d </> "b") "b"
+            shouldFailExists
+                (mv (overwrite OverwriteError) (d </> "a") (d </> "b"))
+            (d </> "a") `shouldContain'` "a"
+            (d </> "b") `shouldContain'` "b"
+
+        it "moves to a missing destination" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            mv (overwrite OverwriteError) (d </> "a") (d </> "b")
+            shouldNotExist (d </> "a")
+            (d </> "b") `shouldContain'` "a"
+
+        it "fails on a dangling symlink at the destination"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createFileLink "nowhere" (d </> "b")
+            shouldFailExists
+                (mv (overwrite OverwriteError) (d </> "a") (d </> "b"))
+            (d </> "a") `shouldContain'` "a"
+            pathIsSymbolicLink (d </> "b") `shouldReturn` True
+
+        it "fails on an existing file in the destination directory"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "new"
+            createDirectory (d </> "dir")
+            writeFile (d </> "dir" </> "a") "old"
+            shouldFailExists
+                (mv (overwrite OverwriteError) (d </> "a") (d </> "dir"))
+            (d </> "a") `shouldContain'` "new"
+            (d </> "dir" </> "a") `shouldContain'` "old"
+
     describe "mv (overwrite OverwriteOnly)" $ do
 
         it "does nothing if the destination is missing"
@@ -442,6 +486,19 @@ main = hspec $ do
             writeFile (d </> "dir" </> "a") "old"
             mvMany (overwrite OverwriteNever)
                 [d </> "a", d </> "b"] (d </> "dir")
+            (d </> "a") `shouldContain'` "new"
+            (d </> "dir" </> "a") `shouldContain'` "old"
+            (d </> "dir" </> "b") `shouldContain'` "b"
+
+        it "moves the other sources with OverwriteError"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "new"
+            writeFile (d </> "b") "b"
+            createDirectory (d </> "dir")
+            writeFile (d </> "dir" </> "a") "old"
+            mvMany (overwrite OverwriteError)
+                [d </> "a", d </> "b"] (d </> "dir")
+                `shouldFailMentioning` [d </> "dir" </> "a"]
             (d </> "a") `shouldContain'` "new"
             (d </> "dir" </> "a") `shouldContain'` "old"
             (d </> "dir" </> "b") `shouldContain'` "b"
