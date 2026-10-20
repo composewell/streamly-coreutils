@@ -29,6 +29,7 @@ import System.Directory
     , withCurrentDirectory
     )
 import System.FilePath ((</>))
+import System.IO.Error (isAlreadyExistsError)
 import System.IO.Temp (createTempDirectory)
 #if !defined(CABAL_OS_WINDOWS)
 import System.PosixCompat.Files (fileMode, getFileStatus, setFileMode)
@@ -81,6 +82,14 @@ shouldFail action = do
     r <- try action :: IO (Either SomeException ())
     case r of
         Left _ -> return ()
+        Right _ ->
+            expectationFailure "Expected an exception but none was thrown"
+
+shouldFailExists :: IO () -> IO ()
+shouldFailExists action = do
+    r <- try action
+    case r of
+        Left e -> e `shouldSatisfy` isAlreadyExistsError
         Right _ ->
             expectationFailure "Expected an exception but none was thrown"
 
@@ -148,6 +157,8 @@ main = hspec $ do
             createFileLink "missing" (d </> "link")
             shouldFail (cp id (d </> "a") (d </> "link"))
             shouldFail (cp (overwrite OverwriteNever) (d </> "a") (d </> "link"))
+            shouldFail
+                (cp (overwrite OverwriteError) (d </> "a") (d </> "link"))
             shouldFail
                 (cp (overwrite OverwriteUpdate) (d </> "a") (d </> "link"))
             shouldNotExist (d </> "missing")
@@ -311,6 +322,15 @@ main = hspec $ do
             cp (overwrite OverwriteNever) (d </> "a") (d </> "dir")
             (d </> "dir" </> "a") `shouldContain'` "old"
 
+        it "fails on a file of the same name with OverwriteError"
+            $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            createDirectory (d </> "dir")
+            writeFile (d </> "dir" </> "a") "old"
+            shouldFailExists
+                (cp (overwrite OverwriteError) (d </> "a") (d </> "dir"))
+            (d </> "dir" </> "a") `shouldContain'` "old"
+
         it "fails to replace a directory in the destination with a file"
             $ withTempDir $ \d -> do
             writeFile (d </> "a") "a"
@@ -369,6 +389,20 @@ main = hspec $ do
         it "copies to a missing destination" $ withTempDir $ \d -> do
             writeFile (d </> "a") "a"
             cp (overwrite OverwriteNever) (d </> "a") (d </> "b")
+            (d </> "b") `shouldContain'` "a"
+
+    describe "cp (overwrite OverwriteError)" $ do
+
+        it "fails and keeps an existing destination" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            writeFile (d </> "b") "b"
+            shouldFailExists
+                (cp (overwrite OverwriteError) (d </> "a") (d </> "b"))
+            (d </> "b") `shouldContain'` "b"
+
+        it "copies to a missing destination" $ withTempDir $ \d -> do
+            writeFile (d </> "a") "a"
+            cp (overwrite OverwriteError) (d </> "a") (d </> "b")
             (d </> "b") `shouldContain'` "a"
 
     describe "cp (overwrite OverwriteOnly)" $ do
