@@ -22,6 +22,9 @@ import Foreign.C.String (CWString, withCWString)
 import System.IO.Error (catchIOError)
 import System.Win32.Info (getFullPathName)
 import System.Win32.Types (DWORD, failWith)
+
+import Streamly.Coreutils.FileTest
+    (and_, doesItExist, sameFileAs, test, testl)
 #else
 import Foreign.C.Error
     (Errno, eEXIST, eINVAL, eNOSYS, eNOTSUP, errnoToIOError, getErrno)
@@ -95,17 +98,27 @@ isUnsupported e = e == eNOSYS || e == eINVAL || e == eNOTSUP
 renameNoReplace :: Path -> Path -> IO Bool
 #if defined(CABAL_OS_WINDOWS)
 renameNoReplace src dest = do
-    srcStr <- toExtendedLengthPath (Path.toString src)
-    destStr <- toExtendedLengthPath (Path.toString dest)
-    r <- withCWString srcStr $ \s ->
-        withCWString destStr $ \d ->
-            c_renameNoReplaceW s d
-    if r == 0
-    then return True
-    else
-        if isExistsError r
-        then return False
-        else failWith "renameNoReplace" r
+    -- MoveFileExW without MOVEFILE_REPLACE_EXISTING still renames src when
+    -- dest is a hard link of the same file, which removes the name src.
+    srcExists <- test src doesItExist
+    sameFile <-
+        if srcExists
+        then testl dest (doesItExist `and_` sameFileAs src)
+        else return False
+    if sameFile
+    then return False
+    else do
+        srcStr <- toExtendedLengthPath (Path.toString src)
+        destStr <- toExtendedLengthPath (Path.toString dest)
+        r <- withCWString srcStr $ \s ->
+            withCWString destStr $ \d ->
+                c_renameNoReplaceW s d
+        if r == 0
+        then return True
+        else
+            if isExistsError r
+            then return False
+            else failWith "renameNoReplace" r
 #else
 renameNoReplace src dest = do
     r <- Array.asCStringUnsafe (Path.toArray src) $ \s ->
