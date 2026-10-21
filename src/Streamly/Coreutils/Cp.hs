@@ -28,13 +28,16 @@ import System.PosixCompat.Files (createLink)
 #if !defined(CABAL_OS_WINDOWS)
 import Control.Exception (bracket)
 import Data.Function ((&))
-import System.IO (hClose)
 import System.Posix.Files
     (accessModes, fileMode, getFileStatus, intersectFileModes)
 import System.Posix.IO (createFile, fdToHandle)
 import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.FileSystem.Handle as Handle
+import qualified Streamly.Internal.FileSystem.Posix.File as OsFile
+#else
+import qualified Streamly.Internal.FileSystem.Windows.File as OsFile
 #endif
+import qualified System.IO as IO
+import qualified Streamly.FileSystem.Handle as Handle
 import qualified Streamly.Internal.FileSystem.FileIO as File
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
@@ -126,23 +129,36 @@ intoDirectory :: Bool -> CpOptions -> CpOptions
 intoDirectory opt options = options { optIntoDirectory = opt }
 
 -- streamly-core has no stat and no way to give a new file a mode, so on
--- POSIX we use the FilePath based functions from unix.
+-- POSIX we use the FilePath based functions from unix. FileIO.withFile
+-- returns a stream, which opens the file only when the stream is run, after
+-- fromChunks has created the destination. So the source is opened with
+-- withBinaryFile from the internal platform specific File module, which
+-- runs an IO action.
 
 -- | Copy the source to a destination that does not exist. On POSIX the
 -- destination is created with the permission bits of the source; the process
 -- umask applies. Like GNU cp without @--preserve@, special bits (setuid,
 -- setgid, sticky) are not copied. The destination is written even if the new
 -- mode is read-only.
+--
+-- The source is opened before the destination is created, like GNU cp, so a
+-- missing or unreadable source leaves no destination behind.
 copyToNew :: Path -> Path -> IO ()
+copyToNew src dest =
+    OsFile.withBinaryFile src IO.ReadMode $ \h ->
+        writeNew (Handle.readChunks h)
+
+    where
+
 #if defined(CABAL_OS_WINDOWS)
-copyToNew src dest = File.fromChunks dest (File.readChunks src)
+    writeNew = File.fromChunks dest
 #else
-copyToNew src dest = do
-    st <- getFileStatus (Path.toString src)
-    let mode = intersectFileModes (fileMode st) accessModes
-        create = createFile (Path.toString dest) mode >>= fdToHandle
-    bracket create hClose $ \h ->
-        File.readChunks src & Stream.fold (Handle.writeChunks h)
+    writeNew chunks = do
+        st <- getFileStatus (Path.toString src)
+        let mode = intersectFileModes (fileMode st) accessModes
+            create = createFile (Path.toString dest) mode >>= fdToHandle
+        bracket create IO.hClose $ \h ->
+            chunks & Stream.fold (Handle.writeChunks h)
 #endif
 
 -- GNU cp refuses to write through a dangling symlink unless POSIXLY_CORRECT
