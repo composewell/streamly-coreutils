@@ -53,12 +53,12 @@ followSymlinks opt cfg = cfg {deRef = opt}
 create :: Bool -> TouchOptions -> TouchOptions
 create opt cfg = cfg {createNew = opt}
 
--- | If the file does not exist create it only if both followSymlinks and create
--- are set to 'True'.
+-- | If the file does not exist create it only if both followSymlinks and
+-- create are set to 'True'.
 --
--- If the file or symbolic link exists then update the access and modification
--- times. If 'followSymlinks' is 'True' then the link target is updated otherwise
--- the symbolic link itself is updated.
+-- If the file or symbolic link exists then update the access and
+-- modification times. If 'followSymlinks' is 'True' then the link target is
+-- updated otherwise the symbolic link itself is updated.
 --
 -- Fails if the parent directories in the path do not exist or if there is no
 -- permission to access a path component.
@@ -87,7 +87,8 @@ touch f path = do
             False -> Posix.touchSymbolicLink pathStr
 #else
             -- XXX Is it possible to support this on Windows?
-            False -> error "touch: followSymlinks=False not supported on Windows"
+            False ->
+                error "touch: followSymlinks=False not supported on Windows"
 #endif
 
     where
