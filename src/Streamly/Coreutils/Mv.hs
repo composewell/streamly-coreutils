@@ -24,12 +24,15 @@ where
 import Control.Exception (IOException, try)
 import Control.Monad (unless, void, when)
 import Data.Either (lefts)
+import Foreign.C.Error (eNOTDIR, errnoToIOError)
 import System.Directory (canonicalizePath, renamePath)
 
 import qualified System.PosixCompat.Files as Files
 
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
+import qualified Streamly.Internal.FileSystem.Path as Path
+    (dropTrailingSeparators, hasTrailingSeparator)
 
 import Streamly.Coreutils.FileTest
     (and_, doesItExist, isDir, isSymLink, not_, sameFileAs, test, testl)
@@ -150,9 +153,27 @@ isSameFile src dest = do
         else return True
     else return False
 
+-- rename(2) fails with ENOTDIR on Linux for a source "link/" where link is a
+-- symlink, but macOS, FreeBSD and Windows rename the symlink or its target.
+-- GNU mv uses the rename from gnulib, which raises ENOTDIR on every
+-- platform.
+
+-- | Raise an exception if src has a trailing separator and names a symlink.
+checkTrailingSeparator :: Path -> IO ()
+checkTrailingSeparator src =
+    when (Path.hasTrailingSeparator src) $ do
+        isLink <-
+            testl
+                (Path.dropTrailingSeparators src)
+                (doesItExist `and_` isSymLink)
+        when isLink
+            $ ioError
+            $ errnoToIOError "mv" eNOTDIR Nothing (Just (Path.toString src))
+
 -- Rename src to dest, subject to the overwrite option.
 moveTo :: MvOptions -> Path -> Path -> IO ()
-moveTo opt src dest =
+moveTo opt src dest = do
+    checkTrailingSeparator src
     case mvOverwrite opt of
         OverwriteNever -> void $ renameNoReplace src dest
         OverwriteError -> do
@@ -198,7 +219,10 @@ mvMany f srcs dir = do
 -- default.
 --
 -- A symlink at @source@ is moved itself, not the file it points to, like GNU
--- @mv@. Moving a file onto itself raises an exception, like GNU @mv@: when
+-- @mv@. A @source@ with a trailing separator that names a symlink, e.g.
+-- @link/@, raises an exception on every platform, like GNU @mv@.
+--
+-- Moving a file onto itself raises an exception, like GNU @mv@: when
 -- @source@ and @dest@ are hard links of one file, or @source@ is a symlink
 -- to @dest@. With 'OverwriteNever' the move is skipped instead.
 mv :: (MvOptions -> MvOptions) -> Path -> Path -> IO ()
