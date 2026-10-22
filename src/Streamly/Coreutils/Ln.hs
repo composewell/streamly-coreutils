@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- |
 -- Module      : Streamly.Coreutils.Ln
 -- Copyright   : (c) 2022 Composewell Technologies
@@ -22,6 +23,12 @@ import Control.Monad (unless, when)
 import Data.Maybe (fromMaybe)
 import Streamly.Coreutils.FileTest (test, testl, doesItExist, sameFileAs)
 import System.Directory (removeFile)
+#if defined(CABAL_OS_WINDOWS)
+import Streamly.Coreutils.FileTest (and_, isDir)
+import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
+import System.Directory
+    (createDirectoryLink, createFileLink, removeDirectory)
+#endif
 
 import qualified System.PosixCompat.Files as Posix
 import Streamly.FileSystem.Path (Path)
@@ -42,8 +49,67 @@ defaultConfig = LnOptions False False
 force :: Bool -> LnOptions -> LnOptions
 force opt cfg = cfg {lnForce = opt}
 
+-- | Create a symbolic link instead of a hard link, like @ln -s@. The source
+-- path is stored in the link as given, so a relative source is relative to
+-- the directory of the link, not to the current directory.
+--
+-- On Windows a symbolic link is either a file link or a directory link. A
+-- directory link is created if the source is a directory, otherwise a file
+-- link, including when the source does not exist.
+--
+-- Default (without this modifier): 'False', create a hard link.
 symbolic :: Bool -> LnOptions -> LnOptions
 symbolic opt cfg = cfg {lnSymbolic = opt}
+
+#if defined(CABAL_OS_WINDOWS)
+-- A symbolic link to a directory is a directory entry on Windows:
+-- removeFile fails on it, removeDirectory removes the link and not the
+-- directory it points to.
+
+-- | Remove a file or a symbolic link. A symbolic link is not followed.
+removeEntry :: Path -> IO ()
+removeEntry path = do
+    dirSymLink <- testl path isDirSymLink
+    if dirSymLink
+    then removeDirectory pathStr
+    else removeFile pathStr
+
+    where
+
+    pathStr = Path.toString path
+
+-- unix-compat does not support symbolic links on Windows. The source is
+-- tested relative to the directory of the link, the way the OS resolves
+-- the link target.
+
+-- | @createSymbolicLink src tgt@ creates a symbolic link @tgt@ pointing to
+-- @src@.
+createSymbolicLink :: Path -> Path -> IO ()
+createSymbolicLink src tgt = do
+    srcIsDir <- test resolved (doesItExist `and_` isDir)
+    if srcIsDir
+    then createDirectoryLink srcStr tgtStr
+    else createFileLink srcStr tgtStr
+
+    where
+
+    srcStr = Path.toString src
+    tgtStr = Path.toString tgt
+    resolved =
+        case Path.splitFile tgt of
+            Just (Just dir, _) | not (Path.isRooted src) -> Path.join dir src
+            _ -> src
+#else
+-- | Remove a file or a symbolic link. A symbolic link is not followed.
+removeEntry :: Path -> IO ()
+removeEntry = removeFile . Path.toString
+
+-- | @createSymbolicLink src tgt@ creates a symbolic link @tgt@ pointing to
+-- @src@.
+createSymbolicLink :: Path -> Path -> IO ()
+createSymbolicLink src tgt =
+    Posix.createSymbolicLink (Path.toString src) (Path.toString tgt)
+#endif
 
 ln :: (LnOptions -> LnOptions) -> Path -> Path -> IO ()
 ln f src tgt = do
@@ -56,10 +122,10 @@ ln f src tgt = do
         srcFound <- test src doesItExist
         same <- if srcFound then isSameEntry else pure False
         when same $ error sameMsg
-        removeFile tgtStr
+        removeEntry tgt
     case lnSymbolic opt of
         False -> Posix.createLink srcStr tgtStr
-        True -> Posix.createSymbolicLink srcStr tgtStr
+        True -> createSymbolicLink src tgt
 
     where
 

@@ -12,7 +12,14 @@
 
 module Streamly.Test.Coreutils.Ln (main) where
 
-import System.Directory (createFileLink, getSymbolicLinkTarget, pathIsSymbolicLink)
+import System.Directory
+    ( createDirectory
+    , createDirectoryLink
+    , createFileLink
+    , doesDirectoryExist
+    , getSymbolicLinkTarget
+    , pathIsSymbolicLink
+    )
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.PosixCompat.Files (createLink, fileID, getFileStatus)
@@ -143,3 +150,13 @@ main = hspec $ do
                 lnS True True (d </> "a") (d </> "b")
                 getSymbolicLinkTarget (d </> "b") `shouldReturn` d </> "a"
                 readFile (d </> "a") `shouldReturn` "x"
+
+        -- Like ln -sfn: the link is replaced, no link is created inside the
+        -- directory it points to.
+        it "replaces a symlink to a directory with force"
+            $ withTempDir $ \d -> do
+                createDirectory (d </> "dir")
+                createDirectoryLink "dir" (d </> "b")
+                lnS True True "c" (d </> "b")
+                getSymbolicLinkTarget (d </> "b") `shouldReturn` "c"
+                doesDirectoryExist (d </> "dir") `shouldReturn` True
