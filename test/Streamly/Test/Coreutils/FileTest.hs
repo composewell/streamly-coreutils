@@ -71,6 +71,7 @@ withTempDir action = do
     removePathForcibly' p =
         void (try (removePathForcibly p) :: IO (Either SomeException ()))
 
+#if !defined(CABAL_OS_WINDOWS)
 shouldFail :: IO Bool -> IO ()
 shouldFail action = do
     r <- try action :: IO (Either SomeException Bool)
@@ -78,6 +79,7 @@ shouldFail action = do
         Left _ -> return ()
         Right _ ->
             expectationFailure "Expected an exception but none was thrown"
+#endif
 
 -- | Create the fixtures used by most tests in directory @d@:
 --
