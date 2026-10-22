@@ -76,7 +76,6 @@ import System.Win32.Types
     , LPDWORD
     , failIfFalse_
     , iNVALID_HANDLE_VALUE
-    , withFilePath
     )
 
 import qualified System.Win32.Types as Win32
@@ -144,19 +143,6 @@ foreign import WINDOWS_CCONV unsafe "windows.h EqualSid"
     c_EqualSid :: PSID -> PSID -> IO BOOL
 
 -- In aclapi.h, linked via -ladvapi32 (same as other security calls)
-foreign import WINDOWS_CCONV unsafe "aclapi.h GetNamedSecurityInfoW"
-    c_GetNamedSecurityInfo
-        :: Win32.LPWSTR -- pObjectName
-        -> DWORD        -- ObjectType (SE_OBJECT_TYPE)
-        -> DWORD        -- SecurityInfo
-        -> Ptr PSID     -- ppsidOwner  (out, optional)
-        -> Ptr PSID     -- ppsidGroup  (out, optional)
-        -> Ptr (Ptr ()) -- ppDacl      (out, optional)
-        -> Ptr (Ptr ()) -- ppSacl      (out, optional)
-        -> Ptr (Ptr ()) -- ppSecurityDescriptor (out)
-        -> IO DWORD     -- ERROR_SUCCESS (0) on success
-
--- Like GetNamedSecurityInfoW but takes a handle, in aclapi.h
 foreign import WINDOWS_CCONV unsafe "aclapi.h GetSecurityInfo"
     c_GetSecurityInfo
         :: HANDLE       -- handle
@@ -527,6 +513,12 @@ openCurrentProcessImpersonationToken = do
                     c_DuplicateToken pt sECURITY_IMPERSONATION pImpToken
                 peek pImpToken
 
+-- GetNamedSecurityInfoW reads the DACL of a symlink itself, not of its
+-- target, so a dangling symlink would be reported accessible. POSIX access()
+-- follows symlinks; to do the same we read the DACL from a handle opened
+-- without FILE_FLAG_OPEN_REPARSE_POINT. Opening a dangling symlink fails,
+-- giving False.
+
 -- | Checks the file's DACL against the current process token for the
 -- given access mask. Implements the Windows equivalent of POSIX access().
 pathAccess :: Path -> DWORD -> IO Bool
@@ -535,10 +527,10 @@ pathAccess path mask =
         openCurrentProcessImpersonationToken
         (\h -> c_CloseHandle h >> return ())
         $ \token ->
-            withFilePath (Path.toString path) $ \pPath ->
+            withFileHandle rEAD_CONTROL True path $ \fh ->
             alloca $ \ppSd -> do
-                ret <- c_GetNamedSecurityInfo
-                           pPath
+                ret <- c_GetSecurityInfo
+                           fh
                            sE_FILE_OBJECT
                            dACL_SECURITY_INFORMATION
                            nullPtr nullPtr nullPtr nullPtr
@@ -548,7 +540,7 @@ pathAccess path mask =
                 then return False
                 else do
                     pSd <- peek ppSd
-                    -- pSd allocated by GetNamedSecurityInfo; free with
+                    -- pSd allocated by GetSecurityInfo; free with
                     -- LocalFree.
                     bracket (return pSd)
                             (\p -> c_LocalFree p >> return ()) $ \sd ->
