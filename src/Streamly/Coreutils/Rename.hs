@@ -81,7 +81,8 @@ renameCheckFirst src dest = do
 
 -- Errors meaning that the platform or the file system does not support an
 -- atomic no-replace rename. Linux returns EINVAL when the file system does
--- not support RENAME_NOREPLACE, macOS returns ENOTSUP.
+-- not support RENAME_NOREPLACE, macOS returns ENOTSUP, FreeBSD returns
+-- EOPNOTSUPP, which is the same value as ENOTSUP.
 isUnsupported :: Errno -> Bool
 isUnsupported e = e == eNOSYS || e == eINVAL || e == eNOTSUP
 #endif
@@ -91,10 +92,11 @@ isUnsupported e = e == eNOSYS || e == eINVAL || e == eNOTSUP
 -- its target does not.
 --
 -- Atomic on Linux (@renameat2@ with @RENAME_NOREPLACE@), macOS (@renamex_np@
--- with @RENAME_EXCL@) and Windows (@MoveFileExW@ without
--- @MOVEFILE_REPLACE_EXISTING@). On other platforms, and on file systems that
--- do not support these calls, @dest@ is checked before the rename, so a
--- @dest@ created in between is replaced.
+-- with @RENAME_EXCL@), FreeBSD 15.1 and later (@renameat2@ with
+-- @AT_RENAME_NOREPLACE@) and Windows (@MoveFileExW@ without
+-- @MOVEFILE_REPLACE_EXISTING@). On other platforms, on older FreeBSD
+-- releases, and on file systems that do not support these calls, @dest@ is
+-- checked before the rename, so a @dest@ created in between is replaced.
 renameNoReplace :: Path -> Path -> IO Bool
 #if defined(CABAL_OS_WINDOWS)
 renameNoReplace src dest = do

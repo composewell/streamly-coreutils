@@ -43,7 +43,8 @@ import Streamly.Coreutils.Rename (renameNoReplace)
 -- = Design notes
 --
 -- * 'OverwriteNever' and 'OverwriteError' use 'renameNoReplace', which is
---   atomic on Linux, macOS and Windows, like GNU @mv@. 'OverwriteOnly' and
+--   atomic on Linux, macOS, FreeBSD 15.1 and later, and Windows, like GNU
+--   @mv@. 'OverwriteOnly' and
 --   'OverwriteUpdate' check the destination before 'renamePath' is called,
 --   so the destination can change in between; GNU @mv -u@ has the same
 --   race.
@@ -88,10 +89,11 @@ defaultConfig = MvOptions
 -- 'OverwriteUpdate' to replace only a destination older than the source.
 --
 -- With 'OverwriteNever' and 'OverwriteError' the check and the rename are one
--- atomic operation on Linux, macOS and Windows, so a destination created
--- concurrently is never replaced. On FreeBSD, and on file systems that do not
--- support it, the destination is checked first and a destination created
--- between the check and the rename is replaced.
+-- atomic operation on Linux, macOS, FreeBSD 15.1 and later, and Windows, so
+-- a destination created concurrently is never replaced. On older FreeBSD
+-- releases, and on file systems that do not support it, the destination is
+-- checked first and a destination created between the check and the rename
+-- is replaced.
 --
 -- Default (without this modifier): 'OverwriteAlways', like GNU @mv@.
 overwrite :: Overwrite -> MvOptions -> MvOptions

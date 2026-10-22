@@ -48,6 +48,9 @@ int streamly_coreutils_rename_noreplace(const char *src, const char *dst)
                    RENAME_NOREPLACE);
 #elif defined(__APPLE__) && defined(RENAME_EXCL)
     return renamex_np(src, dst, RENAME_EXCL);
+#elif defined(__FreeBSD__) && defined(AT_RENAME_NOREPLACE)
+    /* FreeBSD 15.1 and later. */
+    return renameat2(AT_FDCWD, src, AT_FDCWD, dst, AT_RENAME_NOREPLACE);
 #else
     (void)src;
     (void)dst;
