@@ -15,7 +15,7 @@ module Streamly.Test.Coreutils.Dirname (main) where
 
 import Control.Monad (forM_)
 import Data.List (isPrefixOf)
-import System.FilePath (isPathSeparator, pathSeparator)
+import System.FilePath (isPathSeparator)
 import Test.Hspec
 import Test.QuickCheck
     (Gen, Property, elements, forAll, listOf, listOf1, (==>))
@@ -41,10 +41,28 @@ checkCases cases =
         it (show input ++ " -> " ++ show expected) $
             dirname input `shouldReturn` expected
 
+-- | On Windows a path that starts with two separators is a UNC path, which
+-- needs a server and a share name, e.g. \\srv\share. Keep at most one
+-- leading separator on Windows so that the generated paths are valid.
+oneLeadingSep :: String -> String
+#if defined(CABAL_OS_WINDOWS)
+oneLeadingSep p =
+    case span isPathSeparator p of
+        (c : _, rest) -> c : rest
+        _ -> p
+#else
+oneLeadingSep = id
+#endif
+
 -- | Non-empty relative paths over a small alphabet, so that separators,
 -- dot components and repeated separators are common.
 genPath :: Gen String
-genPath = listOf1 (elements "ab./")
+genPath = oneLeadingSep <$> listOf1 (elements "ab./")
+
+-- | Like 'genPath' but often starting with separators.
+genLeadingSepsPath :: Gen String
+genLeadingSepsPath =
+    oneLeadingSep <$> ((++) <$> listOf (elements "/") <*> genPath)
 
 -- | A single file name component, no separators.
 genName :: Gen String
@@ -61,7 +79,7 @@ propTrailingSeps =
     forAll (listOf1 (elements "/")) $ \seps ->
         monadicIO $ do
             r1 <- run $ dirname p
-            r2 <- run $ dirname (p ++ seps)
+            r2 <- run $ dirname (oneLeadingSep (p ++ seps))
             assert (r1 == r2)
 
 -- | Appending a component to a path that has a name in it gives back the
@@ -75,16 +93,16 @@ propAppendName =
             r <- run $ dirname (p ++ seps ++ n)
             assert (r == dropTrailingSeps p)
 
--- | The result is ".", the root, or a prefix of the input that does not end
--- in a separator.
+-- | The result is ".", the root (the first separator of the input), or a
+-- prefix of the input that does not end in a separator.
 propShape :: Property
 propShape =
-    forAll ((++) <$> listOf (elements "/") <*> genPath) $ \p ->
+    forAll genLeadingSepsPath $ \p ->
         monadicIO $ do
             r <- run $ dirname p
             assert
                 (  r == "."
-                || r == [pathSeparator]
+                || (r == take 1 p && all isPathSeparator r)
                 || (r `isPrefixOf` p && not (isPathSeparator (last r)))
                 )
 
