@@ -76,6 +76,10 @@
 --   than the default mode when the path traverses through a symlink
 --   via @..@: @\/link\/..@ lexically resolves to @\/@, but physically
 --   resolves to the parent of the symlink's target.
+-- * On Windows, @..@ is always removed lexically before symlinks are
+--   followed, because Win32 normalizes a path before the filesystem sees
+--   it. @link\\..@ resolves to the directory containing @link@ in every
+--   'resolutionMode', unlike GNU @realpath@ on POSIX.
 
 module Streamly.Coreutils.ResolvePath
     ( ResolvePathOptions

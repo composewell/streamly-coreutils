@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
 --
@@ -15,7 +16,11 @@ module Streamly.Test.Coreutils.ResolvePath (main) where
 
 import Control.Exception (SomeException, try)
 import System.Directory
-    (canonicalizePath, createDirectoryIfMissing, createFileLink)
+    ( canonicalizePath
+    , createDirectoryIfMissing
+    , createDirectoryLink
+    , createFileLink
+    )
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
@@ -40,7 +45,7 @@ withTree action =
         d <- canonicalizePath tmp
         createDirectoryIfMissing True (d </> "x" </> "y")
         writeFile (d </> "x" </> "f") ""
-        createFileLink ("x" </> "y") (d </> "ly")
+        createDirectoryLink ("x" </> "y") (d </> "ly")
         createFileLink "nowhere" (d </> "dangling")
         action d
 
@@ -59,6 +64,15 @@ knownBug reason action = do
             expectationFailure
                 ("passes now, remove the knownBug marker: " ++ reason)
 
+-- | A 'knownBug' on POSIX only. Win32 removes @..@ lexically, so the bug
+-- does not occur on Windows.
+posixBug :: String -> Expectation -> Expectation
+#if !defined(CABAL_OS_WINDOWS)
+posixBug = knownBug
+#else
+posixBug _ action = action
+#endif
+
 -------------------------------------------------------------------------------
 -- Tests
 -------------------------------------------------------------------------------
@@ -72,8 +86,14 @@ main = hspec $ do
         it "resolves a symlink" $ withTree $ \d ->
             resolve id (d </> "ly") `shouldReturn` d </> "x" </> "y"
 
+#if !defined(CABAL_OS_WINDOWS)
         it "resolves .. after the symlink target" $ withTree $ \d ->
             resolve id (d </> "ly" </> "..") `shouldReturn` d </> "x"
+#else
+        -- Win32 removes .. lexically before following symlinks.
+        it "resolves .. before the symlink" $ withTree $ \d ->
+            resolve id (d </> "ly" </> "..") `shouldReturn` d
+#endif
 
         it "removes . and repeated separators" $ withTree $ \d ->
             resolve id (d </> "." </> "x" ++ "//y")
@@ -112,7 +132,7 @@ main = hspec $ do
                 `shouldReturn` d </> "missing" </> "a"
 
         it "resolves .. after a missing component" $ withTree $ \d ->
-            knownBug "canonicalizePath keeps .. after a missing component" $
+            posixBug "canonicalizePath keeps .. after a missing component" $
                 resolve (existenceCheck RequireNone)
                     (d </> "missing" </> "a" </> ".." </> "b")
                     `shouldReturn` d </> "missing" </> "b"
@@ -143,7 +163,7 @@ main = hspec $ do
                 `shouldReturn` d </> "x" </> "f"
 
         it "checks existence on the lexical result" $ withTree $ \d ->
-            knownBug "existence is checked on the physical path" $
+            posixBug "existence is checked on the physical path" $
                 resolve
                     (resolutionMode NoSymlinkResolution . existenceCheck RequirePath)
                     (d </> "ly" </> ".." </> "x" </> "f")
