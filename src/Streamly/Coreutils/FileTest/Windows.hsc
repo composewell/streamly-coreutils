@@ -192,6 +192,10 @@ foreign import WINDOWS_CCONV unsafe "windows.h AccessCheck"
 tOKEN_QUERY :: DWORD
 tOKEN_QUERY = 0x0008
 
+-- TOKEN_DUPLICATE (0x0002) is not re-exported, define locally
+tOKEN_DUPLICATE :: DWORD
+tOKEN_DUPLICATE = 0x0002
+
 -- TokenUser = 1 in the TOKEN_INFORMATION_CLASS enum
 tOKEN_USER :: DWORD
 tOKEN_USER = 1
@@ -510,8 +514,10 @@ openCurrentProcessImpersonationToken :: IO HANDLE
 openCurrentProcessImpersonationToken = do
     proc <- c_GetCurrentProcess
     alloca $ \pToken -> do
+        -- DuplicateToken needs TOKEN_DUPLICATE access to the token.
         failIfFalse_ "OpenProcessToken" $
-            c_OpenProcessToken proc tOKEN_QUERY pToken
+            c_OpenProcessToken
+                proc (tOKEN_QUERY .|. tOKEN_DUPLICATE) pToken
         primaryToken <- peek pToken
         bracket
             (return primaryToken)
