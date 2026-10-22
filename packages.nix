@@ -12,7 +12,7 @@ packages =
 libraries =
 with nixpkgs.haskellPackages;
 [
-temporary hspec
+temporary hspec tasty-bench
 ];
 
 # Haskell dev packages. Install only dependencies of these in the shell,

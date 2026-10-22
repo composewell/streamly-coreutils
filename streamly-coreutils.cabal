@@ -280,6 +280,22 @@ executable hfd
 --     , random            >= 1.0.0 && < 2
 --   default-language: Haskell2010
 
+benchmark Streamly.Benchmark.Coreutils.Cut
+  import: compile-options, perf-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Benchmark/Coreutils/Cut.hs
+  hs-source-dirs: benchmark
+  build-depends:
+      base
+    , filepath
+    , streamly-core
+    , streamly-coreutils
+    , tasty-bench
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Benchmark.Coreutils.Cut.main
+               -rtsopts "-with-rtsopts=-M512M"
+
 -------------------------------------------------------------------------------
 -- Test suites
 -------------------------------------------------------------------------------
