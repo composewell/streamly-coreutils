@@ -57,6 +57,7 @@ import qualified Streamly.Data.Scanl as Scanl
 import qualified Streamly.Data.Stream.Prelude as Stream
 import qualified Streamly.FileSystem.Handle as Handle
 import qualified Streamly.FileSystem.Path as Path
+import qualified Streamly.Internal.Data.Array as Array (last)
 import qualified Streamly.Internal.Data.MutArray as MutArray
 
 import Prelude hiding (tail, lines)
@@ -174,7 +175,7 @@ endsWithNewline :: [Array Word8] -> Bool
 endsWithNewline chunks =
     case reverse (filter ((> 0) . Array.length) chunks) of
         [] -> False
-        (c : _) -> Array.getIndex (Array.length c - 1) c == Just newline
+        (c : _) -> Array.last c == Just newline
 
 -------------------------------------------------------------------------------
 -- Stream helpers

@@ -296,7 +296,7 @@ splitLine delim line
             [d] -> do
                 -- splitEndBy_ drops the empty field after a final delimiter
                 flds <- Stream.toList $ Array.splitEndBy_ (== d) line
-                let lastByte = Array.getIndex (Array.length line - 1) line
+                let lastByte = Array.last line
                 return
                     $ if lastByte == Just d
                       then flds ++ [Array.empty]
