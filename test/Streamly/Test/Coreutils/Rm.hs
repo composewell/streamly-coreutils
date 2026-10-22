@@ -83,7 +83,9 @@ withTempDir action = do
         (createTempDirectory tmpRoot "rm-test-")
         removePathForcibly'
         action
-  where
+
+    where
+
     -- Best-effort cleanup; we do not want cleanup failures to mask test
     -- failures.
     removePathForcibly' p =

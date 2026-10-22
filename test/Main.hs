@@ -18,7 +18,9 @@ splitOnNewLine = S.foldMany (FL.takeEndBy (== '\n') FL.toList)
 
 gen :: Monad m => Char -> Int -> Stream m Char
 gen c n = S.unfoldr step (0, True)
-  where
+
+    where
+
     step (i, flg)
         | i == n = Just ('\n', (0, flg))
     step (0, False) = Just ('x', (1, True))

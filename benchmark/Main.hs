@@ -17,7 +17,9 @@ import qualified Streamly.Data.Fold as Fold
 alternateStrings ::
        MonadIO m => Int -> Int -> String -> String -> Stream m String
 alternateStrings l n str1 str2 = S.unfoldr step (l, Left (n - 1))
-  where
+
+    where
+
     step (0, _) = Nothing
     step (k, Left 0) = Just (str1, (k, Right (n - 1)))
     step (k, Left i) = Just (str1, (k, Left (i - 1)))

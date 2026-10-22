@@ -367,7 +367,9 @@ idNum f =
         (True,  False) -> realUserId
         (False, True ) -> effectiveGroupId
         (True,  True ) -> realGroupId
-  where
+
+    where
+
     cfg = f defaultConfig
 
 -- | Return the name corresponding to a uid or gid (real or effective) of
@@ -382,5 +384,7 @@ idName :: (IdOptions -> IdOptions) -> IO (Maybe String)
 idName f = do
     n <- idNum f
     if idoGroup cfg then groupNameFromId n else userNameFromId n
-  where
+
+    where
+
     cfg = f defaultConfig

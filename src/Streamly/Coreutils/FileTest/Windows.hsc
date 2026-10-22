@@ -258,7 +258,9 @@ withFileHandle access followLinks path action =
             Nothing)
         closeHandle
         action
-  where
+
+    where
+
     flags
         | followLinks = fILE_FLAG_BACKUP_SEMANTICS
         | otherwise =
@@ -431,7 +433,9 @@ isPathReadableNow path =
         closeHandle h
         return True
     ) `catch` \(_ :: IOException) -> return False
-  where
+
+    where
+
     shareMode = fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE
     -- Required to open directories
     flags     = fILE_FLAG_BACKUP_SEMANTICS
@@ -487,7 +491,9 @@ isPathExecutableNow path =
         closeHandle h
         return True
     ) `catch` \(_ :: IOException) -> return False
-  where
+
+    where
+
     shareMode = fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE
     flags     = fILE_FLAG_BACKUP_SEMANTICS
 
@@ -562,7 +568,9 @@ pathAccess path mask =
                             then peek pAccessStatus
                             else return False
     `catch` handler
-  where
+
+    where
+
     handler :: SomeException -> IO Bool
     handler e
         | Just (_ :: AsyncException) <- fromException e = throwIO e

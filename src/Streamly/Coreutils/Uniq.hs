@@ -114,15 +114,17 @@ compareIgnCase _ _ = False
 {-# INLINE compareUsingOptions #-}
 compareUsingOptions :: UniqOptions -> (String -> String -> Bool)
 compareUsingOptions opt =
-
     compareXYZ (ignoreCase opt) (skipFields opt) (skipChar opt) (checkChar opt)
+
     where
 
     -- Gives the number of characters to be deleted from the beginning of the
     -- string to skip @n@ non-space fields\/strings
     indexAfterSkippingNWords :: Int -> String -> Int
     indexAfterSkippingNWords n str = go 0 n
-      where
+
+        where
+
         len = length str
         go i 0 = i
         go i _
@@ -190,7 +192,9 @@ uniq opt strm =
         All -> extract (const True)
         Duplicate -> extract (ge 1)
         Repeated -> (\(UniqResult _ x) -> UniqResult 1 x) <$> extract (ge 1)
-  where
+
+    where
+
     eq n (UniqResult i _) = i == n
     ge n (UniqResult i _) = i > n
     extract predicate =
