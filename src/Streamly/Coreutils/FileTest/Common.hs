@@ -77,6 +77,7 @@ module Streamly.Coreutils.FileTest.Common
     -- * Creating FileTest Predicates
     , withState
     , withStateM
+    , withFollowStateM
     , withStatusM
     , withStatus
     , withPathM
@@ -469,6 +470,13 @@ testWithStatus fp st (FileTest (Predicate f)) =
 withStateM :: (Path -> FileStatus -> IO Bool) -> FileTest
 withStateM p =
     FileTest $ Predicate $ \fs -> requireStatus fs >>= p (filepath fs)
+
+-- | Like 'withStateM' but the supplied function also gets whether the status
+-- follows symlinks: 'True' under 'test' and 'False' under 'testl'.
+withFollowStateM :: (Bool -> Path -> FileStatus -> IO Bool) -> FileTest
+withFollowStateM p =
+    FileTest $ Predicate $ \fs ->
+        requireStatus fs >>= p (statusFollowsLinks fs) (filepath fs)
 
 -- | Convert a @Path -> FileStatus -> Bool@ function into a 'FileTest'
 -- predicate.

@@ -219,6 +219,10 @@ fILE_GENERIC_WRITE = 0x00120116
 fILE_GENERIC_EXECUTE :: DWORD
 fILE_GENERIC_EXECUTE = 0x001200A0
 
+-- Not exported by Win32; value from WinBase.h
+fILE_FLAG_OPEN_REPARSE_POINT :: DWORD
+fILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+
 -------------------------------------------------------------------------------
 -- GENERIC_MAPPING storable struct
 -------------------------------------------------------------------------------
@@ -244,39 +248,49 @@ instance Storable GENERIC_MAPPING where
 -- Same file
 -------------------------------------------------------------------------------
 
--- | Open a file handle suitable for metadata queries.
+-- | Open a file handle suitable for metadata queries. If the first argument
+-- is 'False' and the path is a symlink, open the symlink itself instead of
+-- its target, like @lstat@.
 -- Uses fILE_FLAG_BACKUP_SEMANTICS so that directories can be opened too.
 -- Uses 0 for desired access since only metadata is needed; this succeeds
 -- even when data-read access is restricted.
-withFileHandle :: Path -> (HANDLE -> IO a) -> IO a
-withFileHandle path action =
+withFileHandle :: Bool -> Path -> (HANDLE -> IO a) -> IO a
+withFileHandle followLinks path action =
     bracket
         (createFile (Path.toString path) 0
             (fILE_SHARE_READ .|. fILE_SHARE_WRITE .|. fILE_SHARE_DELETE)
             Nothing
             oPEN_EXISTING
-            fILE_FLAG_BACKUP_SEMANTICS
+            flags
             Nothing)
         closeHandle
         action
+  where
+    flags
+        | followLinks = fILE_FLAG_BACKUP_SEMANTICS
+        | otherwise =
+            fILE_FLAG_BACKUP_SEMANTICS .|. fILE_FLAG_OPEN_REPARSE_POINT
 
 -- | Return a (volumeSerialNumber, fileIndex) pair that uniquely identifies
 -- a file on the local system, following the same-inode logic as POSIX.
-fileId :: Path -> IO (DWORD, Word64)
-fileId path =
-    withFileHandle path $ \h -> do
+fileId :: Bool -> Path -> IO (DWORD, Word64)
+fileId followLinks path =
+    withFileHandle followLinks path $ \h -> do
         info <- getFileInformationByHandle h
         let vol = bhfiVolumeSerialNumber info
             idx = bhfiFileIndex info
         pure (vol, idx)
 
+-- Under 'testl' path1 is not dereferenced, like the lstat used by the POSIX
+-- implementation; path2 is always dereferenced.
+
 -- | True if both paths refer to the same underlying file or directory,
 -- equivalent to POSIX inode comparison.
 sameFileAs :: Path -> FileTest
 sameFileAs path2 =
-    withPathM $ \path1 -> do
-        id1 <- fileId path1
-        id2 <- fileId path2
+    withFollowStateM $ \followLinks path1 _ -> do
+        id1 <- fileId followLinks path1
+        id2 <- fileId True path2
         pure (id1 == id2)
 
 -------------------------------------------------------------------------------
