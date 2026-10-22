@@ -55,7 +55,7 @@ jobs:
         DISABLE_DIST_CHECKS: "y"
         PACKCHECK: "./packcheck.sh"
         PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
-        PACKCHECK_GITHUB_COMMIT: "b8579a2d2a75c9d9cad5957eea63855a2e14a91d"
+        PACKCHECK_GITHUB_COMMIT: "d91731cf46c91b32fd64b307a5fce99ef99b6934"
       with:
         release: ${{ matrix.release }}
         usesh: true

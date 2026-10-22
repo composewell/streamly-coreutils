@@ -109,7 +109,7 @@ jobs:
       # If you have not committed packcheck.sh in your repo at PACKCHECK
       # then it is automatically pulled from this URL.
       PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
-      PACKCHECK_GITHUB_COMMIT: "b8579a2d2a75c9d9cad5957eea63855a2e14a91d"
+      PACKCHECK_GITHUB_COMMIT: "d91731cf46c91b32fd64b307a5fce99ef99b6934"
 
     # ubuntu seems to have better support than debian on CI systems
     runs-on: ${{ matrix.runner }}
@@ -457,7 +457,7 @@ jobs:
               #PATH_VAR="$PATH_VAR:/usr/local/.ghcup/bin"
               ;;
             CYGWIN*|MINGW*|MSYS*)
-              for var in APPDATA CABAL_DIR; do
+              for var in APPDATA CABAL_DIR TEMP TMP; do
                 val="${!var}"
                 [ -n "$val" ] && ARGS="$ARGS $var=\"$(cygpath -u "$val")\""
               done
