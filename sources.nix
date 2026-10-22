@@ -11,7 +11,10 @@ layers = [
     // { rev = "2";
          cabalSha256 = "022hh6aw4sa6a5z6anmngrb4lgh9xql824jn68m01pppqszd9syz";
        };
-  streamly-coreutils = local ./.;
+  streamly-coreutils = local ./.
+    // { c2nix = ["--flag fusion-plugin"];
+         flags = ["--flags fusion-plugin"];
+       };
 }
 ];
 }

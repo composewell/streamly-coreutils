@@ -78,7 +78,7 @@ source-repository head
 flag fusion-plugin
   description: Use fusion plugin for best performance
   manual: True
-  default: False
+  default: True
 
 flag hfd
   description: Build the hfd executable, a parallel find
