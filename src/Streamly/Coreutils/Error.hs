@@ -23,6 +23,9 @@ import qualified Streamly.FileSystem.Path as Path
 
 -- = Design notes
 --
+-- See design/error-handling.md for the full rules and the rejected
+-- alternatives.
+--
 -- * Every failure of a command raises an 'IOError', so that one handler
 --   catches all of them and the predicates in "System.IO.Error", e.g.
 --   'System.IO.Error.isDoesNotExistError', apply. 'error' is used only for
