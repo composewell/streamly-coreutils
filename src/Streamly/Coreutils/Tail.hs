@@ -88,6 +88,13 @@ defaultConfig = TailOptions
     , _reverse = False -- False means default i.e. from the end
     }
 
+-- TODO: GNU tail has two follow modes: --follow=descriptor (the default, -f)
+-- keeps reading the open file, --follow=name (-F, with --retry) reopens the
+-- file by name when it is renamed or recreated, e.g. on log rotation. If we
+-- add the name mode, change the Bool argument of follow to a sum type
+-- (FollowDescriptor | FollowName) before the first release rather than adding
+-- a second Bool modifier.
+
 -- | After the end of the file is reached, keep running and output data as it
 -- is appended to the file, like @tail -f@. The file size is checked once a
 -- second. If the file is truncated, output starts again from its beginning.
