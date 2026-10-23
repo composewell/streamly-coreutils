@@ -13,7 +13,7 @@ module Streamly.Test.Coreutils.Sleep (main) where
 
 import Data.List (isInfixOf)
 import GHC.Clock (getMonotonicTime)
-import System.IO.Error (ioeGetErrorString)
+import GHC.IO.Exception (IOErrorType(InvalidArgument), IOException(..))
 import Test.Hspec
 
 import Streamly.Coreutils.Sleep
@@ -41,5 +41,6 @@ main = hspec $
             sleep 0 `shouldReturn` ()
 
         it "fails on a negative time" $
-            sleep (-1) `shouldThrow`
-                (("invalid time interval" `isInfixOf`) . ioeGetErrorString)
+            sleep (-1) `shouldThrow` \e ->
+                ioe_type e == InvalidArgument
+                    && "invalid time interval" `isInfixOf` ioe_description e

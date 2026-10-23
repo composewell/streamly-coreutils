@@ -101,8 +101,12 @@ import System.FilePath
     (makeRelative, splitDirectories, joinPath, isAbsolute, takeDirectory)
 -- import System.IO.Error (ioError, userError)
 
+import Foreign.C.Error (eNOENT)
+import System.IO.Error (ioeSetErrorString)
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
+
+import Streamly.Coreutils.Error (errnoError)
 
 -- $setup
 -- >>> :set -XQuasiQuotes
@@ -437,23 +441,25 @@ lexicalCollapse p =
         Nothing -> if null collapsed then "." else joinPath collapsed
 
 -- Perform the pre-resolution existence check demanded by the given
--- 'ExistenceCheck'. Throws 'IOError' on violation.
-checkExistence :: ExistenceCheck -> String -> IO ()
+-- 'ExistenceCheck'. Raise an 'IOError' with errno ENOENT for the path on
+-- violation, like GNU realpath -e.
+checkExistence :: ExistenceCheck -> Path -> IO ()
 checkExistence check path = case check of
     RequireNone -> return ()
     RequirePath -> do
-        exists <- doesPathExist path
-        unless exists $
-            ioError
-                (userError ("resolvePath: path does not exist: " ++ path))
+        exists <- doesPathExist pathStr
+        unless exists $ ioError (errnoError "resolvePath" eNOENT path)
     RequireParents -> do
-        let parent = takeDirectory path
-        parentExists <- doesDirectoryExist parent
-        unless parentExists $
-            ioError
-                (userError
-                    ("resolvePath: parent directory does not exist: "
-                        ++ parent))
+        parentExists <- doesDirectoryExist (takeDirectory pathStr)
+        unless parentExists
+            $ ioError
+            $ ioeSetErrorString
+                (errnoError "resolvePath" eNOENT path)
+                "parent directory does not exist"
+
+    where
+
+    pathStr = Path.toString path
 
 -- Is the second path a descendant of (or equal to) the first?
 -- Both arguments should already be canonicalized and absolute.
@@ -487,7 +493,7 @@ resolvePath
 resolvePath modifier path = do
     let opts = modifier defaultConfig
         pathStr = Path.toString path
-    checkExistence (_existenceCheck opts) pathStr
+    checkExistence (_existenceCheck opts) path
     resolved <- case _resolutionMode opts of
         ResolveThenParent -> canonicalizePath pathStr
         ParentThenResolve ->

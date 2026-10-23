@@ -22,6 +22,7 @@ import System.Directory
     , createFileLink
     )
 import System.FilePath ((</>))
+import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 
@@ -104,7 +105,8 @@ main = hspec $ do
                 `shouldReturn` d </> "x" </> "missing"
 
         it "fails on a missing parent" $ withTree $ \d ->
-            resolve id (d </> "missing" </> "a") `shouldThrow` anyIOException
+            resolve id (d </> "missing" </> "a")
+                `shouldThrow` isDoesNotExistError
 
     describe "existenceCheck RequirePath (realpath -e)" $ do
         it "returns an existing path" $ withTree $ \d ->
@@ -113,18 +115,18 @@ main = hspec $ do
 
         it "fails on a missing leaf" $ withTree $ \d ->
             resolve (existenceCheck RequirePath) (d </> "x" </> "missing")
-                `shouldThrow` anyIOException
+                `shouldThrow` isDoesNotExistError
 
         it "fails on a dangling symlink" $ withTree $ \d ->
             resolve (existenceCheck RequirePath) (d </> "dangling")
-                `shouldThrow` anyIOException
+                `shouldThrow` isDoesNotExistError
 
     describe "existenceCheck RequireParents (realpath -E)" $
         it "behaves like the default" $ withTree $ \d -> do
             resolve (existenceCheck RequireParents) (d </> "x" </> "missing")
                 `shouldReturn` d </> "x" </> "missing"
             resolve (existenceCheck RequireParents) (d </> "missing" </> "a")
-                `shouldThrow` anyIOException
+                `shouldThrow` isDoesNotExistError
 
     describe "existenceCheck RequireNone (realpath -m)" $ do
         it "accepts a missing parent" $ withTree $ \d ->

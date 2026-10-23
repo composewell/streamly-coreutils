@@ -21,6 +21,8 @@ where
 
 import Control.Monad (unless, when)
 import Data.Maybe (fromMaybe)
+import Foreign.C.Error (eEXIST)
+import GHC.IO.Exception (IOErrorType(InvalidArgument))
 import Streamly.Coreutils.FileTest (test, testl, doesItExist, sameFileAs)
 import System.Directory (removeFile)
 #if defined(CABAL_OS_WINDOWS)
@@ -34,6 +36,8 @@ import qualified System.PosixCompat.Files as Posix
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
+import Streamly.Coreutils.Error (commandError, errnoError)
+
 data LnOptions = LnOptions
     { lnForce :: Bool
     , lnSymbolic :: Bool
@@ -43,9 +47,11 @@ defaultConfig :: LnOptions
 defaultConfig = LnOptions False False
 
 -- | Remove an existing destination before creating the link, like @ln -f@.
--- Fails if the source and the destination are the same file.
+-- Raises an 'IOError' of type 'InvalidArgument' if the source and the
+-- destination are the same file.
 --
--- Default (without this modifier): 'False', fail if the destination exists.
+-- Default (without this modifier): 'False', raise an exception if the
+-- destination exists.
 force :: Bool -> LnOptions -> LnOptions
 force opt cfg = cfg {lnForce = opt}
 
@@ -111,17 +117,26 @@ createSymbolicLink src tgt =
     Posix.createSymbolicLink (Path.toString src) (Path.toString tgt)
 #endif
 
+-- | @ln modifier source dest@ creates a link @dest@ to @source@, like GNU
+-- @ln@. Pass 'id' for defaults; each modifier documents its own default.
+--
+-- Raises an 'IOError' with errno @EEXIST@
+-- ('System.IO.Error.isAlreadyExistsError') if @dest@ exists, unless 'force'
+-- is 'True'. A failure to create the link raises the 'IOError' of the
+-- system call.
 ln :: (LnOptions -> LnOptions) -> Path -> Path -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
     -- target can be a symlink or non-symlink
     found <- testl tgt doesItExist
     when found $ do
-        unless (lnForce opt) $ error msg
+        unless (lnForce opt) $ ioError (errnoError "ln" eEXIST tgt)
         -- Do not remove the source itself.
         srcFound <- test src doesItExist
         same <- if srcFound then isSameEntry else pure False
-        when same $ error sameMsg
+        when same
+            $ ioError
+            $ commandError InvalidArgument "ln" sameMsg (Just src)
         removeEntry tgt
     case lnSymbolic opt of
         False -> Posix.createLink srcStr tgtStr
@@ -148,7 +163,4 @@ ln f src tgt = do
 
     dirOrCwd = fromMaybe (Path.fromString_ ".")
 
-    msg = "ln: Link target exists, use force to create anyway"
-    sameMsg =
-        "ln: '" ++ srcStr ++ "' and '" ++ tgtStr
-            ++ "' are the same file"
+    sameMsg = "'" ++ srcStr ++ "' and '" ++ tgtStr ++ "' are the same file"

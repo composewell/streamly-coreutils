@@ -36,6 +36,9 @@ where
 
 import Control.Concurrent (threadDelay)
 import Data.Time.Clock (NominalDiffTime)
+import GHC.IO.Exception (IOErrorType(InvalidArgument))
+
+import Streamly.Coreutils.Error (commandError)
 
 import Streamly.Coreutils.Time (seconds, minutes, hours, days)
 
@@ -54,12 +57,14 @@ import Streamly.Coreutils.Time (seconds, minutes, hours, days)
 --
 -- >>> sleep 0.01
 --
--- Raises an 'IOError' with the GNU message "invalid time interval" if the
--- time is negative.
+-- Raises an 'IOError' of type 'InvalidArgument' with the GNU description
+-- "invalid time interval" if the time is negative.
 sleep :: NominalDiffTime -> IO ()
 sleep t
     | t < 0 =
-        ioError $ userError $ "sleep: invalid time interval: " ++ show t
+        ioError
+            $ commandError InvalidArgument "sleep"
+                ("invalid time interval: " ++ show t) Nothing
     | otherwise = go (ceiling (t * 1_000_000))
 
     where

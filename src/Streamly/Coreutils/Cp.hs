@@ -16,13 +16,16 @@ module Streamly.Coreutils.Cp
     , Overwrite (..)
     -- , CpBackup
     , overwrite
-    , CpMethod (..)
+    , CpMethod (CopyContents, HardLink)
     , cpMethod
     , intoDirectory
     )
 where
 
 import Control.Monad (when)
+import Foreign.C.Error (eISDIR)
+import GHC.IO.Exception (IOErrorType(InvalidArgument))
+import System.IO.Error (ioeSetErrorString)
 import System.Directory (canonicalizePath)
 import System.PosixCompat.Files (createLink)
 #if !defined(CABAL_OS_WINDOWS)
@@ -42,6 +45,7 @@ import qualified Streamly.Internal.FileSystem.FileIO as File
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
+import Streamly.Coreutils.Error (commandError, errnoError)
 import Streamly.Coreutils.FileTest
 import Streamly.Coreutils.Overwrite
     (Overwrite(..), shouldOverwrite, targetInDir)
@@ -60,6 +64,9 @@ import Streamly.Coreutils.Overwrite
 
 -- | When overwriting specify backup behavior.
 -- newtype CpBackup = Backup (Maybe String)
+
+-- SymbolicLink and CopyClone are not implemented; their constructors are not
+-- exported until they are.
 
 -- | How to copy the source to destination?
 data CpMethod =
@@ -185,9 +192,11 @@ cpCopy method src dest =
                 -- Writing would truncate the source before it is read.
                 same <- test src (sameFileAs dest)
                 when same
-                    $ ioError $ userError
-                    $ "cp: source and destination are the same file: "
-                        ++ Path.toString src
+                    $ ioError
+                    $ commandError
+                        InvalidArgument "cp"
+                        "source and destination are the same file"
+                        (Just src)
                 File.fromChunks dest (File.readChunks src)
             else copyToNew src dest
         HardLink -> do
@@ -195,14 +204,17 @@ cpCopy method src dest =
             -- linkat with AT_SYMLINK_FOLLOW.
             srcTarget <- canonicalizePath (Path.toString src)
             createLink srcTarget (Path.toString dest)
-        SymbolicLink -> error "Unimplemented"
-        CopyClone -> error "Unimplemented"
+        -- Not exported, so unreachable.
+        SymbolicLink -> error "cp: BUG: SymbolicLink is not implemented"
+        CopyClone -> error "cp: BUG: CopyClone is not implemented"
 
 -- | @cp option-modifier source destination@. Copy a file.
 --
 -- A symlink at @source@ is followed: the file it points to is copied, like
 -- GNU @cp@ without @-P@. A directory @source@, or a symlink to one, raises an
--- exception, like GNU @cp@ without @-r@.
+-- 'IOError' with errno @EISDIR@, like GNU @cp@ without @-r@. Copying a file
+-- onto itself raises an 'IOError' of type
+-- 'GHC.IO.Exception.InvalidArgument'.
 --
 -- If @destination@ is an existing directory, or a symlink to one, @source@
 -- is copied into it; see 'intoDirectory'. Pass 'id' for defaults; each
@@ -212,20 +224,22 @@ cp f src dest = do
     let options = f defaultOptions
     srcIsDir <- test src isDir
     when srcIsDir
-        $ ioError $ userError
-        $ "cp: -r not specified; omitting directory: " ++ Path.toString src
+        $ ioError
+        $ ioeSetErrorString (errnoError "cp" eISDIR src)
+            "-r not specified; omitting directory"
     destIsDir <-
         if optIntoDirectory options
         then test dest (doesItExist `and_` isDir)
         else return False
-    target <- if destIsDir then targetInDir dest src else return dest
+    target <- if destIsDir then targetInDir "cp" dest src else return dest
     case optCopyMethod options of
         CopyContents -> do
             dangling <- isDanglingSymLink target
             when dangling
-                $ ioError $ userError
-                $ "cp: not writing through dangling symlink: "
-                    ++ Path.toString target
+                $ ioError
+                $ commandError
+                    InvalidArgument "cp"
+                    "not writing through dangling symlink" (Just target)
         _ -> return ()
-    r <- shouldOverwrite True (optOverwrite options) src target
+    r <- shouldOverwrite "cp" True (optOverwrite options) src target
     when r $ cpCopy (optCopyMethod options) src target

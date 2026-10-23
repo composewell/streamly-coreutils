@@ -24,7 +24,8 @@ where
 import Control.Exception (IOException, try)
 import Control.Monad (unless, void, when)
 import Data.Either (lefts)
-import Foreign.C.Error (eNOTDIR, errnoToIOError)
+import Foreign.C.Error (eNOENT, eNOTDIR)
+import GHC.IO.Exception (IOErrorType(InvalidArgument))
 import System.Directory (canonicalizePath, renamePath)
 
 import qualified System.PosixCompat.Files as Files
@@ -34,6 +35,8 @@ import qualified Streamly.FileSystem.Path as Path
 import qualified Streamly.Internal.FileSystem.Path as Path
     (dropTrailingSeparators, hasTrailingSeparator)
 
+import Streamly.Coreutils.Error
+    (commandError, errnoError, throwFirstError)
 import Streamly.Coreutils.FileTest
     (and_, doesItExist, isDir, isSymLink, not_, sameFileAs, test, testl)
 import Streamly.Coreutils.Overwrite
@@ -53,10 +56,9 @@ import Streamly.Coreutils.Rename (renameNoReplace)
 --   taking a list: with one source the destination may be a new name, with
 --   several it must be an existing directory.
 --
--- * 'mvMany' raises one 'userError' listing every failure instead of
---   rethrowing the first 'IOException': with several failures there is no
---   single error type to keep. A caller that needs to handle each failure
---   can call 'mv' per source.
+-- * 'mvMany' tries every source, then raises the 'IOError' of the first
+--   failing source; see the design notes in "Streamly.Coreutils.Error". A
+--   caller that needs to handle each failure can call 'mv' per source.
 
 -- | Options for 'mv' and 'mvMany'.
 data MvOptions = MvOptions
@@ -169,8 +171,7 @@ checkTrailingSeparator src =
                 (Path.dropTrailingSeparators src)
                 (doesItExist `and_` isSymLink)
         when isLink
-            $ ioError
-            $ errnoToIOError "mv" eNOTDIR Nothing (Just (Path.toString src))
+            $ ioError (errnoError "mv" eNOTDIR src)
 
 -- Rename src to dest, subject to the overwrite option.
 moveTo :: MvOptions -> Path -> Path -> IO ()
@@ -180,40 +181,45 @@ moveTo opt src dest = do
         OverwriteNever -> void $ renameNoReplace src dest
         OverwriteError -> do
             r <- renameNoReplace src dest
-            unless r $ ioError (destinationExistsError dest)
+            unless r $ ioError (destinationExistsError "mv" dest)
         option -> do
             same <- isSameFile src dest
             when same
-                $ ioError $ userError
-                $ "mv: '" ++ Path.toString src ++ "' and '"
-                    ++ Path.toString dest ++ "' are the same file"
-            r <- shouldOverwrite False option src dest
+                $ ioError
+                $ commandError InvalidArgument "mv" sameMsg (Just src)
+            r <- shouldOverwrite "mv" False option src dest
             when r $ renamePath (Path.toString src) (Path.toString dest)
+
+    where
+
+    sameMsg =
+        "'" ++ Path.toString src ++ "' and '" ++ Path.toString dest
+            ++ "' are the same file"
 
 -- | @mvMany modifier sources dir@ moves each of @sources@ into the existing
 -- directory @dir@, like GNU @mv -t dir sources...@. Pass 'id' for defaults;
 -- each modifier documents its own default.
 --
--- Raises an 'IOError' without moving anything if @dir@ is not a directory
--- or a symlink to one. A source that fails to move does not stop the
--- others, like GNU @mv@; after all sources are tried, an 'IOError' listing
--- each failure is raised.
+-- Raises an 'IOError' without moving anything if @dir@ does not exist, with
+-- errno @ENOENT@, or is not a directory or a symlink to one, with errno
+-- @ENOTDIR@. A source that fails to move does not stop the others, like GNU
+-- @mv@; after all sources are tried, the 'IOError' of the first failing
+-- source is raised, with the number of other failures added to its
+-- description.
 mvMany :: (MvOptions -> MvOptions) -> [Path] -> Path -> IO ()
 mvMany f srcs dir = do
     let opt = f defaultConfig
-        dirStr = Path.toString dir
-    dirIsDir <- test dir (doesItExist `and_` isDir)
-    unless dirIsDir $
-        ioError (userError ("mv: target is not a directory: " ++ dirStr))
+    dirExists <- test dir doesItExist
+    unless dirExists $ ioError (errnoError "mv" eNOENT dir)
+    dirIsDir <- test dir isDir
+    unless dirIsDir $ ioError (errnoError "mv" eNOTDIR dir)
     results <- mapM (moveOne opt) srcs
-    case lefts results of
-        [] -> return ()
-        errs -> ioError (userError (unlines (map show errs)))
+    throwFirstError (lefts results)
 
     where
 
     moveOne :: MvOptions -> Path -> IO (Either IOException ())
-    moveOne opt src = try (targetInDir dir src >>= moveTo opt src)
+    moveOne opt src = try (targetInDir "mv" dir src >>= moveTo opt src)
 
 -- | @mv modifier source dest@ renames @source@ to @dest@. If @dest@ is an
 -- existing directory, or a symlink to one, @source@ is moved into it; see
@@ -235,5 +241,5 @@ mv f src dest = do
         then test dest (doesItExist `and_` isDir)
         else return False
     if destIsDir
-    then targetInDir dest src >>= moveTo opt src
+    then targetInDir "mv" dest src >>= moveTo opt src
     else moveTo opt src dest

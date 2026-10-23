@@ -20,7 +20,9 @@ import System.Directory
     , getSymbolicLinkTarget
     , pathIsSymbolicLink
     )
+import GHC.IO.Exception (IOErrorType(InvalidArgument), IOException(..))
 import System.FilePath ((</>))
+import System.IO.Error (isAlreadyExistsError)
 import System.IO.Temp (withSystemTempDirectory)
 import System.PosixCompat.Files (createLink, fileID, getFileStatus)
 import Test.Hspec
@@ -49,6 +51,9 @@ sameInode a b = do
     sb <- getFileStatus b
     return (fileID sa == fileID sb)
 
+isInvalidArgument :: IOException -> Bool
+isInvalidArgument e = ioe_type e == InvalidArgument
+
 -------------------------------------------------------------------------------
 -- Tests
 -------------------------------------------------------------------------------
@@ -76,7 +81,8 @@ main = hspec $ do
         it "fails on an existing destination" $ withTempDir $ \d -> do
             writeFile (d </> "a") "x"
             writeFile (d </> "b") "y"
-            lnS False False (d </> "a") (d </> "b") `shouldThrow` anyErrorCall
+            lnS False False (d </> "a") (d </> "b")
+                `shouldThrow` isAlreadyExistsError
             readFile (d </> "b") `shouldReturn` "y"
 
         it "fails on a dangling symlink at the destination"
@@ -84,7 +90,7 @@ main = hspec $ do
                 writeFile (d </> "a") "x"
                 createFileLink "nowhere" (d </> "b")
                 lnS False False (d </> "a") (d </> "b")
-                    `shouldThrow` anyErrorCall
+                    `shouldThrow` isAlreadyExistsError
 
     describe "ln (force True)" $ do
         it "replaces an existing destination" $ withTempDir $ \d -> do
@@ -110,14 +116,14 @@ main = hspec $ do
             $ withTempDir $ \d -> do
                 writeFile (d </> "a") "x"
                 lnS True False (d </> "a") (d </> "a")
-                    `shouldThrow` anyErrorCall
+                    `shouldThrow` isInvalidArgument
                 readFile (d </> "a") `shouldReturn` "x"
 
         it "fails on the same file reached through another path"
             $ withTempDir $ \d -> do
                 writeFile (d </> "a") "x"
                 lnS True False (d </> "a") (d </> "." </> "a")
-                    `shouldThrow` anyErrorCall
+                    `shouldThrow` isInvalidArgument
                 readFile (d </> "a") `shouldReturn` "x"
 
     describe "ln (symbolic True)" $ do
@@ -136,7 +142,7 @@ main = hspec $ do
 
         it "fails on an existing destination" $ withTempDir $ \d -> do
             writeFile (d </> "b") "y"
-            lnS False True "a" (d </> "b") `shouldThrow` anyErrorCall
+            lnS False True "a" (d </> "b") `shouldThrow` isAlreadyExistsError
 
         it "replaces a symlink with force" $ withTempDir $ \d -> do
             createFileLink "a" (d </> "b")

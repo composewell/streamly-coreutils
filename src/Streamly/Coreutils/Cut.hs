@@ -51,6 +51,7 @@ import Data.Function ((&))
 import Data.Maybe (isNothing)
 -- import Data.Char (ord, isSpace, chr)
 import Data.Word (Word8)
+import GHC.IO.Exception (IOErrorType(InvalidArgument))
 import Streamly.Data.Stream (Stream)
 import Streamly.Data.Fold (Fold)
 import Streamly.Data.Array (Array)
@@ -60,6 +61,8 @@ import qualified  Streamly.Internal.Data.Stream as Stream
 import qualified  Streamly.Internal.Unicode.Stream as Unicode
 import qualified Streamly.FileSystem.FileIO as File
 import qualified Streamly.FileSystem.Path as Path
+
+import Streamly.Coreutils.Error (commandError)
 
 -- = Design notes
 --
@@ -256,7 +259,8 @@ delimiter d cfg = cfg {cutDelimiter = d}
 onlyDelimited :: Bool -> CutOptions -> CutOptions
 onlyDelimited x cfg = cfg {cutOnlyDelimited = x}
 
--- | Raise the GNU @cut@ error for invalid options.
+-- | Raise an 'IOError' of type 'InvalidArgument' with the GNU @cut@
+-- description for invalid options.
 validateOptions :: CutOptions -> IO ()
 validateOptions opts
     | null (cutFieldList opts) && isNothing (cutFieldsFrom opts) =
@@ -267,7 +271,7 @@ validateOptions opts
 
     where
 
-    failWith msg = ioError $ userError $ "cut: " ++ msg
+    failWith msg = ioError (commandError InvalidArgument "cut" msg Nothing)
 
 -- | Selection mask for fields numbered from 1: element @i@ is True if field
 -- @i + 1@ is selected. Infinite when 'fieldsFrom' is set.

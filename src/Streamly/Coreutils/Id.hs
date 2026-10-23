@@ -65,7 +65,7 @@ module Streamly.Coreutils.Id
     )
 where
 
-import Control.Exception (try, SomeException)
+import Control.Exception (IOException, try)
 import Data.List (nub)
 import Data.Maybe (catMaybes)
 import qualified System.Posix.User as Posix
@@ -142,7 +142,7 @@ userNameFromId :: Int -> IO (Maybe String)
 userNameFromId i = do
     r <- try (Posix.getUserEntryForID (fromIntegral i))
     return $ case r of
-        Left (_ :: SomeException) -> Nothing
+        Left (_ :: IOException) -> Nothing
         Right ue -> Just (Posix.userName ue)
 
 -- | Look up the group name for a gid. Returns 'Nothing' if no matching
@@ -151,7 +151,7 @@ groupNameFromId :: Int -> IO (Maybe String)
 groupNameFromId i = do
     r <- try (Posix.getGroupEntryForID (fromIntegral i))
     return $ case r of
-        Left (_ :: SomeException) -> Nothing
+        Left (_ :: IOException) -> Nothing
         Right ge -> Just (Posix.groupName ge)
 
 -- Internal: look up the full passwd entry for a uid, returning Nothing on
@@ -159,7 +159,7 @@ groupNameFromId i = do
 userEntryFromId i = do
     r <- try (Posix.getUserEntryForID (fromIntegral (i :: Int)))
     return $ case r of
-        Left (_ :: SomeException) -> Nothing
+        Left (_ :: IOException) -> Nothing
         Right ue -> Just ue
 
 -- | Primary group id of the user with the given uid. This is @pw_gid@

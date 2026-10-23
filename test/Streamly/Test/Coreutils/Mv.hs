@@ -17,6 +17,8 @@ import Control.Exception (IOException, bracket, try, SomeException)
 import Control.Monad (void)
 import Data.List (isInfixOf)
 import Data.Time.Clock (addUTCTime, getCurrentTime)
+import Foreign.C.Error (Errno(..), eNOTDIR)
+import GHC.IO.Exception (IOException(..))
 import System.Directory
     ( createDirectory
     , createDirectoryIfMissing
@@ -32,7 +34,7 @@ import System.Directory
     , withCurrentDirectory
     )
 import System.FilePath ((</>))
-import System.IO.Error (isAlreadyExistsError)
+import System.IO.Error (isAlreadyExistsError, isDoesNotExistError)
 import System.IO.Temp (createTempDirectory)
 import System.PosixCompat.Files (createLink)
 import Test.Hspec
@@ -102,6 +104,18 @@ shouldFailExists action = do
         Left e -> e `shouldSatisfy` isAlreadyExistsError
         Right _ ->
             expectationFailure "Expected an exception but none was thrown"
+
+-- | Assert that the action raises an 'IOException' satisfying the predicate.
+shouldFailWith :: IO () -> (IOException -> Bool) -> IO ()
+shouldFailWith action p = do
+    r <- try action
+    case r of
+        Left e -> e `shouldSatisfy` p
+        Right _ ->
+            expectationFailure "Expected an exception but none was thrown"
+
+hasErrno :: Errno -> IOException -> Bool
+hasErrno (Errno n) e = ioe_errno e == Just n
 
 shouldFailMentioning :: IO () -> [String] -> IO ()
 shouldFailMentioning action names = do
@@ -654,13 +668,15 @@ main = hspec $ do
             $ withTempDir $ \d -> do
             writeFile (d </> "a") "a"
             writeFile (d </> "f") "f"
-            shouldFail (mvMany id [d </> "a"] (d </> "f"))
+            mvMany id [d </> "a"] (d </> "f")
+                `shouldFailWith` hasErrno eNOTDIR
             (d </> "a") `shouldContain'` "a"
             (d </> "f") `shouldContain'` "f"
 
         it "fails if the target is missing" $ withTempDir $ \d -> do
             writeFile (d </> "a") "a"
-            shouldFail (mvMany id [d </> "a"] (d </> "missing"))
+            mvMany id [d </> "a"] (d </> "missing")
+                `shouldFailWith` isDoesNotExistError
             (d </> "a") `shouldContain'` "a"
 
         it "moves the remaining sources after a failure, then fails"
@@ -699,10 +715,13 @@ main = hspec $ do
             (d </> "dir" </> "a") `shouldContain'` "old"
             (d </> "dir" </> "b") `shouldContain'` "b"
 
-        it "names every failed source in the error" $ withTempDir $ \d -> do
+        it "raises the error of the first failed source"
+            $ withTempDir $ \d -> do
             createDirectory (d </> "dir")
-            mvMany id [d </> "missing1", d </> "missing2"] (d </> "dir")
-                `shouldFailMentioning` ["missing1", "missing2"]
+            let srcs = [d </> "missing1", d </> "missing2"]
+                action = mvMany id srcs (d </> "dir")
+            action `shouldFailWith` isDoesNotExistError
+            action `shouldFailMentioning` ["missing1", "and 1 more failure"]
 
         it "does nothing for an empty source list" $ withTempDir $ \d -> do
             createDirectory (d </> "dir")

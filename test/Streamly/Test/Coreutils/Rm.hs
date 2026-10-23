@@ -39,6 +39,8 @@ module Streamly.Test.Coreutils.Rm (main) where
 
 import Control.Exception (bracket, try, evaluate, SomeException)
 import Control.Monad (void, when)
+import Foreign.C.Error (Errno(..), eISDIR, eNOTDIR)
+import GHC.IO.Exception (IOException(..))
 import System.Directory
     ( createDirectory
     , createDirectoryLink
@@ -47,6 +49,7 @@ import System.Directory
     , getTemporaryDirectory
     )
 import System.FilePath ((</>))
+import System.IO.Error (isDoesNotExistError, isPermissionError)
 import System.IO.Temp (createTempDirectory)
 import System.PosixCompat.Files
     ( setFileMode
@@ -62,7 +65,7 @@ import Test.Hspec
 #if !defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.Id (idNum)
 #endif
-import Streamly.Coreutils.Rm hiding (rm)
+import Streamly.Coreutils.Rm hiding (rm, rmContents)
 import qualified Streamly.Coreutils.Rm as Rm
 import qualified Streamly.FileSystem.Path as Path
 
@@ -74,6 +77,9 @@ rm :: (RmOptions -> RmOptions) -> FilePath -> IO ()
 rm f path = do
     pathP <- Path.fromString path
     Rm.rm f pathP
+
+rmContents :: RmForce -> FilePath -> IO ()
+rmContents f path = Path.fromString path >>= Rm.rmContents f
 
 -- | Run a test inside a fresh temporary directory, cleaning up afterwards.
 withTempDir :: (FilePath -> IO ()) -> IO ()
@@ -119,6 +125,19 @@ shouldThrow' action = do
     case result of
         Left _  -> return ()
         Right _ -> expectationFailure "Expected an exception but none was thrown"
+
+-- | Assert that an IO action raises an 'IOException' satisfying the
+-- predicate.
+shouldFailWith :: IO () -> (IOException -> Bool) -> IO ()
+shouldFailWith action p = do
+    result <- try action
+    case result of
+        Left e -> e `shouldSatisfy` p
+        Right _ ->
+            expectationFailure "Expected an exception but none was thrown"
+
+hasErrno :: Errno -> IOException -> Bool
+hasErrno (Errno n) e = ioe_errno e == Just n
 
 #if !defined(CABAL_OS_WINDOWS)
 -- | Check whether we are running as root (effective uid 0).
@@ -199,7 +218,7 @@ main = hspec $ do
             it "r--: errors (not writable by us)" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeR__
-                shouldThrow' $ rm id f
+                rm id f `shouldFailWith` isPermissionError
 
             it "---: errors (not writable by us)" $ withTempDir $ \d -> do
                 let f = d </> "file"
@@ -207,7 +226,7 @@ main = hspec $ do
                 shouldThrow' $ rm id f
 
             it "missing: errors" $ withTempDir $ \d ->
-                shouldThrow' $ rm id (d </> "missing")
+                rm id (d </> "missing") `shouldFailWith` isDoesNotExistError
 
         -- Symlinks
         describe "symlink to file" $ do
@@ -244,7 +263,7 @@ main = hspec $ do
             it "errors (is a directory)" $ withTempDir $ \d -> do
                 let sub = d </> "sub"
                 createDirectory sub
-                shouldThrow' $ rm id sub
+                rm id sub `shouldFailWith` hasErrno eISDIR
 
         describe "dir with file" $ do
 
@@ -619,3 +638,26 @@ main = hspec $ do
                 rm (withForce FullForce . recursive True) link
                 shouldNotExist link
                 shouldStillExist target
+
+    describe "rmContents" $ do
+
+        it "empties a directory and keeps it" $ withTempDir $ \d -> do
+            let sub = d </> "sub"
+            createDirectory sub
+            writeFile (sub </> "file") ""
+            rmContents NoForce sub
+            shouldNotExist (sub </> "file")
+            shouldStillExist sub
+
+        it "missing: errors" $ withTempDir $ \d ->
+            rmContents NoForce (d </> "missing")
+                `shouldFailWith` isDoesNotExistError
+
+        it "file: errors (not a directory)" $ withTempDir $ \d -> do
+            let f = d </> "file"
+            writeFile f ""
+            rmContents NoForce f `shouldFailWith` hasErrno eNOTDIR
+            shouldStillExist f
+
+        it "missing under Force: does nothing" $ withTempDir $ \d ->
+            rmContents Force (d </> "missing")

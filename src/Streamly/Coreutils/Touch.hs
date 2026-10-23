@@ -26,7 +26,10 @@ import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
 
 #if defined (CABAL_OS_WINDOWS)
+import GHC.IO.Exception (IOErrorType(UnsupportedOperation))
 import qualified Streamly.Internal.FileSystem.Windows.File as File
+
+import Streamly.Coreutils.Error (commandError)
 #else
 import qualified Streamly.Internal.FileSystem.Posix.File as File
 import qualified System.Posix.Files as Posix (touchSymbolicLink)
@@ -42,7 +45,11 @@ data TouchOptions = TouchOptions
 defaultConfig :: TouchOptions
 defaultConfig = TouchOptions True True
 
--- | Default is 'True'.
+-- | When 'False', update the times of a symbolic link itself, like
+-- @touch -h@. On Windows, 'touch' raises an 'IOError' of type
+-- 'GHC.IO.Exception.UnsupportedOperation' with 'False'.
+--
+-- Default (without this modifier): 'True', the link target is updated.
 followSymlinks :: Bool -> TouchOptions -> TouchOptions
 followSymlinks opt cfg = cfg {deRef = opt}
 
@@ -88,7 +95,11 @@ touch f path = do
 #else
             -- XXX Is it possible to support this on Windows?
             False ->
-                error "touch: followSymlinks=False not supported on Windows"
+                ioError
+                    $ commandError
+                        UnsupportedOperation "touch"
+                        "followSymlinks False is not supported on Windows"
+                        (Just path)
 #endif
 
     where

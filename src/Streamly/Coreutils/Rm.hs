@@ -67,8 +67,6 @@
 --     * Posix rm deletes the contents of the symlink dir, this is equivalent
 --       to 'rmContents' in this module.
 
--- TODO: replace the error calls with exceptions
-
 module Streamly.Coreutils.Rm
     ( rm
     , rmContents
@@ -85,6 +83,8 @@ module Streamly.Coreutils.Rm
 where
 
 import Control.Monad (forM_, unless)
+import Foreign.C.Error (eACCES, eISDIR, eNOENT, eNOTDIR)
+import System.IO.Error (ioeSetErrorString)
 import Streamly.Coreutils.FileTest
     (doesItExist, test, testl, isDir, isWritableByMode)
 #if defined(CABAL_OS_WINDOWS)
@@ -105,6 +105,8 @@ import System.Directory
 import System.FilePath ((</>))
 import Streamly.FileSystem.Path (Path)
 import qualified Streamly.FileSystem.Path as Path
+
+import Streamly.Coreutils.Error (errnoError)
 
 -- TODO: backward compatibility for Rm, None, Nuke changes.
 
@@ -166,17 +168,16 @@ withWriteProtectionCheck path f msg = do
     if writable
     then f path
     else
-        error
-            $ "rm: cannot remove '"
-            ++ Path.toString path ++ "': write-protected " ++ msg
+        ioError
+            $ ioeSetErrorString (errnoError "rm" eACCES path)
+            $ "write-protected " ++ msg
 
 rmdir :: RmOptions -> Path -> IO ()
 rmdir options path =
     let pathStr = Path.toString path
      in
     case rmRecursive options of
-        False ->
-            error $ "rm: cannot remove '" ++ pathStr ++ "': Is a directory"
+        False -> ioError (errnoError "rm" eISDIR path)
         True ->
             case rmForce options of
                 FullForce -> removePathForcibly pathStr
@@ -268,8 +269,16 @@ performRm options path = do
 -- the link itself is removed regardless of whether it points to a
 -- directory or a file.
 --
--- Note: When 'recursive' is 'False' (the default), passing a directory path
--- always results in an error, even under 'FullForce'.
+-- Raises an 'IOError' for each of the following, like GNU @rm@:
+--
+-- * a missing path under 'NoForce', with errno @ENOENT@
+--   ('System.IO.Error.isDoesNotExistError'),
+-- * a directory when 'recursive' is 'False' (the default), even under
+--   'FullForce', with errno @EISDIR@,
+-- * a write-protected file or directory under 'NoForce', with errno
+--   @EACCES@ ('System.IO.Error.isPermissionError').
+--
+-- A failure to remove a path raises the 'IOError' of the system call.
 rm :: (RmOptions -> RmOptions) -> Path -> IO ()
 rm f path = do
     let options = f defaultConfig
@@ -281,9 +290,7 @@ rm f path = do
     then performRm options path
     else
         case rmForce options of
-           NoForce ->
-               error $ "rm: cannot remove '" ++ Path.toString path
-                      ++ "': No such file or directory"
+           NoForce -> ioError (errnoError "rm" eNOENT path)
            _ -> return ()
 
 -- | Recursively removes everything *inside* the given path, while
@@ -298,9 +305,10 @@ rm f path = do
 -- * If the path is a symlink: The target directory is emptied;
 --   the link and the target directory are preserved.
 --
--- @Note:@ Under 'NoForce', this fails if the path does not exist, is a
--- broken symlink, or is a regular file. Under 'Force', these cases
--- are silent no-ops.
+-- Under 'NoForce', raises an 'IOError' with errno @ENOENT@ if the path does
+-- not exist or is a broken symlink, and with errno @ENOTDIR@ if it is not a
+-- directory, like GNU @rm -r path/@. Under 'Force', these cases are silent
+-- no-ops.
 rmContents :: RmForce -> Path -> IO ()
 rmContents flevel path = do
     -- 'test' follows symlinks, unlike 'testl'.
@@ -316,8 +324,9 @@ rmContents flevel path = do
                 rm (withForce flevel . recursive True) itemPath
     else
         case flevel of
-            NoForce ->
-                error $ "rmContents: cannot access '" ++ Path.toString path
-                       ++ "': Not a directory or broken symlink"
+            NoForce -> do
+                found <- test path doesItExist
+                ioError
+                    $ errnoError "rm" (if found then eNOTDIR else eNOENT) path
             _ ->
                 return ()

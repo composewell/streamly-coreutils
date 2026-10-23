@@ -18,7 +18,7 @@ import Data.List (isInfixOf)
 import Data.Word (Word8)
 import System.FilePath ((</>))
 import System.IO (IOMode(WriteMode), hPutStr, withBinaryFile)
-import System.IO.Error (ioeGetErrorString)
+import GHC.IO.Exception (IOErrorType(InvalidArgument), IOException(..))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 
@@ -70,10 +70,12 @@ utf8 =
         . Unicode.encodeUtf8
         . Stream.fromList
 
--- | The action raises an 'IOError' whose message contains the string.
+-- | The action raises an 'IOError' of type 'InvalidArgument' whose
+-- description contains the string.
 shouldFailWith :: IO a -> String -> Expectation
 shouldFailWith action msg =
-    action `shouldThrow` (\e -> msg `isInfixOf` ioeGetErrorString e)
+    action `shouldThrow` \e ->
+        ioe_type e == InvalidArgument && msg `isInfixOf` ioe_description e
 
 -------------------------------------------------------------------------------
 -- Tests
