@@ -11,7 +11,7 @@ description:
   @directory@, @filepath@ and @unix@.
   .
   * Each function is named after its command and its options after the
-    command's flags: @rm (recursive True . withForce Force)@ is @rm -rf@,
+    command's flags: @rm (recursive True . force True)@ is @rm -rf@,
     @mkdir (makeParents True)@ is @mkdir -p@. Translating a shell script
     is mostly mechanical.
   * Defaults and error behaviour follow GNU coreutils, including symbolic
