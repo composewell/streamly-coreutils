@@ -1153,6 +1153,12 @@ isNonEmptyFile = and_ isFile (size (> 0))
 
 -- NOTE: The specified file path is always dereferenced. Size comparison of
 -- symlinks is rare, not provided here.
+--
+-- A missing reference file throws an exception, unlike the time comparisons
+-- where it is older than any file. GNU test has no size comparison to
+-- follow, and no size makes a missing file compare correctly for every
+-- comparison function: a size of 0 gives "sameSizeAs missing" True for an
+-- empty file.
 
 -- | Compare the file size with the size of another file using the supplied
 -- comparison function. If specified file path is a symlink it is dereferenced.
@@ -1165,6 +1171,10 @@ isNonEmptyFile = and_ isFile (size (> 0))
 -- >>> largerThanFile path  = sizeComparedTo path (>)
 -- >>> smallerThanFile path = sizeComparedTo path (<)
 -- >>> sameSizeAs path      = sizeComparedTo path (==)
+--
+-- Throws an exception if the reference file does not exist, or if its
+-- @stat@ call fails for any other reason. If the tested file does not exist
+-- the result is 'False', like every other predicate.
 --
 -- If the supplied file path is a symlink it is dereferenced.
 sizeComparedTo :: Path -> (Int64 -> Int64 -> Bool) -> FileTest
@@ -1180,6 +1190,8 @@ sizeComparedTo path rel =
 --
 -- >>> largerThanFile path = sizeComparedTo path (>)
 --
+-- Throws an exception if the reference file does not exist.
+--
 largerThanFile :: Path -> FileTest
 largerThanFile path = sizeComparedTo path (>)
 
@@ -1190,6 +1202,8 @@ largerThanFile path = sizeComparedTo path (>)
 --
 -- >>> smallerThanFile path = sizeComparedTo path (<)
 --
+-- Throws an exception if the reference file does not exist.
+--
 smallerThanFile :: Path -> FileTest
 smallerThanFile path = sizeComparedTo path (<)
 
@@ -1199,6 +1213,8 @@ smallerThanFile path = sizeComparedTo path (<)
 -- Definition:
 --
 -- >>> sameSizeAs path = sizeComparedTo path (==)
+--
+-- Throws an exception if the reference file does not exist.
 --
 sameSizeAs :: Path -> FileTest
 sameSizeAs path = sizeComparedTo path (==)
