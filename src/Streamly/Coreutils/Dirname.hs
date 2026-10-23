@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 -- |
 -- Module      : Streamly.Coreutils.Dirname
 -- Copyright   : (c) 2022 Composewell Technologies
@@ -13,6 +12,7 @@ module Streamly.Coreutils.Dirname
     (dirname)
 where
 
+import Streamly.Coreutils.Path (splitRoot, uncRootComponents)
 import Streamly.FileSystem.Path (Path)
 
 import qualified Streamly.Internal.Data.Array as Array
@@ -41,24 +41,6 @@ import qualified Streamly.Internal.FileSystem.Path as Path
 --   does: \\srv\share\a gives \\srv\share\ and C:\a gives C:\. Python's
 --   ntpath.dirname gives the same results.
 
--- Components of a root that starts with two separators, e.g. ["srv",
--- "share"] for "\\srv\share\" or ["?", "UNC", "srv"] for "\\?\UNC\srv\".
--- Empty for any other root.
-uncRootComponents :: Path -> [String]
-uncRootComponents root =
-    case Path.toString root of
-        a : b : rest | isSep a && isSep b -> components rest
-        _ -> []
-
-    where
-
-    isSep = Path.isSeparator . Path.charToWord
-
-    components s =
-        case dropWhile isSep s of
-            "" -> []
-            s1 -> let (c, s2) = break isSep s1 in c : components s2
-
 -- "\\srv\share\" or "\\?\UNC\srv\share\", not a device path such as
 -- "\\.\x" or "\\?\C:\".
 isShareRoot :: Path -> Bool
@@ -67,40 +49,6 @@ isShareRoot root =
         ["?", "UNC", _, _] -> True
         [server, _] -> server `notElem` ["?", "."]
         _ -> False
-
-#if MIN_VERSION_streamly_core(0,4,0)
-splitRoot :: Path -> Maybe (Path, Maybe Path)
-splitRoot = Path.splitRoot
-#else
--- streamly-core < 0.4 leaves the share name out of a UNC root: the root of
--- "\\srv\share\a" is "\\srv\". Move the share name into the root.
-splitRoot :: Path -> Maybe (Path, Maybe Path)
-splitRoot path =
-    case Path.splitRoot path of
-        Just (root, Just rest) | isServerRoot root ->
-            let after =
-                      Array.dropWhile Path.isSeparator
-                    $ Array.dropWhile (not . Path.isSeparator)
-                    $ Path.toArray rest
-                rootLen = Array.length arr - Array.length after
-                root1 =
-                    Path.unsafeFromArray
-                        (Array.unsafeSliceOffLen 0 rootLen arr)
-             in if Array.null after
-                then Just (root1, Nothing)
-                else Just (root1, Just (Path.unsafeFromArray after))
-        r -> r
-
-    where
-
-    arr = Path.toArray path
-
-    isServerRoot root =
-        case uncRootComponents root of
-            ["?", "UNC", _] -> True
-            [server] -> server `notElem` ["?", "."]
-            _ -> False
-#endif
 
 -- The result when nothing follows the root.
 rootOnly :: Path -> Path
