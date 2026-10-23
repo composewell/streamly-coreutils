@@ -3,7 +3,7 @@
 Design of `Streamly.Coreutils.Find` and its relation to
 `Streamly.Coreutils.Ls`.
 
-Status: find is implemented except as noted; ls is not yet built on it.
+Status: find is implemented except as noted; ls is built on it.
 
 ## Current state
 
@@ -23,6 +23,8 @@ Implemented:
   cannot apply them to its chunks, which mix depths, and is built from
   `findChunked` when either is set.
 * `maxResults` applies to all variants.
+* `followSymlinks` (GNU `find -L`) and `followRootSymlink` (GNU
+  `find -H`).
 * A root that ends with a separator gives `dir/name`, like GNU `find`;
   the chunked readers would give `dir//name` (see
   `design/upstream-fixes.md`).
@@ -58,12 +60,23 @@ Split:
 * `Ls` is a thin layer over `find`: depth 1, hide dotfiles by default
   with an `all` / `almostAll` modifier, sort by name. `Ls` keeps no
   traversal code of its own.
-* Remove `Ls.recursive`; a recursive walk is `find`. A GNU `ls -R`
-  equivalent, if wanted later, is `find (traversal WideDepthFirst)` with
-  sorting within each directory.
+* `Ls.recursive` and `Ls.traversal` stay, as `findEither` with the Find
+  traversal of the same name. Ls offers three of the seven traversals
+  (`WideDepthFirstReverse`, the default, `DepthFirst`, `BreadthFirst`). A
+  GNU `ls -R` equivalent also needs sorting within each directory.
 * Rendering (`-l`, columns) waits until an `hls` executable is wanted.
 
-`ls` is `findEither (minDepth 1 . maxDepth 1)`.
+`ls` is `findEither (followRootSymlink True . maxDepth 1)` without its
+first element when that element is a directory (`Left`). This gives the
+GNU `ls` operand rules:
+
+* A directory: its entries. The root is dropped.
+* A symlink to a directory: the entries of the target, as GNU `ls`
+  follows a symlink given on the command line. `followRootSymlink` is
+  GNU `find -H`.
+* Any other path: the path itself, as `Right`, like `ls file`.
+
+`findEither (minDepth 1 . maxDepth 1)` would give nothing for the last two.
 
 ## Remaining changes to find
 
