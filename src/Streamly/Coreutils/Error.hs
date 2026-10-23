@@ -12,13 +12,17 @@ module Streamly.Coreutils.Error
     ( errnoError
     , commandError
     , throwFirstError
+    , relocateErrors
     )
 where
 
 import Foreign.C.Error (Errno, errnoToIOError)
 import GHC.IO.Exception (IOErrorType, IOException(..))
-
+import System.IO.Error (ioeGetLocation, ioeSetLocation)
+import Streamly.Data.Stream (Stream)
 import Streamly.FileSystem.Path (Path)
+
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.FileSystem.Path as Path
 
 -- = Design notes
@@ -85,3 +89,17 @@ throwFirstError errs =
         let n = length rest
          in " (and " ++ show n ++ " more "
                 ++ (if n == 1 then "failure" else "failures") ++ ")"
+
+-- | @relocateErrors from to stream@ changes the location of the 'IOError's
+-- raised by @stream@ from @from@ to @to@, e.g. from @"find"@ to @"rm"@ for a
+-- command built on another command. Errors with any other location
+-- propagate unchanged.
+relocateErrors :: String -> String -> Stream IO a -> Stream IO a
+relocateErrors from to = Stream.handle (ioError . relocate)
+
+    where
+
+    relocate :: IOError -> IOError
+    relocate e
+        | ioeGetLocation e == from = ioeSetLocation e to
+        | otherwise = e
