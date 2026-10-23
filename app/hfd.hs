@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Data.Maybe (fromMaybe)
 import System.IO (stdout)
 
 import Options.Applicative
@@ -27,93 +28,74 @@ import qualified Streamly.FileSystem.Path as Path
 
 import Streamly.Coreutils.Find
     ( FindOptions
+    , Traversal(..)
     , findByteChunked
     , followSymlinks
+    , maxDepth
     , maxResults
-    , parallelInterleaved
-    , parallelOrdered
-    , parallelUnordered
-    , serialAppend
-    , serialBfs
-    , serialBfsRev
-    , serialDfs
-    , serialInterleaved
+    , minDepth
+    , traversal
     )
 
 data Config = Config
-    { cfgTraversal :: FindOptions -> FindOptions
-    , cfgRoot :: FilePath
-    , cfgMaxResults :: Maybe Int
+    { cfgTraversal :: Traversal
     , cfgFollowSymlinks :: Bool
+    , cfgMinDepth :: Maybe Int
+    , cfgMaxDepth :: Maybe Int
+    , cfgMaxResults :: Maybe Int
+    , cfgRoot :: FilePath
     }
 
-data Traversal
-    = TraversalDfs
-    | TraversalBfs
-    | TraversalBfsRev
-    | TraversalAppend
-    | TraversalInterleaved
-    | TraversalParallel
-    | TraversalParallelInterleaved
-    | TraversalParallelOrdered
-
-toTraversalConfig :: Traversal -> FindOptions -> FindOptions
-toTraversalConfig traversal =
-    case traversal of
-        TraversalDfs -> serialDfs
-        TraversalBfs -> serialBfs
-        TraversalBfsRev -> serialBfsRev
-        TraversalAppend -> serialAppend
-        TraversalInterleaved -> serialInterleaved
-        TraversalParallel -> parallelUnordered
-        TraversalParallelInterleaved -> parallelInterleaved
-        TraversalParallelOrdered -> parallelOrdered
-
-mkConfig :: Traversal -> Bool -> Maybe Int -> Maybe FilePath -> Config
-mkConfig traversal follow mMaxResults mPath =
-    Config
-        { cfgTraversal = toTraversalConfig traversal
-        , cfgRoot = maybe "." id mPath
-        , cfgMaxResults = mMaxResults
-        , cfgFollowSymlinks = follow
-        }
+parseNonNegativeInt :: String -> Either String Int
+parseNonNegativeInt str =
+    case reads str of
+        [(n, "")]
+            | n >= 0 -> Right n
+            | otherwise -> Left "N must not be negative"
+        _ -> Left "N must be an integer"
 
 traversalParser :: Parser Traversal
 traversalParser =
-    OA.flag' TraversalBfs
+    OA.flag' DepthFirst
+        (long "dfs" <> help "Depth-first traversal (default)")
+    OA.<|> OA.flag' WideDepthFirstReverse
+        (long "wide-dfs-reverse"
+            <> help "Wide depth-first traversal, last subdirectory first")
+    OA.<|> OA.flag' BreadthFirst
         (long "bfs" <> help "Breadth-first traversal")
-    OA.<|> OA.flag' TraversalBfsRev
-        (long "bfs-rev" <> help "Reverse breadth-first traversal")
-    OA.<|> OA.flag' TraversalAppend
-        (long "append" <> help "Serial append traversal")
-    OA.<|> OA.flag' TraversalInterleaved
+    OA.<|> OA.flag' Interleaved
         (long "interleaved" <> help "Serial interleaved traversal")
-    OA.<|> OA.flag' TraversalParallel
-        (long "parallel" <> help "Parallel unordered traversal")
-    OA.<|> OA.flag' TraversalParallelInterleaved
-        (long "parallel-interleaved" <> help "Parallel interleaved traversal")
-    OA.<|> OA.flag' TraversalParallelOrdered
-        (long "parallel-ordered" <> help "Parallel ordered traversal")
-    OA.<|> OA.flag' TraversalDfs
-        (long "dfs" <> help "Depth-first traversal")
-    OA.<|> OA.pure TraversalDfs
+    OA.<|> OA.flag' DepthFirstParallel
+        (long "dfs-parallel"
+            <> help "Parallel depth-first traversal, unordered")
+    OA.<|> OA.flag' DepthFirstParallelInterleaved
+        (long "dfs-parallel-interleaved"
+            <> help "Parallel depth-first traversal, interleaved")
+    OA.<|> OA.flag' DepthFirstParallelOrdered
+        (long "dfs-parallel-ordered"
+            <> help "Parallel depth-first traversal, in depth-first order")
+    OA.<|> OA.pure DepthFirst
+
+countOption :: String -> String -> Parser (Maybe Int)
+countOption name desc =
+    optional
+        (option (OA.eitherReader parseNonNegativeInt)
+            (long name <> metavar "N" <> help desc))
 
 configParser :: Parser Config
 configParser =
-    mkConfig
+    Config
         <$> traversalParser
         <*> OA.switch
                 (OA.short 'L'
                     <> long "follow"
                     <> help "Descend into symlinked directories")
-        <*> optional
-                (option (OA.eitherReader parsePositiveInt)
-                    (long "max-results"
-                        <> metavar "N"
-                        <> help "Stop after emitting N results"))
-        <*> optional
+        <*> countOption "min-depth" "Do not list entries above depth N"
+        <*> countOption "max-depth" "Do not descend below depth N"
+        <*> countOption "max-results" "Stop after emitting N results"
+        <*> (fromMaybe "." <$> optional
                 (strArgument
-                    (metavar "PATH" <> help "Root path to search"))
+                    (metavar "PATH" <> help "Root path to search")))
 
 parserInfo :: ParserInfo Config
 parserInfo =
@@ -124,21 +106,17 @@ parserInfo =
             <> progDesc "A basic fd-like driver for Streamly.Coreutils.Find."
             <> header "hfd")
 
+findOptions :: Config -> FindOptions -> FindOptions
+findOptions cfg =
+      maybe id maxResults (cfgMaxResults cfg)
+    . maybe id maxDepth (cfgMaxDepth cfg)
+    . maybe id minDepth (cfgMinDepth cfg)
+    . followSymlinks (cfgFollowSymlinks cfg)
+    . traversal (cfgTraversal cfg)
+
 main :: IO ()
 main = do
     cfg <- execParser parserInfo
     path <- Path.fromString (cfgRoot cfg)
-    let applyConfig opts =
-            maybe id maxResults (cfgMaxResults cfg) $
-                followSymlinks (cfgFollowSymlinks cfg) $
-                cfgTraversal cfg opts
     Stream.fold (Handle.writeChunks stdout)
-        $ findByteChunked applyConfig path
-
-parsePositiveInt :: String -> Either String Int
-parsePositiveInt str =
-    case reads str of
-        [(n, "")]
-            | n > 0 -> Right n
-            | otherwise -> Left "N must be positive"
-        _ -> Left "N must be an integer"
+        $ findByteChunked (findOptions cfg) path
