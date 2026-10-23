@@ -159,43 +159,43 @@ withMode path mode action =
 
 existenceTests :: Spec
 existenceTests = do
-    describe "doesItExist" $ do
+    describe "pathExists" $ do
         it "test follows symlinks" $ withFixtures $ \d ->
-            shouldGive test d doesItExist
+            shouldGive test d pathExists
                 [ ("file", True), ("dir", True), ("fileLink", True)
                 , ("dirLink", True), ("dangling", False), ("missing", False)
                 ]
 
-        it "not_ doesItExist is True for a missing path, like test ! -e"
+        it "not_ pathExists is True for a missing path, like test ! -e"
             $ withFixtures $ \d -> do
-            shouldGive test d (not_ doesItExist)
+            shouldGive test d (not_ pathExists)
                 [ ("file", False), ("dangling", True), ("missing", True) ]
-            shouldGive testl d (not_ doesItExist)
+            shouldGive testl d (not_ pathExists)
                 [ ("file", False), ("dangling", False), ("missing", True) ]
 
         it "testl tests the symlink itself" $ withFixtures $ \d ->
-            shouldGive testl d doesItExist
+            shouldGive testl d pathExists
                 [ ("file", True), ("dir", True), ("fileLink", True)
                 , ("dirLink", True), ("dangling", True), ("missing", False)
                 ]
 
-    describe "doesItExist `and_` isDir" $ do
+    describe "pathExists `and_` isDir" $ do
         it "test is True for a directory or a symlink to one"
             $ withFixtures $ \d ->
-            shouldGive test d (doesItExist `and_` isDir)
+            shouldGive test d (pathExists `and_` isDir)
                 [ ("file", False), ("dir", True), ("fileLink", False)
                 , ("dirLink", True), ("dangling", False), ("missing", False)
                 ]
 
         it "testl is True only for a directory" $ withFixtures $ \d ->
-            shouldGive testl d (doesItExist `and_` isDir)
+            shouldGive testl d (pathExists `and_` isDir)
                 [ ("file", False), ("dir", True), ("fileLink", False)
                 , ("dirLink", False), ("dangling", False), ("missing", False)
                 ]
 
-    describe "doesItExist `and_` isFile" $
+    describe "pathExists `and_` isFile" $
         it "test is True for a file or a symlink to one" $ withFixtures $ \d ->
-            shouldGive test d (doesItExist `and_` isFile)
+            shouldGive test d (pathExists `and_` isFile)
                 [ ("file", True), ("empty", True), ("dir", False)
                 , ("fileLink", True), ("dirLink", False)
                 , ("dangling", False), ("missing", False)
@@ -238,9 +238,9 @@ missingPathTests = do
 
         it "gives the same result in either order in and_"
             $ withFixtures $ \d -> do
-            test (d </> "missing") (isDir `and_` doesItExist)
+            test (d </> "missing") (isDir `and_` pathExists)
                 `shouldReturn` False
-            test (d </> "missing") (doesItExist `and_` isDir)
+            test (d </> "missing") (pathExists `and_` isDir)
                 `shouldReturn` False
 
     describe "comparison with a missing file" $ do
@@ -278,10 +278,10 @@ missingPathTests = do
 #if !defined(CABAL_OS_WINDOWS)
     describe "a path under a regular file" $ do
         it "does not exist, like test -e file/x" $ withFixtures $ \d -> do
-            test (notDirPath d) doesItExist `shouldReturn` False
-            testl (notDirPath d) doesItExist `shouldReturn` False
-            test (notDirPath d) (not_ doesItExist) `shouldReturn` True
-            test (notDirPath d) (doesItExist `and_` isDir)
+            test (notDirPath d) pathExists `shouldReturn` False
+            testl (notDirPath d) pathExists `shouldReturn` False
+            test (notDirPath d) (not_ pathExists) `shouldReturn` True
+            test (notDirPath d) (pathExists `and_` isDir)
                 `shouldReturn` False
 
         it "is False for other predicates" $ withFixtures $ \d -> do
@@ -295,12 +295,12 @@ missingPathTests = do
     describe "a symlink loop" $
         it "test raises" $ withFixtures $ \d -> do
             createFileLink "loop" (d </> "loop")
-            shouldFail $ test (d </> "loop") doesItExist
+            shouldFail $ test (d </> "loop") pathExists
 
     describe "a parent directory without search permission" $
         it "raises" $ needsNonRoot $ withFixtures $ \d ->
             withMode (d </> "dir") 0o000 $ do
-                shouldFail $ test (d </> "dir" </> "x") doesItExist
+                shouldFail $ test (d </> "dir" </> "x") pathExists
                 shouldFail $ test (d </> "dir" </> "x") isFile
 #endif
 
@@ -398,9 +398,9 @@ combinatorTests = do
             test (d </> "file") (false `or_` false) `shouldReturn` False
             test (d </> "file") (isDir `or_` isFile) `shouldReturn` True
 
-        it "not_ doesItExist `or_` isDir is True for missing or a directory"
+        it "not_ pathExists `or_` isDir is True for missing or a directory"
             $ withFixtures $ \d ->
-            shouldGive test d (not_ doesItExist `or_` isDir)
+            shouldGive test d (not_ pathExists `or_` isDir)
                 [ ("file", False), ("dir", True), ("missing", True) ]
 
     describe "and and or" $ do

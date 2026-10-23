@@ -69,15 +69,15 @@ shouldOverwrite :: String -> Bool -> Overwrite -> Path -> Path -> IO Bool
 shouldOverwrite cmd followLinks option src dest =
     case option of
         OverwriteAlways -> return True
-        OverwriteOnly -> runTest dest doesItExist
-        OverwriteNever -> not <$> runTest dest doesItExist
+        OverwriteOnly -> runTest dest pathExists
+        OverwriteNever -> not <$> runTest dest pathExists
         OverwriteError -> do
-            r <- runTest dest doesItExist
+            r <- runTest dest pathExists
             if r
             then ioError (destinationExistsError cmd dest)
             else return True
         OverwriteUpdate -> do
-            r <- runTest dest doesItExist
+            r <- runTest dest pathExists
             if r
             then do
                 destTime <-

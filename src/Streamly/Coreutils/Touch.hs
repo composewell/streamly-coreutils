@@ -19,7 +19,7 @@ module Streamly.Coreutils.Touch
     )
 where
 
-import Streamly.Coreutils.FileTest (test, doesItExist)
+import Streamly.Coreutils.FileTest (test, pathExists)
 import System.IO (IOMode(AppendMode))
 import System.IO.Error (catchIOError, isDoesNotExistError)
 import Streamly.FileSystem.Path (Path)
@@ -82,7 +82,7 @@ touch f path = do
         pathStr = Path.toString path
     if createNew opt && deRef opt
     then do
-        found <- test path doesItExist
+        found <- test path pathExists
         if found
         then Posix.touchFile pathStr
         -- AppendMode does not truncate a file created after the check.

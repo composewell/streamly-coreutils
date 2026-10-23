@@ -23,7 +23,7 @@ import Control.Monad (unless, when)
 import Data.Maybe (fromMaybe)
 import Foreign.C.Error (eEXIST)
 import GHC.IO.Exception (IOErrorType(InvalidArgument))
-import Streamly.Coreutils.FileTest (test, testl, doesItExist, sameFileAs)
+import Streamly.Coreutils.FileTest (test, testl, pathExists, sameFileAs)
 import System.Directory (removeFile)
 #if defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest (isDir)
@@ -128,11 +128,11 @@ ln :: (LnOptions -> LnOptions) -> Path -> Path -> IO ()
 ln f src tgt = do
     let opt = f defaultConfig
     -- target can be a symlink or non-symlink
-    found <- testl tgt doesItExist
+    found <- testl tgt pathExists
     when found $ do
         unless (lnForce opt) $ ioError (errnoError "ln" eEXIST tgt)
         -- Do not remove the source itself.
-        srcFound <- test src doesItExist
+        srcFound <- test src pathExists
         same <- if srcFound then isSameEntry else pure False
         when same
             $ ioError

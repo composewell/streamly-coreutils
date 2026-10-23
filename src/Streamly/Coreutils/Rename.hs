@@ -24,7 +24,7 @@ import System.Win32.Info (getFullPathName)
 import System.Win32.Types (DWORD, failWith)
 
 import Streamly.Coreutils.FileTest
-    (doesItExist, sameFileAs, test, testl)
+    (pathExists, sameFileAs, test, testl)
 #else
 import Foreign.C.Error
     (Errno, eEXIST, eINVAL, eNOSYS, eNOTSUP, errnoToIOError, getErrno)
@@ -34,7 +34,7 @@ import System.Directory (renamePath)
 
 import qualified Streamly.Internal.Data.Array as Array (asCStringUnsafe)
 
-import Streamly.Coreutils.FileTest (doesItExist, testl)
+import Streamly.Coreutils.FileTest (pathExists, testl)
 #endif
 
 #if defined(CABAL_OS_WINDOWS)
@@ -72,7 +72,7 @@ foreign import ccall safe "streamly_coreutils_rename_noreplace"
 -- replaced.
 renameCheckFirst :: Path -> Path -> IO Bool
 renameCheckFirst src dest = do
-    exists <- testl dest doesItExist
+    exists <- testl dest pathExists
     if exists
     then return False
     else do
@@ -102,7 +102,7 @@ renameNoReplace :: Path -> Path -> IO Bool
 renameNoReplace src dest = do
     -- MoveFileExW without MOVEFILE_REPLACE_EXISTING still renames src when
     -- dest is a hard link of the same file, which removes the name src.
-    srcExists <- test src doesItExist
+    srcExists <- test src pathExists
     sameFile <-
         if srcExists
         then testl dest (sameFileAs src)

@@ -44,9 +44,19 @@
 -- predicates can be moved into a separate module. But does it buy us anything
 -- worthwhile?
 --
--- Naming: unary predicates are either isSomething or hasSomething. Binary
--- predicates are nouns. Predicates are named so that they read well on the
--- call site e.g. "test path doesItExist" or "test path isReadable".
+-- Naming: unary predicates are either isSomething or hasSomething.
+-- Predicates that compare the path with another file are comparative
+-- phrases without the "is" prefix, e.g. sameFileAs, newerThanFile: the "is"
+-- is implied, like the path itself. Predicates are named so that they read
+-- well on the call site e.g. "test path pathExists" or "test path
+-- isReadable".
+--
+-- A predicate is a statement about the path under test, and the path is the
+-- implied subject of the name: isDir means "the path is a directory". The
+-- subject is not repeated in the name, so it is isDir, not pathIsDir.
+-- pathExists is the one exception: "exists" may become a GHC keyword (the
+-- first-class existentials proposal), and doesItExist is a question rather
+-- than a statement.
 --
 -- Files supported by windows:
 --
@@ -105,7 +115,7 @@ module Streamly.Coreutils.FileTest.Common
     -- * Predicates
 
     -- ** General
-    , doesItExist
+    , pathExists
 
     -- ** File Type
     , isDir
@@ -477,7 +487,7 @@ not_ (FileTest (Predicate p)) = FileTest (Predicate (fmap not . p))
 -- exception type can be used to determine the reason for failure. The shell
 -- @test@ returns false in these cases.
 --  * test 'isSymLink' tests the path itself, like 'testl', see 'isSymLink'.
---  * test 'doesItExist' returns false if the path is symlink but it does not
+--  * test 'pathExists' returns false if the path is symlink but it does not
 --  point to an existing file.
 --
 test :: Path -> FileTest -> IO Bool
@@ -489,7 +499,7 @@ test path (FileTest (Predicate f)) = do
 -- symlink.
 --
 --  * 'isSymLink' returns true if path is a symlink, false otherwise.
---  * 'doesItExist' returns true if the link exists irrespective of whether it
+--  * 'pathExists' returns true if the link exists irrespective of whether it
 --  points to an existing file.
 --  * Predicates related to file permission mode bits are meaningless, and
 --  should not be used.
@@ -580,13 +590,13 @@ false = FileTest $ Predicate $ const (pure False)
 -- cannot be determined.
 --
 -- Like coreutil @test -e file@
-doesItExist :: FileTest
-doesItExist =
+pathExists :: FileTest
+pathExists =
     FileTest $ Predicate $ \fs -> withExistingStatus fs (\_ -> pure True)
 
-{-# DEPRECATED isExisting "Use doesItExist instead." #-}
+{-# DEPRECATED isExisting "Use pathExists instead." #-}
 isExisting :: FileTest
-isExisting = doesItExist
+isExisting = pathExists
 
 ---------------
 -- Type of file

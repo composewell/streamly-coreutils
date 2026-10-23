@@ -38,7 +38,7 @@ import qualified Streamly.Internal.FileSystem.Path as Path
 import Streamly.Coreutils.Error
     (commandError, errnoError, throwFirstError)
 import Streamly.Coreutils.FileTest
-    (and_, doesItExist, isDir, isSymLink, not_, sameFileAs, test, testl)
+    (and_, isDir, isSymLink, not_, pathExists, sameFileAs, test, testl)
 import Streamly.Coreutils.Overwrite
     (Overwrite(..), destinationExistsError, shouldOverwrite, targetInDir)
 import Streamly.Coreutils.Rename (renameNoReplace)
@@ -134,7 +134,7 @@ intoDirectory opt cfg = cfg {mvIntoDirectory = opt}
 -- | True if moving src to dest would move a file onto itself.
 isSameFile :: Path -> Path -> IO Bool
 isSameFile src dest = do
-    destIsFile <- testl dest (doesItExist `and_` not_ isSymLink)
+    destIsFile <- testl dest (pathExists `and_` not_ isSymLink)
     same <-
         if destIsFile
         then test src (sameFileAs dest)
@@ -209,7 +209,7 @@ moveTo opt src dest = do
 mvMany :: (MvOptions -> MvOptions) -> [Path] -> Path -> IO ()
 mvMany f srcs dir = do
     let opt = f defaultConfig
-    dirExists <- test dir doesItExist
+    dirExists <- test dir pathExists
     unless dirExists $ ioError (errnoError "mv" eNOENT dir)
     dirIsDir <- test dir isDir
     unless dirIsDir $ ioError (errnoError "mv" eNOTDIR dir)

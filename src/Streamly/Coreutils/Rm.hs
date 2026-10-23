@@ -86,7 +86,7 @@ import Control.Monad (forM_, unless)
 import Foreign.C.Error (eACCES, eISDIR, eNOENT, eNOTDIR)
 import System.IO.Error (ioeSetErrorString)
 import Streamly.Coreutils.FileTest
-    (doesItExist, test, testl, isDir, isWritableByMode)
+    (pathExists, test, testl, isDir, isWritableByMode)
 #if defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
@@ -285,7 +285,7 @@ rm f path = do
     -- Note this test is required not just for existence check but also so that
     -- we fail if there is no permission to access the path.
     --
-    found <- testl path doesItExist
+    found <- testl path pathExists
     if found
     then performRm options path
     else
@@ -325,7 +325,7 @@ rmContents flevel path = do
     else
         case flevel of
             NoForce -> do
-                found <- test path doesItExist
+                found <- test path pathExists
                 ioError
                     $ errnoError "rm" (if found then eNOTDIR else eNOENT) path
             _ ->

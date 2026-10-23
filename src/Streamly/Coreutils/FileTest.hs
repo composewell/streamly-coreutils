@@ -10,6 +10,11 @@
 -- GNU @test@ utility. This module is portable across Linux, macOS, and
 -- Windows platforms.
 --
+-- A predicate is a statement about the path passed to 'test' or 'testl',
+-- and evaluates to 'True' or 'False' for that path. The path is the implied
+-- subject of every predicate name: @test path isDir@ is 'True' if @path@ is
+-- a directory, and @test path isReadable@ is 'True' if @path@ is readable.
+--
 -- Predicates can be combined using boolean operators. Multiple composed
 -- predicates are evaluated using a single file status query, minimizing
 -- system calls and providing better performance than performing each test
@@ -48,7 +53,7 @@
 -- > test -b file        -> isBlockDevice
 -- > test -c file        -> isCharDevice
 -- > test -d file        -> isDir
--- > test -e file        -> doesItExist
+-- > test -e file        -> pathExists
 -- > test -f file        -> isFile
 -- > test -g file        -> hasSetGid
 -- > test -G file        -> isOwnedByCurrentGroup
@@ -72,7 +77,7 @@
 --
 -- Example:
 --
--- >>> _ <- test [path|a|] doesItExist
+-- >>> _ <- test [path|a|] pathExists
 -- >>> _ <- test [path|/usr/bin/ls|] (isReadable `and_` size (> 4096))
 -- >>> _ <- test [path|/usr/bin/ls|] (newerThanFile [path|/usr/bin|])
 
@@ -100,7 +105,7 @@ module Streamly.Coreutils.FileTest
 
     -- ** General
     -- , predicate -- exposes FileStatus
-    , doesItExist
+    , pathExists
 
     -- ** File Type
     , isDir

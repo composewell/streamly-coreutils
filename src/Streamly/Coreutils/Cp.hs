@@ -176,7 +176,7 @@ isDanglingSymLink :: Path -> IO Bool
 isDanglingSymLink path = do
     isLink <- testl path isSymLink
     if isLink
-    then not <$> test path doesItExist
+    then not <$> test path pathExists
     else return False
 
 -- | Unconditionally copy the source to destination using the specified copy
@@ -186,7 +186,7 @@ cpCopy method src dest =
     case method of
         CopyContents -> do
             -- An existing destination keeps its own mode, like GNU cp.
-            exists <- test dest doesItExist
+            exists <- test dest pathExists
             if exists
             then do
                 -- Writing would truncate the source before it is read.
