@@ -230,7 +230,6 @@ library
     , Streamly.Coreutils.Mkdir
     , Streamly.Coreutils.Mv
     , Streamly.Coreutils.ReadLink
-    , Streamly.Coreutils.ResolvePath
     , Streamly.Coreutils.Rm
     , Streamly.Coreutils.Sh
     , Streamly.Coreutils.Sleep
@@ -253,6 +252,8 @@ library
     , Streamly.Coreutils.Overwrite
     , Streamly.Coreutils.Path
     , Streamly.Coreutils.Rename
+    -- Exposed when we require streamly-core 0.4, see the design notes.
+    , Streamly.Coreutils.ResolvePath
     , Streamly.Coreutils.String
     , Streamly.Coreutils.Time
     , Streamly.Coreutils.Uniq
@@ -553,19 +554,37 @@ test-suite Streamly.Coreutils.ReadLink
   ghc-options: -main-is Streamly.Test.Coreutils.ReadLink.main
                -rtsopts "-with-rtsopts=-M512M"
 
+-- ResolvePath is not exposed by the library, so the test builds it from src.
 test-suite Streamly.Coreutils.ResolvePath
-  import: compile-options
+  import: compile-options, default-extensions
   type: exitcode-stdio-1.0
   main-is: Streamly/Test/Coreutils/ResolvePath.hs
-  hs-source-dirs: test
+  hs-source-dirs: test, src
+  other-modules:
+      Streamly.Coreutils.Dirname
+    , Streamly.Coreutils.Error
+    , Streamly.Coreutils.FileTest
+    , Streamly.Coreutils.FileTest.Common
+    , Streamly.Coreutils.Path
+    , Streamly.Coreutils.ResolvePath
+    , Streamly.Coreutils.Time
+  if os(windows)
+    other-modules: Streamly.Coreutils.FileTest.Windows
+  else
+    other-modules: Streamly.Coreutils.FileTest.Posix
   build-depends:
-      base
+      base >= 4.8 && < 5
     , directory
     , filepath
     , hspec
     , streamly-core
-    , streamly-coreutils
     , temporary
+    , time
+    , unix-compat
+  if !os(windows)
+    build-depends: unix
+  else
+    build-depends: Win32
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.ResolvePath.main
                -rtsopts "-with-rtsopts=-M512M"

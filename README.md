@@ -135,7 +135,6 @@ few lines of code, so other orders can be added the same way.
 | `stat` | `Streamly.Coreutils.Stat` |
 | `test`, `[ ... ]` | `Streamly.Coreutils.FileTest` |
 | `readlink` | `Streamly.Coreutils.ReadLink` |
-| `realpath` | `Streamly.Coreutils.ResolvePath` |
 | `dirname` | `Streamly.Coreutils.Dirname` |
 | `which` | `Streamly.Coreutils.Which` |
 | `tail` | `Streamly.Coreutils.Tail` |

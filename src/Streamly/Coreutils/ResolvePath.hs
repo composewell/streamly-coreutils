@@ -122,6 +122,10 @@ import Streamly.Coreutils.Path (components, splitRoot)
 --   'NoSymlinkResolution' use 'makeAbsolute' plus a custom @..@-collapsing
 --   walker ('lexicalCollapse').
 --
+-- * This module is not exposed yet. We wait for streamly-core 0.4, which
+--   may provide path resolution on 'Path' (see the next note), before
+--   committing to this API.
+--
 -- * streamly-core master has an internal module
 --   @Streamly.Internal.FileSystem.PathIO@ with @makeAbsolute@,
 --   @resolve@ and @resolveDotDots@ on 'Path'. @makeAbsolute@ is
