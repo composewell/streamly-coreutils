@@ -8,7 +8,7 @@ shell, or instead of assembling the same behaviour from `directory`,
 `filepath` and `unix`.
 
 * Each function is named after its command and its options after the
-  command's flags: `rm (recursive True . withForce Force)` is `rm -rf`,
+  command's flags: `rm (recursive True . force True)` is `rm -rf`,
   `mkdir (makeParents True)` is `mkdir -p`. Translating a shell script is
   mostly mechanical.
 * Defaults and error behaviour follow GNU coreutils, including symbolic
@@ -53,7 +53,7 @@ import Streamly.Coreutils.Cp (cp)
 import Streamly.Coreutils.FileTest (test, isFile, size, and_)
 import Streamly.Coreutils.Find (Traversal(..), find, traversal)
 import Streamly.Coreutils.Mkdir (mkdir, makeParents)
-import Streamly.Coreutils.Rm (rm, recursive, withForce, RmForce(..))
+import Streamly.Coreutils.Rm (rm, recursive, force)
 
 main :: IO ()
 main = do
@@ -71,7 +71,7 @@ main = do
     print n
 
     -- rm -rf backup
-    rm (recursive True . withForce Force) [path|backup|]
+    rm (recursive True . force True) [path|backup|]
 ```
 
 Every function takes its options as a modifier: pass `id` for the GNU
