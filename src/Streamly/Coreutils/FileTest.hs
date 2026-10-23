@@ -74,7 +74,7 @@
 --
 -- >>> _ <- test [path|a|] doesItExist
 -- >>> _ <- test [path|/usr/bin/ls|] (isReadable `and_` size (> 4096))
--- >>> _ <- test [path|/usr/bin/ls|] (modifyTimeComparedTo [path|reference.txt|] (>))
+-- >>> _ <- test [path|/usr/bin/ls|] (newerThanFile [path|/usr/bin|])
 
 module Streamly.Coreutils.FileTest
     (

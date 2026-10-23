@@ -119,6 +119,10 @@ setOld path = do
     setAccessTime path oldTime
     setModificationTime path oldTime
 
+-- | True if the first time is more than a day after the second.
+newerByOneDay :: POSIXTime -> POSIXTime -> Bool
+newerByOneDay t ref = t - ref > 86400
+
 #if !defined(CABAL_OS_WINDOWS)
 -- | A path under a regular file. A stat of this path fails with ENOTDIR.
 notDirPath :: FilePath -> FilePath
@@ -240,11 +244,36 @@ missingPathTests = do
                 `shouldReturn` False
 
     describe "comparison with a missing file" $ do
-        it "raises for size and time comparisons" $ withFixtures $ \d -> do
+        it "raises for size comparisons" $ withFixtures $ \d ->
             shouldFail $ test (d </> "file") (withPath largerThanFile
                 (d </> "missing"))
-            shouldFail $ test (d </> "file") (withPath newerThanFile
-                (d </> "missing"))
+
+        it "treats a missing reference as older, like test -nt and -ot"
+            $ withFixtures $ \d -> do
+            let file = d </> "file"
+                missing = d </> "missing"
+            test file (withPath newerThanFile missing) `shouldReturn` True
+            test file (withPath olderThanFile missing) `shouldReturn` False
+            test file (withPath (`accessTimeComparedTo` (>)) missing)
+                `shouldReturn` True
+            test file (withPath (`accessTimeComparedTo` (<)) missing)
+                `shouldReturn` False
+            test file (withPath (`modifyTimeComparedTo` (==)) missing)
+                `shouldReturn` False
+
+        it "treats a missing reference as older than any time difference"
+            $ withFixtures $ \d ->
+            test (d </> "file")
+                (withPath (`modifyTimeComparedTo` newerByOneDay)
+                    (d </> "missing"))
+                `shouldReturn` True
+
+        it "is False if the tested file is missing" $ withFixtures $ \d -> do
+            let missing = d </> "missing"
+            test missing (withPath olderThanFile (d </> "file"))
+                `shouldReturn` False
+            test missing (withPath newerThanFile missing)
+                `shouldReturn` False
 
 #if !defined(CABAL_OS_WINDOWS)
     describe "a path under a regular file" $ do

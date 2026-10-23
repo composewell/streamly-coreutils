@@ -848,6 +848,19 @@ modifiedAfter t = modifyTime (>= t)
 -- NOTE: The specified file path is always dereferenced. Time comparison of
 -- symlinks is rare, not provided here.
 
+-- GNU test treats a missing file as older than any existing file: "f1 -nt
+-- f2" is true if f2 does not exist. POSIXTime is unbounded, so there is no
+-- minimum value to stand for a missing file. stat returns the times as a
+-- 64-bit time_t in seconds, so a time one second before the smallest time_t
+-- is earlier than the time of any file. Using it as the time of a missing
+-- reference file gives the GNU result for any comparison function that is
+-- monotone in the reference time, including (>), (<), (==) and comparisons
+-- of the difference such as "newer by more than an hour".
+
+-- | The time used for a reference file that does not exist.
+missingFileTime :: POSIXTime
+missingFileTime = fromIntegral (minBound :: Int64) - 1
+
 timeComparedToWith ::
        (FileStatus -> POSIXTime)
     -> Path
@@ -855,11 +868,27 @@ timeComparedToWith ::
     -> FileTest
 timeComparedToWith getFileTime path cmp =
   withStatusM $ \st -> do
-    st1 <- Files.getFileStatus (Path.toString path)
-    pure $ cmp (getFileTime st) (getFileTime st1)
+    t1 <-
+        (getFileTime <$> Files.getFileStatus (Path.toString path))
+            `catch` handler
+    pure $ cmp (getFileTime st) t1
+
+    where
+
+    handler e
+        | isNonExistentError e = pure missingFileTime
+        | otherwise = throwIO e
 
 -- | Compare the modification time of the file with the modification time of
--- another file.
+-- another file. The first argument of the comparison function is the time of
+-- the file being tested and the second argument is the time of the reference
+-- file.
+--
+-- If the reference file does not exist, its time is taken to be earlier than
+-- the time of any file, like GNU @test -nt@ and @test -ot@. So
+-- @modifyTimeComparedTo ref (>)@ is 'True' and
+-- @modifyTimeComparedTo ref (<)@ is 'False' when @ref@ does not exist. Other
+-- @stat@ errors on the reference file raise an exception.
 --
 -- If specified file path is a symlink it is dereferenced.
 --
@@ -871,6 +900,9 @@ modifyTimeComparedTo = timeComparedToWith Files.modificationTimeHiRes
 --
 -- >>> olderThanFile path = modifyTimeComparedTo path (<)
 --
+-- Equivalent to @test file -ot ref@: 'False' if the reference file does not
+-- exist.
+--
 -- If specified file path is a symlink it is dereferenced.
 --
 olderThanFile :: Path -> FileTest
@@ -880,6 +912,9 @@ olderThanFile path = modifyTimeComparedTo path (<)
 --
 -- >>> newerThanFile path = modifyTimeComparedTo path (>)
 --
+-- Equivalent to @test file -nt ref@: 'True' if the reference file does not
+-- exist.
+--
 -- If specified file path is a symlink it is dereferenced.
 --
 newerThanFile  :: Path -> FileTest
@@ -887,6 +922,9 @@ newerThanFile path = modifyTimeComparedTo path (>)
 
 -- | Compare the access time of the file with the access time of
 -- another file.
+--
+-- Like 'modifyTimeComparedTo', a reference file that does not exist is
+-- taken to be older than any file.
 --
 -- If specified file path is a symlink it is dereferenced.
 accessTimeComparedTo ::
