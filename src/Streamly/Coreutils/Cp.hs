@@ -229,7 +229,7 @@ cp f src dest = do
             "-r not specified; omitting directory"
     destIsDir <-
         if optIntoDirectory options
-        then test dest (doesItExist `and_` isDir)
+        then test dest isDir
         else return False
     target <- if destIsDir then targetInDir "cp" dest src else return dest
     case optCopyMethod options of

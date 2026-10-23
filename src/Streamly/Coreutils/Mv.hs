@@ -137,7 +137,7 @@ isSameFile src dest = do
     destIsFile <- testl dest (doesItExist `and_` not_ isSymLink)
     same <-
         if destIsFile
-        then test src (doesItExist `and_` sameFileAs dest)
+        then test src (sameFileAs dest)
         else return False
     if same
     then do
@@ -169,7 +169,7 @@ checkTrailingSeparator src =
         isLink <-
             testl
                 (Path.dropTrailingSeparators src)
-                (doesItExist `and_` isSymLink)
+                isSymLink
         when isLink
             $ ioError (errnoError "mv" eNOTDIR src)
 
@@ -238,7 +238,7 @@ mv f src dest = do
     let opt = f defaultConfig
     destIsDir <-
         if mvIntoDirectory opt
-        then test dest (doesItExist `and_` isDir)
+        then test dest isDir
         else return False
     if destIsDir
     then targetInDir "mv" dest src >>= moveTo opt src

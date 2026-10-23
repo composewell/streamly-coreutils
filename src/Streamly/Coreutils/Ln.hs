@@ -26,7 +26,7 @@ import GHC.IO.Exception (IOErrorType(InvalidArgument))
 import Streamly.Coreutils.FileTest (test, testl, doesItExist, sameFileAs)
 import System.Directory (removeFile)
 #if defined(CABAL_OS_WINDOWS)
-import Streamly.Coreutils.FileTest (and_, isDir)
+import Streamly.Coreutils.FileTest (isDir)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 import System.Directory
     (createDirectoryLink, createFileLink, removeDirectory)
@@ -92,7 +92,7 @@ removeEntry path = do
 -- @src@.
 createSymbolicLink :: Path -> Path -> IO ()
 createSymbolicLink src tgt = do
-    srcIsDir <- test resolved (doesItExist `and_` isDir)
+    srcIsDir <- test resolved isDir
     if srcIsDir
     then createDirectoryLink srcStr tgtStr
     else createFileLink srcStr tgtStr
