@@ -9,17 +9,17 @@ Status: proposal, not implemented.
 
 * The `Cp` module header says "Copy a file or directory", but `cp` raises
   "cp: -r not specified; omitting directory" for a directory source.
-* `find` does not provide what `cp -r` needs (it drops directories, among
-  other things). The `find` side is designed in `design/find.md`.
+* `findEither` lists directories as `Left`, before their contents with the
+  serial traversals. The `find` side is described in `design/find.md`.
 
 ## What cp -r needs from find
 
 1. Directory entries, emitted before their contents (pre-order), so that
    each destination directory can be created before the files in it, and
-   empty directories are copied. `cp` uses the serial DFS traversal, which
-   guarantees this order. Requires `find` to output directories, as
-   `findEither` with directories as `Left`, so that `cp` tells them apart
-   without a `stat` of its own.
+   empty directories are copied. `cp` uses the default `DepthFirst`
+   traversal, which guarantees this order, through `findEither`, which
+   returns directories as `Left`, so that `cp` tells them apart without a
+   `stat` of its own.
 2. The path of each entry relative to the source root, to build the
    destination path: either a `find` option or `stripPrefix` in `cp`.
 3. The entry type: directory, regular file, symlink, other (fifo, socket,
@@ -67,7 +67,7 @@ With `src` a directory:
 
 ### Copying the tree
 
-Fold over `findEither serialDfs src`. For each entry, with `rel` its path
+Fold over `findEither id src`. For each entry, with `rel` its path
 relative to `src` and `out = copyPath </> rel`:
 
 * `Left d` (directory): create `out` with mode `u+rwx`, so that it can be

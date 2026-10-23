@@ -3,31 +3,38 @@
 Design of `Streamly.Coreutils.Find` and its relation to
 `Streamly.Coreutils.Ls`.
 
-Status: proposal, not implemented.
+Status: find is implemented except as noted; ls is not yet built on it.
 
 ## Current state
 
-* `find` and `findChunked` do not output directories. `readEitherPaths`
-  and `readEitherChunks` (streamly-core, `ReadDir.hsc`) emit a directory
-  only as `Left`, and `Find.hs` applies `Stream.catRights` to the output
-  of `concatIterate`, which drops every `Left`. The root and empty
-  directories are dropped as well. GNU `find` outputs the root and every
-  directory.
-* `findByteChunked` (used by `hfd`) does output directories: the `Right`
-  buffer of `readEitherByteChunks` holds directories and files separated
-  by newlines, and `Left` carries only the directories still to be
-  traversed. It produces raw bytes, carries no entry types, and is not
-  exported on Windows.
-* `maxResults` is applied only in `findByteChunked`; `find` and
-  `findChunked` ignore it (see `TODO.md`).
-* There is no depth limit (GNU `-maxdepth`, `-mindepth`) and no
-  predicates (`-name`, `-type`, ...).
-* `ls (recursive True)` duplicates `find serialBfs`: both expand
-  directories with `Dir.readEitherPaths`. `ls` returns `Either Path Path`
-  with directories as `Left`, has none of the traversal options, and took
-  1.09 s against 0.36 s for `find` on a 247,029 entry tree.
-* `ls id dir` (not recursive) is a single `Dir.readEitherPaths`. `find`
-  cannot express it because it has no depth limit.
+Implemented:
+
+* `find`, `findEither`, `findChunked` and `findByteChunked` list the root
+  and every entry under it, directories included, like GNU `find`. A root
+  that is not a directory is listed by itself; a missing root raises
+  ENOENT. `findEither` returns directories as `Left`.
+* One `traversal :: Traversal -> ...` modifier selects one of seven
+  traversals: `DepthFirst` (default), `WideDepthFirstReverse`,
+  `BreadthFirst`, `Interleaved`, `DepthFirstParallel`,
+  `DepthFirstParallelInterleaved`, `DepthFirstParallelOrdered`. The
+  Haddock of `Traversal` gives the order each one guarantees.
+* `minDepth` and `maxDepth`, like GNU `-mindepth` / `-maxdepth`, with the
+  root at depth 0. Each element carries its depth. `findByteChunked`
+  cannot apply them to its chunks, which mix depths, and is built from
+  `findChunked` when either is set.
+* `maxResults` applies to all variants.
+* A root that ends with a separator gives `dir/name`, like GNU `find`;
+  the chunked readers would give `dir//name` (see
+  `design/upstream-fixes.md`).
+* Tests: `test/Streamly/Test/Coreutils/Find.hs`. The output of `hfd` was
+  compared with GNU `find` 4.10.0 on a 21,118 entry tree, for every
+  traversal and several depth limits.
+
+Not implemented:
+
+* Predicates (`-name`, `-type`, ...).
+* Paths relative to the root (see below).
+* Continuing past an unreadable directory (see Errors below).
 
 ## find and ls
 
@@ -52,42 +59,13 @@ Split:
   with an `all` / `almostAll` modifier, sort by name. `Ls` keeps no
   traversal code of its own.
 * Remove `Ls.recursive`; a recursive walk is `find`. A GNU `ls -R`
-  equivalent, if wanted later, is `find serialDfs` with sorting within
-  each directory.
+  equivalent, if wanted later, is `find (traversal WideDepthFirst)` with
+  sorting within each directory.
 * Rendering (`-l`, columns) waits until an `hls` executable is wanted.
 
-Building `ls` on `find` requires `find` to output directories and to
-support `maxDepth`; otherwise depth-1 `ls` would lose its
-subdirectories.
+`ls` is `findEither (minDepth 1 . maxDepth 1)`.
 
-## Changes to find
-
-### Output directories
-
-Make `find` and `findChunked` output the root and all directories, like
-`findByteChunked` and GNU `find`.
-
-Add a variant that keeps the directory / non-directory distinction:
-
-```haskell
-findEither :: (FindOptions -> FindOptions) -> Path -> Stream IO (Either Path Path)
-```
-
-`Left` is a directory, `Right` is anything else. This is the
-`concatIterate` output without `catRights`. `find` is then
-`fmap (either id id) . findEither`. Consumers use the `Either` to tell
-directories apart without a `stat` of their own.
-
-### Depth limits
-
-Add `maxDepth :: Int -> FindOptions -> FindOptions` and `minDepth`, like
-GNU `-maxdepth` / `-mindepth`. The root is depth 0. `ls` uses
-`minDepth 1 . maxDepth 1`.
-
-### maxResults
-
-Apply `maxResults` in `find` and `findChunked` too, or restrict it to
-`findByteChunked` and stop exporting it (see `TODO.md`).
+## Remaining changes to find
 
 ### Paths relative to the root
 
@@ -118,23 +96,13 @@ Continuing past an unreadable directory, as GNU `find` does, needs a
 streamly-core change: an option to skip the directory, or to report the
 error in the stream. Record this in `design/upstream-fixes.md`.
 
-### Traversal order
+### Pre-visit action
 
-The serial DFS and BFS traversals emit a directory before its contents.
-The parallel traversals do not guarantee this order to the consumer.
-Document the order each traversal guarantees on its modifier.
-
-A traversal with a pre-visit action (run an action in the step that reads
-a directory, before its children are emitted) would let a parallel
-consumer rely on a directory being handled before its contents.
+The parallel traversals do not guarantee that a directory reaches the
+consumer before its contents. A traversal with a pre-visit action (run an
+action in the step that reads a directory, before its children are
+emitted) would let a parallel consumer rely on that.
 
 ## Open questions
 
-1. Does `find` return directories as plain `Path`s with a separate
-   `findEither`, or is `findEither` the only change?
-2. Relative paths: a `find` option, or `stripPrefix` in the consumer?
-3. `maxResults`: implement for all variants, or drop it from the export
-   list?
-4. Should the traversal strategy modifiers (`serialDfs`, ...,
-   `parallelOrdered`) stay exported, or be reduced to the few with
-   distinct guarantees (ordered serial DFS, unordered parallel)?
+1. Relative paths: a `find` option, or `stripPrefix` in the consumer?
