@@ -47,6 +47,7 @@ import Streamly.Coreutils.Find
     , traversal
 #if !defined(CABAL_OS_WINDOWS)
     , findByteChunked
+    , followRootSymlink
     , followSymlinks
 #endif
     )
@@ -361,6 +362,20 @@ rootSpec =
                     createDirectoryLink ".." (root </> "d" </> "up")
                     xs <- run (followSymlinks True) root
                     (root </> "d" </> "up") `elem` xs `shouldBe` True
+
+            it "follows only the root with followRootSymlink True" $
+                withTempDir $ \root -> do
+                    makeFixture root
+                    createDirectoryLink "a" (root </> "link")
+                    createDirectoryLink "a1" (root </> "a" </> "link1")
+                    let link = root </> "link"
+                    xs <- run (followRootSymlink True . maxDepth 1) link
+                    sort xs `shouldBe` sort
+                        [ link, link </> "a1", link </> "a2"
+                        , link </> "fa", link </> "link1"
+                        ]
+                    ys <- run (followRootSymlink True) link
+                    filter (isUnder (link </> "link1")) ys `shouldBe` []
 #endif
 
 main :: IO ()

@@ -20,6 +20,7 @@
 -- >> find (minDepth 1 . maxDepth 1) dir     -- find dir -mindepth 1
 --                                           --   -maxdepth 1
 -- >> find (followSymlinks True) dir         -- find -L dir
+-- >> find (followRootSymlink True) dir      -- find -H dir
 -- >> find (traversal DepthFirstParallel) dir
 --                                           -- unordered, concurrent
 -- >> findEither id dir                      -- directories as Left
@@ -58,6 +59,7 @@ module Streamly.Coreutils.Find
     , Traversal (..)
     , traversal
     , followSymlinks
+    , followRootSymlink
     , minDepth
     , maxDepth
     , maxResults
@@ -227,10 +229,12 @@ data Traversal =
       -- 'DepthFirst' order.
 
 -- | Options for the find functions. Modify the defaults with 'traversal',
--- 'followSymlinks', 'minDepth', 'maxDepth' and 'maxResults'.
+-- 'followSymlinks', 'followRootSymlink', 'minDepth', 'maxDepth' and
+-- 'maxResults'.
 data FindOptions = FindOptions
     { findTraversal :: Traversal
     , findFollowSymlinks :: Bool
+    , findFollowRootSymlink :: Bool
     , findMinDepth :: Int
     , findMaxDepth :: Maybe Int
     , findMaxResults :: Maybe Int
@@ -241,6 +245,7 @@ defaultOptions =
     FindOptions
         { findTraversal = DepthFirst
         , findFollowSymlinks = False
+        , findFollowRootSymlink = False
         , findMinDepth = 0
         , findMaxDepth = Nothing
         , findMaxResults = Nothing
@@ -267,6 +272,16 @@ traversal t cfg = cfg {findTraversal = t}
 -- on Windows.
 followSymlinks :: Bool -> FindOptions -> FindOptions
 followSymlinks x cfg = cfg {findFollowSymlinks = x}
+
+-- | Descend into the root (starting point) if it is a symbolic link to a
+-- directory, like @find -H@. Symbolic links under the root are listed but
+-- not followed.
+-- 'followSymlinks' implies this.
+--
+-- Default (without this modifier): a symbolic link given as the root is
+-- listed by itself, like @find -P@.
+followRootSymlink :: Bool -> FindOptions -> FindOptions
+followRootSymlink x cfg = cfg {findFollowRootSymlink = x}
 
 -- | Do not output entries at depths less than @n@, like @find -mindepth n@.
 -- The root (starting point) is at depth 0 and the entries in it at depth 1.
@@ -359,7 +374,10 @@ descends opts d = d < fromMaybe maxBound (findMaxDepth opts)
 -- ENOENT exception if it does not exist.
 isDirRoot :: FindOptions -> Path -> IO Bool
 isDirRoot opts root = do
-    let testRoot = if findFollowSymlinks opts then test else testl
+    let testRoot =
+            if findFollowSymlinks opts || findFollowRootSymlink opts
+            then test
+            else testl
     r <- testRoot root isDir
     if r
     then pure True
