@@ -13,11 +13,14 @@
 module Streamly.Coreutils.Path
     ( uncRootComponents
     , splitRoot
+    , components
     )
 where
 
+import Data.Functor.Identity (runIdentity)
 import Streamly.FileSystem.Path (Path)
 
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.FileSystem.Path as Path
 #if !MIN_VERSION_streamly_core(0,4,0)
 import qualified Streamly.Internal.Data.Array as Array
@@ -76,3 +79,8 @@ splitRoot path =
             _ -> False
 #endif
 
+-- | The components of a path, like filepath's @splitDirectories@: the root,
+-- if any, then the names between separators. @.@ components are dropped
+-- except in the leading position, and trailing separators are dropped.
+components :: Path -> [Path]
+components = runIdentity . Stream.toList . Path.splitPath_

@@ -94,19 +94,18 @@ module Streamly.Coreutils.ResolvePath
 where
 
 import Control.Monad (unless)
-import Data.List (isPrefixOf)
-import System.Directory
-    (canonicalizePath, doesDirectoryExist, doesPathExist, makeAbsolute)
-import System.FilePath
-    (makeRelative, splitDirectories, joinPath, isAbsolute, takeDirectory)
--- import System.IO.Error (ioError, userError)
+import Data.Maybe (isJust)
+import System.Directory (canonicalizePath, makeAbsolute)
 
 import Foreign.C.Error (eNOENT)
 import System.IO.Error (ioeSetErrorString)
 import Streamly.FileSystem.Path (Path)
-import qualified Streamly.FileSystem.Path as Path
+import qualified Streamly.Internal.FileSystem.Path as Path
 
+import Streamly.Coreutils.Dirname (dirname)
 import Streamly.Coreutils.Error (errnoError)
+import Streamly.Coreutils.FileTest (isDir, pathExists, test)
+import Streamly.Coreutils.Path (components, splitRoot)
 
 -- $setup
 -- >>> :set -XQuasiQuotes
@@ -122,6 +121,19 @@ import Streamly.Coreutils.Error (errnoError)
 --   default 'ResolveThenParent' (physical) mode; 'ParentThenResolve' and
 --   'NoSymlinkResolution' use 'makeAbsolute' plus a custom @..@-collapsing
 --   walker ('lexicalCollapse').
+--
+-- * streamly-core master has an internal module
+--   @Streamly.Internal.FileSystem.PathIO@ with @makeAbsolute@,
+--   @resolve@ and @resolveDotDots@ on 'Path'. @makeAbsolute@ is
+--   implemented and can replace the one from @directory@; it does not
+--   drop @.@ components, but 'lexicalCollapse' does. @resolve@ and
+--   @resolveDotDots@ are @undefined@. @resolve@ is documented as
+--   POSIX @realpath(3)@, which fails if any component is missing, so it
+--   can replace 'canonicalizePath' only for 'RequirePath'.
+--   'RequireParents' and 'RequireNone' need the 'canonicalizePath'
+--   behavior of resolving the longest existing prefix.
+--   'ParentThenResolve' would be @collapseDotDots@ followed by
+--   @resolve@.
 --
 -- * Why a single 'ResolutionMode' enum instead of two flags.
 --   Symlink expansion is a three-way choice, not two orthogonal
@@ -140,7 +152,8 @@ import Streamly.Coreutils.Error (errnoError)
 --   for a symlink-aware normalizer but is the wrong semantics for
 --   @realpath -s@ and @-L@, which want symlink-oblivious lexical
 --   resolution of @..@. So we collapse @..@ ourselves in
---   'lexicalCollapse'.
+--   'lexicalCollapse'. streamly-core 0.4 adds @Path.collapseDotDots@
+--   with the same semantics; use it when we require streamly-core 0.4.
 --
 -- * 'canonicalizePath' diverges from GNU @realpath@ on nonexistent
 --   paths: it canonicalizes as much as it can rather than failing.
@@ -153,17 +166,25 @@ import Streamly.Coreutils.Error (errnoError)
 --   compatibility as the cost of being slightly less permissive by
 --   default.
 --
--- * 'RequireParents' is implemented via @doesDirectoryExist@ on
---   'takeDirectory' of the path. If the immediate parent directory
+-- * 'RequireParents' is implemented via @test parent isDir@ on
+--   'dirname' of the path. If the immediate parent directory
 --   exists then every intermediate ancestor must too (by
 --   transitivity of directory existence), so a single check covers
---   the GNU @-E@ requirement. Edge cases handled by 'takeDirectory':
+--   the GNU @-E@ requirement. Edge cases handled by 'dirname':
 --   bare filenames give @"."@ (always exists), @\/@ gives @\/@
---   (always exists), so these pass without special-casing.
+--   (always exists), so these pass without special-casing. Trailing
+--   separators are ignored, so @missing/@ passes as it does with GNU
+--   @realpath -E@; filepath's @takeDirectory "missing/"@ is @"missing"@.
 --
--- * 'RequirePath' uses 'doesPathExist' rather than
---   'doesDirectoryExist' so that files (not just directories) at the
---   leaf are accepted.
+-- * 'RequirePath' uses 'pathExists' rather than 'isDir' so that files
+--   (not just directories) at the leaf are accepted.
+--
+-- * The existence checks use the 'FileTest' predicates rather than
+--   'System.Directory.doesPathExist' / 'doesDirectoryExist', which
+--   return 'False' on any error. 'test' returns 'False' only for a
+--   missing path (ENOENT, ENOTDIR) and raises other @stat@ errors
+--   (EACCES, ELOOP), so these are reported with their own errno as GNU
+--   @realpath@ does.
 --
 -- * 'ParentThenResolve' is implemented as
 --   @canonicalizePath . lexicalCollapse . makeAbsolute@: collapse
@@ -188,8 +209,8 @@ import Streamly.Coreutils.Error (errnoError)
 --   gates whether relativization fires. When 'relativeWithin' is
 --   set alone, its directory serves both roles (matching GNU
 --   @--relative-base=DIR@ without @--relative-to@). Containment is
---   tested component-wise via 'splitDirectories' so that partial
---   name prefixes (@\/foo@ vs @\/foobar@) don't register as matches.
+--   tested component-wise so that partial name prefixes (@\/foo@ vs
+--   @\/foobar@) don't register as matches.
 --
 -- * Throws 'IOError' rather than returning 'Maybe'. A canonicalization
 --   failure is an exceptional condition, not a lookup miss - matches
@@ -411,34 +432,24 @@ relativeTo base opts = opts { _relativeTo = Just base }
 relativeWithin :: Path -> ResolvePathOptions -> ResolvePathOptions
 relativeWithin dir opts = opts { _relativeWithin = Just dir }
 
--- Collapse @.@ and @..@ segments lexically. On absolute paths, @..@
--- at the root is dropped (you can't ascend above @\/@). On relative
--- paths, leading @..@ segments are preserved.
+-- Collapse @.@ and @..@ segments of an absolute path lexically. @..@ at
+-- the root is dropped (you can't ascend above @\/@).
 --
--- Uses 'splitDirectories' / 'joinPath' from @filepath@ to stay
--- platform-correct on separator handling.
-lexicalCollapse :: String -> String
-lexicalCollapse p =
-    let parts = splitDirectories p
-        absolute = isAbsolute p
-        (root, rest) =
-            if absolute
-            then case parts of
-                (r:xs) -> (Just r, xs)
-                [] -> (Nothing, [])
-            else (Nothing, parts)
-        step acc "." = acc
-        step acc ".." = case acc of
-            -- Relative path: preserve leading ..
-            [] -> [".." | not absolute]
-            (x:xs)
-                | x == ".." -> "..":x:xs
-                | otherwise -> xs
-        step acc x = x : acc
-        collapsed = reverse (foldl step [] rest)
-    in case root of
-        Just r -> joinPath (r : collapsed)
-        Nothing -> if null collapsed then "." else joinPath collapsed
+-- XXX Replace with Path.collapseDotDots from streamly-core 0.4.
+lexicalCollapse :: Path -> Path
+lexicalCollapse path =
+    case splitRoot path of
+        Just (root, Just body) ->
+            foldl Path.join root (reverse (foldl step [] (components body)))
+        _ -> path
+
+    where
+
+    step acc c =
+        case Path.toString c of
+            "." -> acc
+            ".." -> drop 1 acc
+            _ -> c : acc
 
 -- Perform the pre-resolution existence check demanded by the given
 -- 'ExistenceCheck'. Raise an 'IOError' with errno ENOENT for the path on
@@ -447,27 +458,47 @@ checkExistence :: ExistenceCheck -> Path -> IO ()
 checkExistence check path = case check of
     RequireNone -> return ()
     RequirePath -> do
-        exists <- doesPathExist pathStr
+        exists <- test path pathExists
         unless exists $ ioError (errnoError "resolvePath" eNOENT path)
     RequireParents -> do
-        parentExists <- doesDirectoryExist (takeDirectory pathStr)
+        parent <- dirname path
+        parentExists <- test parent isDir
         unless parentExists
             $ ioError
             $ ioeSetErrorString
                 (errnoError "resolvePath" eNOENT path)
                 "parent directory does not exist"
 
+-- If the components of the first path are the leading components of the
+-- second, return the remaining components of the second.
+stripComponents :: Path -> Path -> Maybe [Path]
+stripComponents dir p = go (components dir) (components p)
+
     where
 
-    pathStr = Path.toString path
+    go [] ys = Just ys
+    go (x:xs) (y:ys) | Path.eqPathBytes x y = go xs ys
+    go _ _ = Nothing
 
 -- Is the second path a descendant of (or equal to) the first?
 -- Both arguments should already be canonicalized and absolute.
--- Uses component-wise comparison via 'splitDirectories' so that
--- partial-name matches (e.g. @\/foo@ vs @\/foobar@) don't register
--- as containment.
-isPathUnder :: String -> String -> Bool
-isPathUnder dir p = splitDirectories dir `isPrefixOf` splitDirectories p
+-- Comparing components rather than strings means that partial-name
+-- matches (e.g. @\/foo@ vs @\/foobar@) don't register as containment.
+isPathUnder :: Path -> Path -> Bool
+isPathUnder dir p = isJust (stripComponents dir p)
+
+-- Make the second path relative to the first, like filepath's
+-- makeRelative: @"."@ if the paths are equal, the second path unchanged if
+-- it is not under the first. No @..@ components are introduced.
+--
+-- XXX Replace with Path.stripPrefix from streamly-core 0.4, which gives
+-- Nothing in both the equal and the not-under cases.
+makeRelative :: Path -> Path -> Path
+makeRelative dir p =
+    case stripComponents dir p of
+        Nothing -> p
+        Just [] -> Path.fromString_ "."
+        Just (x:xs) -> foldl Path.join x xs
 
 -- | Resolve a filesystem path to its canonical form, similar to the
 -- shell @realpath@ command.
@@ -492,13 +523,11 @@ resolvePath
     -> IO Path
 resolvePath modifier path = do
     let opts = modifier defaultConfig
-        pathStr = Path.toString path
     checkExistence (_existenceCheck opts) path
     resolved <- case _resolutionMode opts of
-        ResolveThenParent -> canonicalizePath pathStr
-        ParentThenResolve ->
-            makeAbsolute pathStr >>= canonicalizePath . lexicalCollapse
-        NoSymlinkResolution -> fmap lexicalCollapse (makeAbsolute pathStr)
+        ResolveThenParent -> canonicalize path
+        ParentThenResolve -> absolute >>= canonicalize . lexicalCollapse
+        NoSymlinkResolution -> fmap lexicalCollapse absolute
     -- Relativization and containment logic:
     --   * _relativeTo chooses the target to relativize against.
     --   * _relativeWithin gates whether relativization fires: if
@@ -510,13 +539,19 @@ resolvePath modifier path = do
             Just t -> Just t
             Nothing -> _relativeWithin opts
     case target of
-        Nothing -> Path.fromString resolved
+        Nothing -> return resolved
         Just t -> do
-            canonicalTarget <- canonicalizePath (Path.toString t)
+            canonicalTarget <- canonicalize t
             case _relativeWithin opts of
-                Nothing -> Path.fromString (makeRelative canonicalTarget resolved)
+                Nothing -> return (makeRelative canonicalTarget resolved)
                 Just boundary -> do
-                    canonicalBoundary <- canonicalizePath (Path.toString boundary)
+                    canonicalBoundary <- canonicalize boundary
                     if isPathUnder canonicalBoundary resolved
-                    then Path.fromString (makeRelative canonicalTarget resolved)
-                    else Path.fromString resolved
+                    then return (makeRelative canonicalTarget resolved)
+                    else return resolved
+
+    where
+
+    canonicalize p = canonicalizePath (Path.toString p) >>= Path.fromString
+
+    absolute = makeAbsolute (Path.toString path) >>= Path.fromString
