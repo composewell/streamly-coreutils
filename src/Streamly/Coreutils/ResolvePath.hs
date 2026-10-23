@@ -375,9 +375,11 @@ resolutionMode mode opts = opts { _resolutionMode = mode }
 -- the relative path is computed, so that @..@ segments and symlinks in the
 -- base are handled correctly.
 --
--- If the canonical path and base do not share the same root (for
--- example, on different Windows drives), the absolute path is
--- returned unchanged.
+-- If the canonical path is not under the base, the absolute path is
+-- returned unchanged. No @..@ segments are introduced, unlike GNU
+-- @realpath --relative-to@: for the base @\/usr\/bin@, @\/usr\/lib@ gives
+-- @\/usr\/lib@, GNU gives @..\/lib@. A path on a different root, for
+-- example a different Windows drive, is never under the base.
 --
 -- A path relative to itself is @\".\"@:
 --
@@ -414,8 +416,10 @@ relativeTo base opts = opts { _relativeTo = Just base }
 -- modifier only controls the boundary.
 --
 -- Without this modifier, if 'relativeTo' is set, the result is made
--- relative whenever possible (even if it requires @..@ segments that
--- escape the base directory).
+-- relative to the base whenever it is under the base, and is returned as
+-- an absolute path otherwise. No @..@ segments are introduced, unlike GNU
+-- @realpath --relative-to@: for the base @\/usr\/bin@, @\/usr\/lib@ gives
+-- @\/usr\/lib@, GNU gives @..\/lib@.
 --
 -- === Examples
 --
@@ -493,6 +497,14 @@ isPathUnder dir p = isJust (stripComponents dir p)
 --
 -- XXX Replace with Path.stripPrefix from streamly-core 0.4, which gives
 -- Nothing in both the equal and the not-under cases.
+--
+-- TODO Introduce @..@ components like GNU @realpath --relative-to@: for
+-- the base @/usr/bin@, @/usr/lib@ should give @../lib@, not @/usr/lib@.
+-- Drop the components the two paths have in common, then put one @..@ for
+-- each remaining component of the base before the remaining components of
+-- the path. Paths on different roots (Windows drives) stay absolute.
+-- streamly-core 0.4 has Path.takeCommonPrefix for the first step. Update
+-- the Haddock of 'relativeTo' and 'relativeWithin' when this is done.
 makeRelative :: Path -> Path -> Path
 makeRelative dir p =
     case stripComponents dir p of
