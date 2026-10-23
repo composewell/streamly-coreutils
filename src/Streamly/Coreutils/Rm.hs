@@ -79,7 +79,7 @@ module Streamly.Coreutils.Rm
     )
 where
 
-import Control.Monad (forM_, unless, when)
+import Control.Monad (unless, when)
 import Foreign.C.Error (eACCES, eISDIR, eNOENT, eNOTDIR)
 #if !defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.Chmod (Perm(..), addOwner, chmod)
@@ -110,20 +110,18 @@ import System.Directory
     , searchable
 #endif
     , setPermissions
-    , listDirectory
     , writable
     )
-import System.FilePath
-    ( (</>)
-#if !defined(CABAL_OS_WINDOWS)
-    , dropTrailingPathSeparator
-    , takeDirectory
-#endif
-    )
 import Streamly.FileSystem.Path (Path)
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.Error (errnoError)
+#if !defined(CABAL_OS_WINDOWS)
+import Streamly.Coreutils.Dirname (dirname)
+#endif
+import Streamly.Coreutils.Error (errnoError, relocateErrors)
+import Streamly.Coreutils.Find
+    (find, followRootSymlink, maxDepth, minDepth)
 
 -- = Design notes
 --
@@ -242,13 +240,6 @@ requireWritableDir dir = do
         $ ioeSetErrorString (errnoError "rm" eACCES dir)
             "directory not writable"
 
-parentDir :: Path -> IO Path
-parentDir path =
-    Path.fromString
-        $ takeDirectory
-        $ dropTrailingPathSeparator
-        $ Path.toString path
-
 -- | Give the owner read, write and execute permission on a directory, like
 -- @chmod u+rwx@. The mode is not changed if the directory is already
 -- accessible, e.g. through its group permissions, so that a directory owned
@@ -260,12 +251,32 @@ makeDirAccessible dir = do
         $ chmod id (addOwner [Read, Write, Exec]) dir
 #endif
 
+-- The directory listing is read completely, and the directory closed, before
+-- any entry is removed. Removing entries while the stream is still reading
+-- the directory has two problems:
+--
+-- * POSIX does not specify whether readdir returns every remaining entry
+--   when entries are unlinked during the scan. Some filesystems (NFS, older
+--   macOS HFS+) skip entries, and removeDirectory then fails with ENOTEMPTY.
+-- * removePath recurses into subdirectories, so a streaming traversal keeps
+--   one directory descriptor open per level of depth, and a deep tree can
+--   exceed the process limit on open file descriptors (EMFILE).
+--
+-- Reading the listing into a list costs the same memory as listDirectory.
+--
+-- The root symlink is followed so that rmContents empties the target of a
+-- symlink to a directory. rmdir passes only a directory that is not a
+-- symlink.
+
 -- | Remove each entry of a directory with the same options.
-removeEntries :: RmOptions -> FilePath -> IO ()
+removeEntries :: RmOptions -> Path -> IO ()
 removeEntries options dir = do
-    contents <- listDirectory dir
-    forM_ contents $ \item ->
-        Path.fromString (dir </> item) >>= removePath options
+    entries <- Stream.toList (relocateErrors "find" "rm" (find opts dir))
+    mapM_ (removePath options) entries
+
+    where
+
+    opts = followRootSymlink True . minDepth 1 . maxDepth 1
 
 rmdir :: RmOptions -> Path -> IO ()
 rmdir options path
@@ -273,7 +284,7 @@ rmdir options path
 #if !defined(CABAL_OS_WINDOWS)
     | rmMakeDirsWritable options = do
         makeDirAccessible path
-        removeEntries options pathStr
+        removeEntries options path
         removeDirectory pathStr
 #endif
     | rmForce options =
@@ -289,7 +300,7 @@ rmdir options path
 #endif
     | otherwise = do
         withWriteProtectionCheck path (const (pure ())) "directory"
-        removeEntries options pathStr
+        removeEntries options path
         withWriteProtectionCheck
             path
             (removeDirectory . Path.toString)
@@ -386,7 +397,7 @@ rm f path = do
 #if !defined(CABAL_OS_WINDOWS)
     when (rmMakeDirsWritable options && rmRecursive options) $ do
         dir <- testl path isDir
-        when dir $ parentDir path >>= requireWritableDir
+        when dir $ dirname path >>= requireWritableDir
 #endif
     removePath options path
 
@@ -420,7 +431,7 @@ rmContents f path = do
 #if !defined(CABAL_OS_WINDOWS)
         when (rmMakeDirsWritable options) $ requireWritableDir path
 #endif
-        removeEntries options (Path.toString path)
+        removeEntries options path
     else
         unless (rmForce options) $ do
             found <- test path pathExists
