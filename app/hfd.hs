@@ -63,14 +63,12 @@ traversalParser =
             <> help "Wide depth-first traversal, last subdirectory first")
     OA.<|> OA.flag' BreadthFirst
         (long "bfs" <> help "Breadth-first traversal")
-    OA.<|> OA.flag' Interleaved
-        (long "interleaved" <> help "Serial interleaved traversal")
     OA.<|> OA.flag' DepthFirstParallel
         (long "dfs-parallel"
             <> help "Parallel depth-first traversal, unordered")
-    OA.<|> OA.flag' DepthFirstParallelInterleaved
-        (long "dfs-parallel-interleaved"
-            <> help "Parallel depth-first traversal, interleaved")
+    OA.<|> OA.flag' BreadthFirstParallel
+        (long "bfs-parallel"
+            <> help "Parallel breadth-first traversal, unordered")
     OA.<|> OA.flag' DepthFirstParallelOrdered
         (long "dfs-parallel-ordered"
             <> help "Parallel depth-first traversal, in depth-first order")

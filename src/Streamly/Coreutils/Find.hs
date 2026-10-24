@@ -130,9 +130,9 @@ import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 --   > DepthFirst                      204    164           154
 --   > WideDepthFirstReverse           264    264           154
 --   > BreadthFirst                    274    264           154
---   > Interleaved                     304    194           154
+--   > Interleaved (dropped)           304    194           154
 --   > DepthFirstParallel              174    124            94
---   > DepthFirstParallelInterleaved   224    134            94
+--   > BreadthFirstParallel            224    134            94
 --   > DepthFirstParallelOrdered       234    174           154
 --
 -- * DepthFirst appends StreamK streams (StreamK.concatIterateWith
@@ -140,23 +140,27 @@ import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 --   264 and 154 ms; it is kept commented out in iterateWith for benchmarking.
 --
 -- * A parallel traversal is named by the serial order it is built on,
---   followed by the concurrency mode: DepthFirstParallel,
---   DepthFirstParallelInterleaved and DepthFirstParallelOrdered use
---   parConcatIterate, a concurrent concatIterate. Parallel breadth first
---   traversals can be added later as BreadthFirstParallel and
---   BreadthFirstParallelOrdered. A separate modifier for the concurrency
---   mode was rejected because not every combination of order and mode has
---   an implementation, e.g. WideDepthFirstReverse has no parallel version.
+--   followed by the concurrency mode. DepthFirstParallel,
+--   BreadthFirstParallel and DepthFirstParallelOrdered use
+--   parConcatIterate, a concurrent concatIterate. The planned traversals
+--   are commented out in the Traversal type. A separate modifier for the
+--   concurrency mode was rejected because not every combination of order
+--   and mode has an implementation, e.g. WideDepthFirstReverse has no
+--   parallel version.
 --
--- * For the unordered DepthFirstParallel, "depth first" describes how
---   directories are scheduled, not the output order. Even the scheduling
---   depends on the queue of the parConcatIterate channel ("The channel q
---   should be FIFO for DFS, otherwise it is BFS" in streamly). The
---   alternative considered was to name it plain Parallel, because it
---   guarantees no order, and to use an order prefix only for the ordered
---   variants and for a parallel traversal that really schedules breadth
---   first. DepthFirstParallel was chosen so that a future
---   BreadthFirstParallel has a matching name.
+-- * For the unordered parallel traversals, "depth first" and "breadth
+--   first" describe how directories are scheduled, not the output order.
+--   The scheduling is set by the work queue of the parConcatIterate
+--   channel. The default channel has a LIFO queue (enqueueLIFO in
+--   Channel/Append.hs): a worker continues with the directory queued last,
+--   which is depth first. With interleaved True the channel has a FIFO
+--   queue (enqueueFIFO in Channel/Interleave.hs) and runs the pending
+--   directories round robin, which is breadth first. The comment "The
+--   channel q should be FIFO for DFS, otherwise it is BFS" in
+--   parConcatIterate has FIFO and LIFO the other way round. The
+--   alternative considered was to name DepthFirstParallel plain Parallel,
+--   because it guarantees no order; the scheduling prefix was kept so that
+--   the two unordered traversals have matching names.
 --
 -- * The serial traversals use the concat tree iterations, not the unfold
 --   ones (unfoldIterateDfs, bfsUnfoldIterate, ...). In streamly-core 0.3 the
@@ -182,29 +186,74 @@ import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 -------------------------------------------------------------------------------
 
 -- | The order in which the tree is visited. All serial traversals list a
--- directory before its contents. For a tree in which directory @1@ contains
--- @2@ and @3@, @2@ contains @4@, @3@ contains @5@, @4@ contains @7@ and @5@
--- contains @6@, with entries listed in that order:
+-- directory before its contents. For the following tree, with the entries of
+-- each directory returned by the operating system in the order shown:
 --
--- +-----------------------------+---------------------+
--- | Traversal                   | Output              |
--- +=============================+=====================+
--- | 'DepthFirst'                | 1, 2, 4, 7, 3, 5, 6 |
--- +-----------------------------+---------------------+
--- | 'DepthFirstParallelOrdered' | 1, 2, 4, 7, 3, 5, 6 |
--- +-----------------------------+---------------------+
--- | 'WideDepthFirstReverse'     | 1, 2, 3, 5, 6, 4, 7 |
--- +-----------------------------+---------------------+
--- | 'BreadthFirst'              | 1, 2, 3, 4, 5, 7, 6 |
--- +-----------------------------+---------------------+
+-- > 1
+-- > |-- 2
+-- > |   |-- 4
+-- > |   |   `-- 8
+-- > |   `-- 5
+-- > `-- 3
+-- >     |-- 6
+-- >     |   `-- 9
+-- >     `-- 7
 --
--- 'Interleaved', 'DepthFirstParallel' and 'DepthFirstParallelInterleaved' do
--- not guarantee an order.
+-- +-----------------------------+---------------------------+
+-- | Traversal                   | Output                    |
+-- +=============================+===========================+
+-- | 'DepthFirst'                | 1, 2, 4, 8, 5, 3, 6, 9, 7 |
+-- +-----------------------------+---------------------------+
+-- | 'DepthFirstParallelOrdered' | 1, 2, 4, 8, 5, 3, 6, 9, 7 |
+-- +-----------------------------+---------------------------+
+-- | 'WideDepthFirstReverse'     | 1, 2, 3, 6, 7, 9, 4, 5, 8 |
+-- +-----------------------------+---------------------------+
+-- | 'BreadthFirst'              | 1, 2, 3, 4, 5, 6, 7, 8, 9 |
+-- +-----------------------------+---------------------------+
+--
+-- 'DepthFirstParallel' and 'BreadthFirstParallel' do not guarantee an order.
+
+-- Planned traversals are commented out below. The outputs in their comments
+-- are for the tree in the Haddock above. Those marked "new combinator" need a
+-- tree iteration combinator that streamly does not have yet.
+--
+-- Dropped traversals:
+--
+-- * Interleaved (StreamK.mergeIterateWith StreamK.interleave). It merges the
+--   streams pairwise in a balanced tree, so the output is not a useful
+--   order. When every directory has 2 or 4 subdirectories, each level has
+--   the same entries as in BreadthFirst, in a different order, e.g. aa, ba,
+--   ab, bb instead of aa, ab, ba, bb. With 3 subdirectories per directory,
+--   or with an unbalanced tree, it emits entries of the next level before
+--   it finishes the current one, e.g. cca before bc. It keeps the
+--   partly read directories open and was the slowest traversal. The fair
+--   progress across subtrees it gives is provided by BreadthFirstParallel.
+--
+-- * InterleavedParallelOrdered, the concurrent version of Interleaved, for
+--   the same reasons.
+--
+-- * DepthFirstParallelInterleaved was renamed BreadthFirstParallel; its
+--   round robin schedule is breadth first (see the design notes).
 data Traversal =
       DepthFirst
       -- ^ Pre-order depth first, the order of GNU @find@. Keeps the
       -- directories on the current path open; a very deep tree can exceed
       -- the open file limit.
+
+    {-
+    | DepthFirstPostOrder
+      -- List a directory after its contents, like GNU @find -depth@; the
+      -- order needed to remove a tree. Output: 8, 4, 5, 2, 9, 6, 7, 3, 1. New
+      -- combinator.
+    -}
+
+    {-
+    | WideDepthFirst
+      -- Like WideDepthFirstReverse but expands the subdirectories in the
+      -- order they were listed. Output: 1, 2, 3, 4, 5, 8, 6, 7, 9. Uses
+      -- wideDfsConcatIterate from streamly-core 0.4 (streamly master).
+    -}
+
     | WideDepthFirstReverse
       -- ^ List all entries of a directory, then each of its subdirectories
       -- in turn, recursively, the last listed first. Keeps one directory
@@ -214,19 +263,35 @@ data Traversal =
       -- ^ Level by level: all entries at depth one, then all at depth two,
       -- and so on. Keeps one directory open, and the directories of the next
       -- level in memory, which can be many for a wide tree.
-    | Interleaved
-      -- ^ Interleave the entries of sibling directories, so that one large
-      -- directory does not delay the others.
+
+    {-
+    | BreadthFirstReverse
+      -- Level by level, but the directories of each level are read in the
+      -- reverse of the order they were listed. Faster than BreadthFirst.
+      -- Output: 1, 2, 3, 6, 7, 4, 5, 8, 9. Uses bfsConcatIterateRev from
+      -- streamly-core 0.4 (streamly master).
+    -}
+
     | DepthFirstParallel
-      -- ^ Read directories concurrently, scheduled depth first, and emit
-      -- entries as soon as they are read. The fastest; the output order is
-      -- not deterministic.
-    | DepthFirstParallelInterleaved
-      -- ^ Like 'DepthFirstParallel' but schedules the directories fairly, so
-      -- that one large subtree does not delay the others.
+      -- ^ Read directories concurrently, scheduled depth first: each worker
+      -- continues with the directory it found last. Entries are emitted as
+      -- soon as they are read. The fastest; the output order is not
+      -- deterministic.
+    | BreadthFirstParallel
+      -- ^ Read directories concurrently, scheduled breadth first: the
+      -- pending directories are read in turn, so the directories of a level
+      -- are read in parallel and one large subtree does not delay the
+      -- others. Entries are emitted as soon as they are read; the output
+      -- order is not deterministic.
     | DepthFirstParallelOrdered
       -- ^ Read directories concurrently, but emit the entries in the
       -- 'DepthFirst' order.
+
+    {-
+    | BreadthFirstParallelOrdered
+      -- Read directories concurrently, but emit the entries in the
+      -- BreadthFirst order. New combinator.
+    -}
 
 -- | Options for the find functions. Modify the defaults with 'traversal',
 -- 'followSymlinks', 'followRootSymlink', 'minDepth', 'maxDepth' and
@@ -345,9 +410,8 @@ iterateWith t next =
         -- streamly-core 0.4.
         WideDepthFirstReverse -> Stream.altBfsConcatIterate next
         BreadthFirst -> Stream.bfsConcatIterate next
-        Interleaved -> viaK (StreamK.mergeIterateWith StreamK.interleave)
         DepthFirstParallel -> Stream.parConcatIterate id parNext
-        DepthFirstParallelInterleaved ->
+        BreadthFirstParallel ->
             Stream.parConcatIterate (Stream.interleaved True) parNext
         DepthFirstParallelOrdered ->
             Stream.parConcatIterate (Stream.ordered True) parNext

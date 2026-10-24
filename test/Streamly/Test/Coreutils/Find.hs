@@ -169,18 +169,6 @@ withRest xs =
     | (Left d, rest) <- zip xs (drop 1 (scanr (:) [] xs))
     ]
 
--- | Each directory is listed before all paths under it.
-parentsFirst :: [Either FilePath FilePath] -> Bool
-parentsFirst xs =
-    and
-        [ not (any (isUnder d) earlier)
-        | (Left d, earlier) <- zip xs (scanl (flip (:)) [] paths)
-        ]
-
-    where
-
-    paths = map (either id id) xs
-
 isDfs :: [Either FilePath FilePath] -> Bool
 isDfs xs = and [prefix (isUnder d) rest | (d, rest) <- withRest xs]
 
@@ -209,12 +197,8 @@ traversals =
     [ (DepthFirst, "DepthFirst", Just isDfs)
     , (WideDepthFirstReverse, "WideDepthFirstReverse", Just isWideDfs)
     , (BreadthFirst, "BreadthFirst", Just isBfs)
-    , (Interleaved, "Interleaved", Just parentsFirst)
     , (DepthFirstParallel, "DepthFirstParallel", Nothing)
-    , ( DepthFirstParallelInterleaved
-      , "DepthFirstParallelInterleaved"
-      , Nothing
-      )
+    , (BreadthFirstParallel, "BreadthFirstParallel", Nothing)
     , (DepthFirstParallelOrdered, "DepthFirstParallelOrdered", Just isDfs)
     ]
 
