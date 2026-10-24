@@ -28,7 +28,7 @@ description:
     even with a serial traversal. The README has the measurements.
   * Where a utility's work can be done concurrently, it is, or will be in
     a later release. @find@ already has concurrent traversals, which read
-    several directories at the same time: @find (traversal Parallel)@
+    several directories at the same time: @find (parallel True)@
     instead of @find id@. Other utilities that walk a directory tree, such as
     recursive @ls@ and @rm@, will get concurrent versions. The results are
     streams, so your own processing of them can be made concurrent too,

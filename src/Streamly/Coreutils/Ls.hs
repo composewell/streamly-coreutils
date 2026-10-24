@@ -45,18 +45,18 @@ import qualified Streamly.Data.Stream as Stream
 
 import Streamly.Coreutils.Error (relocateErrors)
 import Streamly.Coreutils.Find
-    (findEither, followRootSymlink, maxDepth)
+    (FindOptions, findEither, followRootSymlink, maxDepth)
 
 import qualified Streamly.Coreutils.Find as Find
 
 -- = Design notes
 --
 -- * ls is built on findEither and has no traversal code of its own; see
---   design/find.md. Each Ls traversal is the Find traversal of the same
---   name. Ls keeps its own Traversal type so that its default
---   (WideDepthFirstReverse, like ls -R) and its documentation stay
---   independent of Find, and so that it offers only the orders that suit a
---   listing.
+--   design/find.md. Each Ls traversal is a combination of the Find
+--   traversal options that gives the same order. Ls keeps its own Traversal
+--   type so that its default (WideDepthFirstReverse, like ls -R) and its
+--   documentation stay independent of Find, and so that it offers only the
+--   orders that suit a listing.
 --
 -- * The root symlink is followed (find -H), like GNU ls follows a symlink
 --   given on the command line. A directory root is the first element of
@@ -134,13 +134,13 @@ recursive opt cfg = cfg {lsRecursive = opt}
 traversal :: Traversal -> LsOptions -> LsOptions
 traversal t cfg = cfg {lsTraversal = t}
 
--- | The Find traversal with the same name.
-findTraversal :: Traversal -> Find.Traversal
+-- | The Find traversal options that give the same order.
+findTraversal :: Traversal -> FindOptions -> FindOptions
 findTraversal t =
     case t of
-        WideDepthFirstReverse -> Find.WideDepthFirstReverse
-        DepthFirst -> Find.DepthFirst
-        BreadthFirst -> Find.BreadthFirst
+        WideDepthFirstReverse -> Find.batched True . Find.reverseSiblings True
+        DepthFirst -> id
+        BreadthFirst -> Find.traversal Find.BreadthFirst . Find.batched True
 
 -- | Drop the first element of a stream if it is a 'Left'.
 dropLeftHead :: Monad m => Stream m (Either a b) -> Stream m (Either a b)
@@ -174,7 +174,7 @@ ls f dir = relocateErrors "find" "ls" entries
 
     opts = f defaultOptions
     follow = followRootSymlink True
-    order = Find.traversal (findTraversal (lsTraversal opts))
+    order = findTraversal (lsTraversal opts)
 
     entries
         | lsRecursive opts = findEither (follow . order) dir

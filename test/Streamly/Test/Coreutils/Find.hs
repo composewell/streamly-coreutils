@@ -26,10 +26,11 @@ import System.Directory
     , createFileLink
 #endif
     )
+import GHC.IO.Exception (IOErrorType(UnsupportedOperation), IOException(..))
 import System.FilePath (splitDirectories, (</>))
 import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Hspec
+import Test.Hspec hiding (parallel)
 
 #if !defined(CABAL_OS_WINDOWS)
 import Data.Char (chr)
@@ -38,12 +39,16 @@ import Data.Char (chr)
 import Streamly.Coreutils.Find
     ( FindOptions
     , Traversal(..)
+    , batched
     , find
     , findChunked
     , findEither
     , maxDepth
     , maxResults
     , minDepth
+    , ordered
+    , parallel
+    , reverseSiblings
     , traversal
 #if !defined(CABAL_OS_WINDOWS)
     , findByteChunked
@@ -169,18 +174,6 @@ withRest xs =
     | (Left d, rest) <- zip xs (drop 1 (scanr (:) [] xs))
     ]
 
--- | Each directory is listed before all paths under it.
-parentsFirst :: [Either FilePath FilePath] -> Bool
-parentsFirst xs =
-    and
-        [ not (any (isUnder d) earlier)
-        | (Left d, earlier) <- zip xs (scanl (flip (:)) [] paths)
-        ]
-
-    where
-
-    paths = map (either id id) xs
-
 isDfs :: [Either FilePath FilePath] -> Bool
 isDfs xs = and [prefix (isUnder d) rest | (d, rest) <- withRest xs]
 
@@ -204,25 +197,40 @@ isBfs xs =
 -- | The order guarantee of each traversal, if any.
 type Order = [Either FilePath FilePath] -> Bool
 
-traversals :: [(Traversal, String, Maybe Order)]
+traversals :: [(Options, String, Maybe Order)]
 traversals =
-    [ (DepthFirst, "DepthFirst", Just isDfs)
-    , (WideDepthFirstReverse, "WideDepthFirstReverse", Just isWideDfs)
-    , (BreadthFirst, "BreadthFirst", Just isBfs)
-    , (Interleaved, "Interleaved", Just parentsFirst)
-    , (DepthFirstParallel, "DepthFirstParallel", Nothing)
-    , ( DepthFirstParallelInterleaved
-      , "DepthFirstParallelInterleaved"
+    [ (id, "id", Just isDfs)
+#if MIN_VERSION_streamly_core(0,4,0)
+    , (batched True, "batched True", Just isWideDfs)
+#endif
+    , ( batched True . reverseSiblings True
+      , "batched True . reverseSiblings True"
+      , Just isWideDfs
+      )
+    , ( traversal BreadthFirst . batched True
+      , "traversal BreadthFirst . batched True"
+      , Just isBfs
+      )
+#if MIN_VERSION_streamly_core(0,4,0)
+    , ( traversal BreadthFirst . batched True . reverseSiblings True
+      , "traversal BreadthFirst . batched True . reverseSiblings True"
+      , Just isBfs
+      )
+#endif
+    , (parallel True, "parallel True", Nothing)
+    , ( traversal BreadthFirst . parallel True
+      , "traversal BreadthFirst . parallel True"
       , Nothing
       )
-    , (DepthFirstParallelOrdered, "DepthFirstParallelOrdered", Just isDfs)
+    , ( parallel True . ordered True
+      , "parallel True . ordered True"
+      , Just isDfs
+      )
     ]
 
-traversalSpec :: (Traversal, String, Maybe Order) -> Spec
-traversalSpec (t, name, order) =
-    describe ("traversal " ++ name) $ do
-        let f = traversal t
-
+traversalSpec :: (Options, String, Maybe Order) -> Spec
+traversalSpec (f, name, order) =
+    describe ("traversal options " ++ name) $ do
         it "findEither lists the tree, directories as Left" $
             withTempDir $ \root -> do
                 makeFixture root
@@ -247,6 +255,30 @@ traversalSpec (t, name, order) =
                         xs <- findEitherS f root
                         ok xs `shouldBe` True
 
+-- | Traversal options with no implementation.
+unsupported :: [(Options, String)]
+unsupported =
+    [ (traversal BreadthFirst, "traversal BreadthFirst")
+    , (reverseSiblings True, "reverseSiblings True")
+    , (parallel True . batched True, "parallel True . batched True")
+    , ( traversal BreadthFirst . parallel True . ordered True
+      , "traversal BreadthFirst . parallel True . ordered True"
+      )
+    ]
+
+unsupportedSpec :: Spec
+unsupportedSpec =
+    forM_ unsupported $ \(f, name) ->
+        forM_ variants $ \(vname, run) ->
+            it (vname ++ " (" ++ name ++ ") raises UnsupportedOperation") $
+                withTempDir $ \root -> do
+                    makeFixture root
+                    run f root `shouldThrow` isUnsupported
+
+    where
+
+    isUnsupported e = ioe_type e == UnsupportedOperation
+
 depthSpec :: Spec
 depthSpec =
     forM_ variants $ \(vname, run) ->
@@ -267,11 +299,8 @@ depthSpec =
                 check (minDepth 2 . maxDepth 3) 2 3
             it "negative depths are 0" $
                 check (minDepth (-1) . maxDepth (-1)) 0 0
-            it "with DepthFirstParallel" $
-                check
-                    (minDepth 1 . maxDepth 2 . traversal DepthFirstParallel)
-                    1
-                    2
+            it "with parallel True" $
+                check (minDepth 1 . maxDepth 2 . parallel True) 1 2
 
 maxResultsSpec :: Spec
 maxResultsSpec =
@@ -401,6 +430,7 @@ main = hspec $ do
             xs <- findChunkedS id root
             any null xs `shouldBe` False
     forM_ traversals traversalSpec
+    describe "unsupported traversal options" unsupportedSpec
     describe "depth limits" depthSpec
     describe "maxResults" maxResultsSpec
     describe "root" rootSpec

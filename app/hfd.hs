@@ -29,16 +29,24 @@ import qualified Streamly.FileSystem.Path as Path
 import Streamly.Coreutils.Find
     ( FindOptions
     , Traversal(..)
+    , batched
     , findByteChunked
     , followSymlinks
     , maxDepth
     , maxResults
     , minDepth
+    , ordered
+    , parallel
+    , reverseSiblings
     , traversal
     )
 
 data Config = Config
     { cfgTraversal :: Traversal
+    , cfgBatched :: Bool
+    , cfgReverseSiblings :: Bool
+    , cfgParallel :: Bool
+    , cfgOrdered :: Bool
     , cfgFollowSymlinks :: Bool
     , cfgMinDepth :: Maybe Int
     , cfgMaxDepth :: Maybe Int
@@ -56,25 +64,8 @@ parseNonNegativeInt str =
 
 traversalParser :: Parser Traversal
 traversalParser =
-    OA.flag' DepthFirst
-        (long "dfs" <> help "Depth-first traversal (default)")
-    OA.<|> OA.flag' WideDepthFirstReverse
-        (long "wide-dfs-reverse"
-            <> help "Wide depth-first traversal, last subdirectory first")
-    OA.<|> OA.flag' BreadthFirst
-        (long "bfs" <> help "Breadth-first traversal")
-    OA.<|> OA.flag' Interleaved
-        (long "interleaved" <> help "Serial interleaved traversal")
-    OA.<|> OA.flag' DepthFirstParallel
-        (long "dfs-parallel"
-            <> help "Parallel depth-first traversal, unordered")
-    OA.<|> OA.flag' DepthFirstParallelInterleaved
-        (long "dfs-parallel-interleaved"
-            <> help "Parallel depth-first traversal, interleaved")
-    OA.<|> OA.flag' DepthFirstParallelOrdered
-        (long "dfs-parallel-ordered"
-            <> help "Parallel depth-first traversal, in depth-first order")
-    OA.<|> OA.pure DepthFirst
+    OA.flag DepthFirst BreadthFirst
+        (long "bfs" <> help "Breadth-first traversal (default depth-first)")
 
 countOption :: String -> String -> Parser (Maybe Int)
 countOption name desc =
@@ -86,6 +77,17 @@ configParser :: Parser Config
 configParser =
     Config
         <$> traversalParser
+        <*> OA.switch
+                (long "batched"
+                    <> help "Read a directory to the end before any other")
+        <*> OA.switch
+                (long "reverse-siblings"
+                    <> help "With --batched, read subdirectories last first")
+        <*> OA.switch
+                (long "parallel" <> help "Read directories concurrently")
+        <*> OA.switch
+                (long "ordered"
+                    <> help "With --parallel, keep the serial order")
         <*> OA.switch
                 (OA.short 'L'
                     <> long "follow"
@@ -112,6 +114,10 @@ findOptions cfg =
     . maybe id maxDepth (cfgMaxDepth cfg)
     . maybe id minDepth (cfgMinDepth cfg)
     . followSymlinks (cfgFollowSymlinks cfg)
+    . ordered (cfgOrdered cfg)
+    . parallel (cfgParallel cfg)
+    . reverseSiblings (cfgReverseSiblings cfg)
+    . batched (cfgBatched cfg)
     . traversal (cfgTraversal cfg)
 
 main :: IO ()

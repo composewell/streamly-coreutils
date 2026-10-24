@@ -28,7 +28,7 @@ shell, or instead of assembling the same behaviour from `directory`,
   even with a serial traversal (see the table below).
 * Where a utility's work can be done concurrently, it is, or will be in a
   later release. `find` already has concurrent traversals, which read
-  several directories at the same time: `find (traversal Parallel)`
+  several directories at the same time: `find (parallel True)`
   instead of `find id`. Other utilities that walk a directory tree, such as
   recursive `ls` and `rm`, will get concurrent versions. The results are
   streams, so your own processing of them can be made concurrent too,
@@ -51,7 +51,7 @@ import qualified Streamly.Data.Stream as Stream
 
 import Streamly.Coreutils.Cp (cp)
 import Streamly.Coreutils.FileTest (test, isFile, size, and_)
-import Streamly.Coreutils.Find (Traversal(..), find, traversal)
+import Streamly.Coreutils.Find (find, parallel)
 import Streamly.Coreutils.Mkdir (mkdir, makeParents)
 import Streamly.Coreutils.Rm (rm, recursive, force)
 
@@ -65,7 +65,7 @@ main = do
 
     -- find src -type f -size +10k | wc -l
     -- with directories read concurrently
-    n <- find (traversal Parallel) [path|src|]
+    n <- find (parallel True) [path|src|]
         & Stream.filterM (\p -> test p (isFile `and_` size (> 10240)))
         & Stream.fold Fold.length
     print n
@@ -106,19 +106,21 @@ output to `/dev/null`. Symbolic links are not followed. The machine has
 | `find .` (GNU findutils 4.10.0) | serial | 0.68 s |
 | `fd -u -j1 .` (fd 10.5.0) | serial | 0.88 s |
 | `fd -u .` | 2 threads | 0.48 s |
-| `hfd --dfs .` | serial | 0.41 s |
+| `hfd .` | serial | 0.41 s |
 | `hfd --parallel .` | concurrent | 0.34 s |
 
 `hfd` is a small command line driver for `Streamly.Coreutils.Find`,
 included in this package. Build it with `cabal build -f hfd hfd`.
 
-`find` has eight traversals, selected with the `traversal` modifier, e.g.
-`find (traversal BreadthFirst)`. Five are serial: depth-first (the GNU
-`find` order and the default), depth-first using stream append, wide
-depth-first, breadth-first and interleaved. Three read directories
-concurrently: unordered, interleaved, and ordered, which gives the
-depth-first order. Streamly's stream combinators make each of them a few
-lines of code, so other orders can be added the same way.
+`find` takes one modifier per traversal choice: `traversal`
+(`DepthFirst`, the GNU `find` order and the default, or `BreadthFirst`),
+`batched` (read a directory to the end before any other),
+`reverseSiblings` (with `batched`, read the subdirectories last first),
+`parallel` (read directories concurrently) and `ordered` (with
+`parallel`, output in the serial order). For example,
+`find (traversal BreadthFirst . batched True)` lists the tree level by
+level. Streamly's stream combinators make each traversal a few lines of
+code, so other orders can be added the same way.
 
 ## Commands
 

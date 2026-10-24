@@ -7,34 +7,30 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Walk a directory tree, like GNU @find@ without an expression. The root of
--- the tree is the path given to a find function, what GNU @find@ calls the
--- starting point. It is not the file system root @/@. The output is the root
--- followed by every entry under it, each prefixed with the root. A root that
--- is not a directory is listed by itself.
+-- Walk a directory tree, like GNU @find@ without an expression. The find
+-- @root@ is the starting point that is the path given to a find function. The
+-- term @root@ in this context does not mean the file system root @/@. The
+-- output is the root followed by every entry under it, each prefixed with the
+-- root. A root that is not a directory is listed by itself.
 --
 -- Usage:
 --
--- >> find id dir                            -- find dir
--- >> find (maxDepth 1) dir                  -- find dir -maxdepth 1
--- >> find (minDepth 1 . maxDepth 1) dir     -- find dir -mindepth 1
---                                           --   -maxdepth 1
--- >> find (followSymlinks True) dir         -- find -L dir
--- >> find (followRootSymlink True) dir      -- find -H dir
--- >> find (traversal DepthFirstParallel) dir
---                                           -- unordered, concurrent
--- >> findEither id dir                      -- directories as Left
+-- >> find id dir                           -- find dir
+-- >> find (maxDepth 1) dir                 -- find dir -maxdepth 1
+-- >> find (minDepth 1 . maxDepth 1) dir    -- find dir -mindepth 1 -maxdepth 1
+-- >> find (followSymlinks True) dir        -- find -L dir
+-- >> find (followRootSymlink True) dir     -- find -H dir
+-- >> find (parallel True) dir             -- unordered, concurrent traversal
+-- >> find (traversal BreadthFirst . batched True) dir  -- level by level
+-- >> findEither id dir                     -- directories Left, files Right
 --
--- Symbolic links are listed but not followed: a symlink to a directory is
--- reported as an entry and its target is not traversed, like the GNU find
--- default (@find -P@). Use 'followSymlinks' to follow them.
+-- Symbolic links are listed but not followed by default: a symlink to a
+-- directory is reported as an entry and its target is not traversed, like the
+-- GNU find default (@find -P@). Use 'followSymlinks' to follow them.
 --
--- Caveats, compared to GNU @find@:
---
--- * Entries are not sorted. Within a directory they are in the order the
---   operating system returns them, as with GNU @find@.
--- * A directory that cannot be read, e.g. for lack of permission, ends the
---   stream with an exception. GNU @find@ reports it and continues.
+-- Caveats, compared to GNU @find@: A directory that cannot be read, e.g. for
+-- lack of permission, ends the stream with an exception. GNU @find@ reports it
+-- and continues.
 --
 -- The @hfd@ executable in this package is a command line driver for
 -- 'findByteChunked'. To compare its speed with GNU @find@ and Rust @fd@:
@@ -58,6 +54,10 @@ module Streamly.Coreutils.Find
     , FindOptions
     , Traversal (..)
     , traversal
+    , batched
+    , reverseSiblings
+    , parallel
+    , ordered
     , followSymlinks
     , followRootSymlink
     , minDepth
@@ -67,6 +67,7 @@ module Streamly.Coreutils.Find
 where
 
 import Data.Bifunctor (bimap)
+import Data.List (intercalate)
 import Data.Maybe
     ( fromMaybe
 #if !defined(CABAL_OS_WINDOWS)
@@ -74,6 +75,7 @@ import Data.Maybe
 #endif
     )
 import Foreign.C.Error (eNOENT)
+import GHC.IO.Exception (IOErrorType(UnsupportedOperation))
 import Streamly.Data.Stream.Prelude (Stream)
 import Streamly.FileSystem.DirIO (ReadOptions)
 import Streamly.FileSystem.Path (Path)
@@ -86,8 +88,14 @@ import qualified Streamly.FileSystem.DirIO as DirIO
 import qualified Streamly.FileSystem.Path as Path
 #endif
 import qualified Streamly.Internal.Data.Stream as Stream
-    ( altBfsConcatIterate
-    , bfsConcatIterate
+    ( bfsConcatIterate
+#if MIN_VERSION_streamly_core(0,4,0)
+    , bfsConcatIterateRev
+    , wideDfsConcatIterate
+    , wideDfsConcatIterateRev
+#else
+    , altBfsConcatIterate
+#endif
     , takeEndBy
 #if !defined(CABAL_OS_WINDOWS)
     , postscanlMaybe
@@ -95,7 +103,7 @@ import qualified Streamly.Internal.Data.Stream as Stream
 #endif
     )
 import qualified Streamly.Internal.Data.StreamK as StreamK
-    (concatIterateWith, mergeIterateWith)
+    (concatIterateWith)
 import qualified Streamly.Internal.FileSystem.DirIO as Dir
     (readEitherChunks, readEitherPaths)
 import qualified Streamly.Internal.FileSystem.Path as Path
@@ -118,7 +126,7 @@ import qualified Streamly.Internal.FileSystem.Posix.ReadDir as Dir
 #endif
 #endif
 
-import Streamly.Coreutils.Error (errnoError)
+import Streamly.Coreutils.Error (commandError, errnoError)
 import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 
 -- = Design notes
@@ -126,42 +134,53 @@ import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 -- * Timings of listing a sample tree with each traversal, from the
 --   streamly-examples ListDir example. Rust fd (concurrent) took 150 ms.
 --
---   > Traversal                       find   findChunked   findByteChunked
---   > DepthFirst                      204    164           154
---   > WideDepthFirstReverse           264    264           154
---   > BreadthFirst                    274    264           154
---   > Interleaved                     304    194           154
---   > DepthFirstParallel              174    124            94
---   > DepthFirstParallelInterleaved   224    134            94
---   > DepthFirstParallelOrdered       234    174           154
+--   > Traversal options                         find  findChunked  ByteChunked
+--   > id                                        204   164          154
+--   > batched True . reverseSiblings True       264   264          154
+--   > traversal BreadthFirst . batched True     274   264          154
+--   > StreamK interleave (dropped)              304   194          154
+--   > parallel True                             174   124           94
+--   > traversal BreadthFirst . parallel True    224   134           94
+--   > parallel True . ordered True              234   174          154
 --
--- * DepthFirst appends StreamK streams (StreamK.concatIterateWith
+-- * The default traversal appends StreamK streams (StreamK.concatIterateWith
 --   StreamK.append). Stream.concatIterate gives the same order but took 274,
 --   264 and 154 ms; it is kept commented out in iterateWith for benchmarking.
 --
--- * A parallel traversal is named by the serial order it is built on,
---   followed by the concurrency mode: DepthFirstParallel,
---   DepthFirstParallelInterleaved and DepthFirstParallelOrdered use
---   parConcatIterate, a concurrent concatIterate. Parallel breadth first
---   traversals can be added later as BreadthFirstParallel and
---   BreadthFirstParallelOrdered. A separate modifier for the concurrency
---   mode was rejected because not every combination of order and mode has
---   an implementation, e.g. WideDepthFirstReverse has no parallel version.
+-- * The traversal options follow the axes of the tree traversal notes in
+--   the streamly repository (docs/Developer/tree-traversal.md): expansion
+--   order (traversal), batching (batched), sibling order (reverseSiblings)
+--   and concurrency (parallel, ordered). One constructor per traversal,
+--   each name combining several choices (WideDepthFirstReverse,
+--   DepthFirstParallelOrdered), was replaced because adding the remaining
+--   orders multiplied the constructors. Not every combination has a
+--   streamly combinator; iterateWith maps the implemented ones and the
+--   others raise an UnsupportedOperation exception when the stream runs.
 --
--- * For the unordered DepthFirstParallel, "depth first" describes how
---   directories are scheduled, not the output order. Even the scheduling
---   depends on the queue of the parConcatIterate channel ("The channel q
---   should be FIFO for DFS, otherwise it is BFS" in streamly). The
---   alternative considered was to name it plain Parallel, because it
---   guarantees no order, and to use an order prefix only for the ordered
---   variants and for a parallel traversal that really schedules breadth
---   first. DepthFirstParallel was chosen so that a future
---   BreadthFirstParallel has a matching name.
+-- * Post order (find -depth), the remaining axis, is not exported: no
+--   streamly combinator implements it yet.
+--
+-- * StreamK.mergeIterateWith StreamK.interleave was dropped. It merges the
+--   streams pairwise in a balanced tree, so the output is not a useful
+--   order, it keeps the partly read directories open and it was the
+--   slowest traversal. traversal BreadthFirst . parallel True gives the fair
+--   progress across subtrees it was meant for.
+--
+-- * For the unordered parallel traversals, "depth first" and "breadth
+--   first" describe how directories are scheduled, not the output order.
+--   The scheduling is set by the work queue of the parConcatIterate
+--   channel. The default channel has a LIFO queue (enqueueLIFO in
+--   Channel/Append.hs): a worker continues with the directory queued last,
+--   which is depth first. With interleaved True the channel has a FIFO
+--   queue (enqueueFIFO in Channel/Interleave.hs) and runs the pending
+--   directories round robin, which is breadth first. The comment "The
+--   channel q should be FIFO for DFS, otherwise it is BFS" in
+--   parConcatIterate has FIFO and LIFO the other way round.
 --
 -- * The serial traversals use the concat tree iterations, not the unfold
 --   ones (unfoldIterateDfs, bfsUnfoldIterate, ...). In streamly-core 0.3 the
 --   unfold iterations open every pending directory as soon as it is emitted,
---   so BFS can exceed the open file limit.
+--   so a breadth first traversal can exceed the open file limit.
 --
 -- * Each element carries its depth, the root being 0, to implement minDepth
 --   and maxDepth. A directory at maxDepth is listed but not read.
@@ -181,58 +200,55 @@ import Streamly.Coreutils.FileTest (isDir, pathExists, test, testl)
 -- Options
 -------------------------------------------------------------------------------
 
--- | The order in which the tree is visited. All serial traversals list a
--- directory before its contents. For a tree in which directory @1@ contains
--- @2@ and @3@, @2@ contains @4@, @3@ contains @5@, @4@ contains @7@ and @5@
--- contains @6@, with entries listed in that order:
---
--- +-----------------------------+---------------------+
--- | Traversal                   | Output              |
--- +=============================+=====================+
--- | 'DepthFirst'                | 1, 2, 4, 7, 3, 5, 6 |
--- +-----------------------------+---------------------+
--- | 'DepthFirstParallelOrdered' | 1, 2, 4, 7, 3, 5, 6 |
--- +-----------------------------+---------------------+
--- | 'WideDepthFirstReverse'     | 1, 2, 3, 5, 6, 4, 7 |
--- +-----------------------------+---------------------+
--- | 'BreadthFirst'              | 1, 2, 3, 4, 5, 7, 6 |
--- +-----------------------------+---------------------+
---
--- 'Interleaved', 'DepthFirstParallel' and 'DepthFirstParallelInterleaved' do
--- not guarantee an order.
+-- | The order in which the pending directories are read.
 data Traversal =
       DepthFirst
-      -- ^ Pre-order depth first, the order of GNU @find@. Keeps the
-      -- directories on the current path open; a very deep tree can exceed
-      -- the open file limit.
-    | WideDepthFirstReverse
-      -- ^ List all entries of a directory, then each of its subdirectories
-      -- in turn, recursively, the last listed first. Keeps one directory
-      -- open, and the subdirectories not yet read along the current path in
-      -- memory.
+      -- ^ Depth first: the directory found last is read next. Keeps the
+      -- directories on the current path open, unless 'batched'; a very deep
+      -- tree can exceed the open file limit.
     | BreadthFirst
-      -- ^ Level by level: all entries at depth one, then all at depth two,
-      -- and so on. Keeps one directory open, and the directories of the next
-      -- level in memory, which can be many for a wide tree.
-    | Interleaved
-      -- ^ Interleave the entries of sibling directories, so that one large
-      -- directory does not delay the others.
-    | DepthFirstParallel
-      -- ^ Read directories concurrently, scheduled depth first, and emit
-      -- entries as soon as they are read. The fastest; the output order is
-      -- not deterministic.
-    | DepthFirstParallelInterleaved
-      -- ^ Like 'DepthFirstParallel' but schedules the directories fairly, so
-      -- that one large subtree does not delay the others.
-    | DepthFirstParallelOrdered
-      -- ^ Read directories concurrently, but emit the entries in the
-      -- 'DepthFirst' order.
+      -- ^ Breadth first: the directory found first is read next.
 
 -- | Options for the find functions. Modify the defaults with 'traversal',
--- 'followSymlinks', 'followRootSymlink', 'minDepth', 'maxDepth' and
--- 'maxResults'.
+-- 'batched', 'reverseSiblings', 'parallel', 'ordered', 'followSymlinks',
+-- 'followRootSymlink', 'minDepth', 'maxDepth' and 'maxResults'.
+--
+-- The traversal options choose the order in which the tree is visited. A
+-- directory is listed before its contents in every order. For the
+-- following tree, with the entries of each directory returned by the
+-- operating system in the order shown:
+--
+-- > 1
+-- > |-- 2
+-- > |   |-- 4
+-- > |   |   `-- 8
+-- > |   `-- 5
+-- > `-- 3
+-- >     |-- 6
+-- >     |   `-- 9
+-- >     `-- 7
+--
+-- * @id@: 1, 2, 4, 8, 5, 3, 6, 9, 7
+-- * @batched True@: 1, 2, 3, 4, 5, 8, 6, 7, 9
+-- * @batched True . reverseSiblings True@: 1, 2, 3, 6, 7, 9, 4, 5, 8
+-- * @traversal BreadthFirst . batched True@: 1, 2, 3, 4, 5, 6, 7, 8, 9
+-- * @traversal BreadthFirst . batched True . reverseSiblings True@:
+--   1, 2, 3, 6, 7, 4, 5, 8, 9
+-- * @parallel True . ordered True@: 1, 2, 4, 8, 5, 3, 6, 9, 7
+--
+-- @parallel True@ and @traversal BreadthFirst . parallel True@ do not
+-- guarantee an order. @batched True@ without 'reverseSiblings', and
+-- @traversal BreadthFirst . batched True . reverseSiblings True@, need
+-- streamly-core 0.4. Other
+-- combinations of the traversal options are not implemented: the stream
+-- raises an exception ('GHC.IO.Exception.UnsupportedOperation') when it
+-- runs.
 data FindOptions = FindOptions
     { findTraversal :: Traversal
+    , findBatched :: Bool
+    , findReverseSiblings :: Bool
+    , findParallel :: Bool
+    , findOrdered :: Bool
     , findFollowSymlinks :: Bool
     , findFollowRootSymlink :: Bool
     , findMinDepth :: Int
@@ -244,6 +260,10 @@ defaultOptions :: FindOptions
 defaultOptions =
     FindOptions
         { findTraversal = DepthFirst
+        , findBatched = False
+        , findReverseSiblings = False
+        , findParallel = False
+        , findOrdered = False
         , findFollowSymlinks = False
         , findFollowRootSymlink = False
         , findMinDepth = 0
@@ -251,11 +271,47 @@ defaultOptions =
         , findMaxResults = Nothing
         }
 
--- | The order in which the tree is visited.
+-- | Read the pending directories depth first or breadth first. Serial
+-- 'BreadthFirst' needs @batched True@.
 --
 -- Default (without this modifier): 'DepthFirst', the order of GNU @find@.
 traversal :: Traversal -> FindOptions -> FindOptions
 traversal t cfg = cfg {findTraversal = t}
+
+-- | Read a directory to the end before reading any other directory, and
+-- output all its entries together. Keeps one directory open at a time, and
+-- the directories not yet read in memory: those along the current path for
+-- 'DepthFirst', those of the next level for 'BreadthFirst'.
+--
+-- Default (without this modifier): False, a subdirectory is read as soon as
+-- it is found, and the rest of its parent directory after it.
+batched :: Bool -> FindOptions -> FindOptions
+batched x cfg = cfg {findBatched = x}
+
+-- | With 'batched', read the subdirectories of a batch in the reverse of the
+-- order they were found. Faster than the forward order.
+--
+-- Default (without this modifier): False, the order they were found.
+reverseSiblings :: Bool -> FindOptions -> FindOptions
+reverseSiblings x cfg = cfg {findReverseSiblings = x}
+
+-- | Read directories concurrently. Entries are output as soon as they are
+-- read, so the output order is not deterministic, unless 'ordered'. With
+-- 'DepthFirst' each worker continues with the directory it found last. With
+-- 'BreadthFirst' the pending directories are read in turn, so one large
+-- subtree does not delay the others. Not implemented with 'batched'.
+--
+-- Default (without this modifier): False, one directory is read at a time.
+parallel :: Bool -> FindOptions -> FindOptions
+parallel x cfg = cfg {findParallel = x}
+
+-- | With 'parallel', output the entries in the order of the serial
+-- traversal. Implemented for 'DepthFirst' only. Has no effect on a serial
+-- traversal.
+--
+-- Default (without this modifier): False.
+ordered :: Bool -> FindOptions -> FindOptions
+ordered x cfg = cfg {findOrdered = x}
 
 -- | Descend into directories reached through symbolic links, like @find -L@.
 -- This includes a symbolic link given as the root (starting point).
@@ -328,31 +384,69 @@ readOptions opts =
     . DirIO.ignoreInaccessible True
 #endif
 
+-- | The traversal options as text, for error messages.
+traversalName :: FindOptions -> String
+traversalName opts =
+    intercalate ", "
+        [ case findTraversal opts of
+            DepthFirst -> "DepthFirst"
+            BreadthFirst -> "BreadthFirst"
+        , if findBatched opts then "batched" else "interleaved"
+        , if findReverseSiblings opts then "reverse siblings" else "forward"
+        , if not (findParallel opts)
+          then "serial"
+          else if findOrdered opts
+          then "parallel ordered"
+          else "parallel unordered"
+        ]
+
 -- | Expand a tree from the given roots using @next@ to produce the children
--- of an element, 'Nothing' for a leaf.
+-- of an element, 'Nothing' for a leaf. A combination of the traversal
+-- options with no implementation gives a stream that raises an exception.
 {-# INLINE iterateWith #-}
 iterateWith ::
-       Traversal
+       FindOptions
     -> (a -> Maybe (Stream IO a))
     -> Stream IO a
     -> Stream IO a
-iterateWith t next =
-    case t of
-        -- Slower than the StreamK append, see the design notes.
-        -- DepthFirst -> Stream.concatIterate next
-        DepthFirst -> viaK (StreamK.concatIterateWith StreamK.append)
-        -- XXX Add WideDepthFirst using wideDfsConcatIterate from
-        -- streamly-core 0.4.
-        WideDepthFirstReverse -> Stream.altBfsConcatIterate next
-        BreadthFirst -> Stream.bfsConcatIterate next
-        Interleaved -> viaK (StreamK.mergeIterateWith StreamK.interleave)
-        DepthFirstParallel -> Stream.parConcatIterate id parNext
-        DepthFirstParallelInterleaved ->
-            Stream.parConcatIterate (Stream.interleaved True) parNext
-        DepthFirstParallelOrdered ->
-            Stream.parConcatIterate (Stream.ordered True) parNext
+iterateWith opts next
+    | findParallel opts =
+        case (findTraversal opts, batching, findOrdered opts) of
+            (DepthFirst, (False, False), False) ->
+                Stream.parConcatIterate id parNext
+            (BreadthFirst, (False, False), False) ->
+                Stream.parConcatIterate (Stream.interleaved True) parNext
+            (DepthFirst, (False, False), True) ->
+                Stream.parConcatIterate (Stream.ordered True) parNext
+            _ -> unsupported
+    | otherwise =
+        case (findTraversal opts, batching) of
+            -- Slower than the StreamK append, see the design notes.
+            -- (DepthFirst, (False, False)) -> Stream.concatIterate next
+            (DepthFirst, (False, False)) ->
+                viaK (StreamK.concatIterateWith StreamK.append)
+#if MIN_VERSION_streamly_core(0,4,0)
+            (DepthFirst, (True, False)) -> Stream.wideDfsConcatIterate next
+            (DepthFirst, (True, True)) -> Stream.wideDfsConcatIterateRev next
+            (BreadthFirst, (True, True)) -> Stream.bfsConcatIterateRev next
+#else
+            (DepthFirst, (True, True)) -> Stream.altBfsConcatIterate next
+#endif
+            (BreadthFirst, (True, False)) -> Stream.bfsConcatIterate next
+            _ -> unsupported
 
     where
+
+    batching = (findBatched opts, findReverseSiblings opts)
+
+    unsupported _ =
+        Stream.fromEffect
+            $ ioError
+            $ commandError
+                UnsupportedOperation
+                "find"
+                ("traversal not implemented: " ++ traversalName opts)
+                Nothing
 
     nextK = maybe StreamK.nil StreamK.fromStream . next
 
@@ -403,7 +497,7 @@ walk ::
 walk opts dirRoot fileRoot readRoot readDir root =
       fmap snd
     $ Stream.filter ((>= findMinDepth opts) . fst)
-    $ iterateWith (findTraversal opts) next
+    $ iterateWith opts next
     $ Stream.fromEffect (tagRoot <$> isDirRoot opts root)
 
     where
@@ -617,7 +711,7 @@ findByteChunked f root =
 
     readTree =
           Stream.catRights
-        $ iterateWith (findTraversal opts) next
+        $ iterateWith opts next
         $ if Path.hasTrailingSeparator root
           then Stream.concatMapM listRoot (Dir.readEitherPaths ro root)
           else Stream.fromPure (Left [root])
