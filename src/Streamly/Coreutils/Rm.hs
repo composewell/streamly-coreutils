@@ -22,7 +22,7 @@
 --
 -- Equivalent to @rm -f@, removes readonly files as well:
 --
---  >>> rmf = rm (withForce Force)
+--  >>> rmf = rm (force True)
 --
 -- Equivalent to @rm -r@, removes directories with writable files:
 --
@@ -31,16 +31,16 @@
 -- Equivalent to @rm -rf@, removes directories with readonly files as well,
 -- directories must have write permissions:
 --
---  >>> rmrf = rm (recursive True . withForce Force)
+--  >>> rmrf = rm (recursive True . force True)
 --
 -- Removes directories without write permissions as well:
 --
---  >>> rmrff = rm (recursive True . withForce FullForce)
+--  >>> rmrff = rm (recursive True . force True . makeDirsWritable True)
 --
 -- Equivalent to @rm -rf dirSymLink/@, removing the contents but leaving the
 -- directory intact:
 --
---  >>> rmcf = rmContents Force
+--  >>> rmcf = rmContents (force True)
 --
 -- = Comparison with Posix @rm@
 --
@@ -73,20 +73,28 @@ module Streamly.Coreutils.Rm
 
     -- * Options
     , RmOptions
-    , RmForce(..)
-    , withForce
-    , recursive
-
-    -- * Deprecated
     , force
+    , makeDirsWritable
+    , recursive
     )
 where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (unless, when)
 import Foreign.C.Error (eACCES, eISDIR, eNOENT, eNOTDIR)
+#if !defined(CABAL_OS_WINDOWS)
+import Streamly.Coreutils.Chmod (Perm(..), addOwner, chmod)
+#endif
 import System.IO.Error (ioeSetErrorString)
 import Streamly.Coreutils.FileTest
-    (pathExists, test, testl, isDir, isWritableByMode)
+    ( pathExists
+    , test
+    , testl
+    , isDir
+    , isWritableByMode
+#if !defined(CABAL_OS_WINDOWS)
+    , isWritable
+#endif
+    )
 #if defined(CABAL_OS_WINDOWS)
 import Streamly.Coreutils.FileTest.Windows (isDirSymLink)
 #endif
@@ -94,65 +102,114 @@ import System.Directory
     ( getPermissions
     , removeFile
     , removeDirectory
-#if !defined(CABAL_OS_WINDOWS)
-    , removeDirectoryRecursive
-#endif
+#if defined(CABAL_OS_WINDOWS)
     , removePathForcibly
+#else
+    , readable
+    , removeDirectoryRecursive
+    , searchable
+#endif
     , setPermissions
-    , listDirectory
     , writable
     )
-import System.FilePath ((</>))
 import Streamly.FileSystem.Path (Path)
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.FileSystem.Path as Path
 
-import Streamly.Coreutils.Error (errnoError)
+#if !defined(CABAL_OS_WINDOWS)
+import Streamly.Coreutils.Dirname (dirname)
+#endif
+import Streamly.Coreutils.Error (errnoError, relocateErrors)
+import Streamly.Coreutils.Find
+    (find, followRootSymlink, maxDepth, minDepth)
 
--- TODO: backward compatibility for Rm, None, Nuke changes.
-
--- | Defines how @rm@ handles missing paths and permission obstacles.
+-- = Design notes
 --
--- On Unix, deleting a file requires write permission on its parent directory,
--- not on the file itself. On Windows, it requires the file's own read-only
--- attribute to be unset.
-data RmForce
-    = NoForce
-    -- ^ Default. Errors if a path is missing. Errors if a file or directory
-    -- is write-protected (on Unix: checked via mode bits; on Windows: checked
-    -- via the read-only attribute).
-    | Force
-    -- ^ Mirrors @rm -f@. Silently ignores missing paths. Deletes
-    -- write-protected files and directories where the OS permits it — that
-    -- is, where the current user has write permission on the parent directory
-    -- (Unix) or is not blocked by ACLs (Windows). Errors only on genuine
-    -- permission failures.
-    | FullForce
-    -- ^ Extends @Force@. In recursive mode, also chmods directories to
-    -- ensure their contents can be traversed and removed, even if the
-    -- directory itself is write-protected. On Windows this is equivalent
-    -- to @Force@ since directory mode bits are not enforced.
+-- * Force options. GNU @rm -f@ is 'force' :: Bool, the same name and type
+--   as @Ln.force@. 'force' is ignoreMissing plus "do not refuse a
+--   write-protected entry"; it applies to each file or directory being
+--   removed and does not change its mode on Unix. 'makeDirsWritable'
+--   applies to the contents of the directories inside the tree being
+--   removed. The two are independent, and all four combinations are
+--   meaningful.
+--
+-- * Rejected: a sum type @NoForce | Force | FullForce@. @force Force@
+--   repeats the word, and @withForce Force@ was the only modifier in the
+--   package with a @with@ prefix. Numbered levels (@ForceLevel1@) are
+--   opaque. Two exclusive modifiers (@force@, @fullForce@) setting one field
+--   do not show in the type that they are exclusive.
+--
+-- * The name 'makeDirsWritable' says that permissions are changed, unlike
+--   @ignoreDirPermissions@. @forceDirs@ reads like "remove directories",
+--   and @forceRecursive@ / @forceTree@ suggest that it implies 'recursive'.
+--
+-- * 'makeDirsWritable' never changes the parent of the path. A change to
+--   the parent would outlive the call and weaken a protection its owner
+--   chose; GNU @rm@ does not change it either. Use chmod explicitly.
+--
+-- * 'makeDirsWritable' checks that the parent is writable before changing
+--   any permission. Without the check, removing @a/b@ with @a@
+--   write-protected empties @b@, leaves @b@ writable, and then fails with
+--   EACCES (this is what 'removePathForcibly' does). The check is best
+--   effort: it does not cover the sticky bit or a concurrent change.
 
 data RmOptions = RmOptions
-    { rmForce :: RmForce
+    { rmForce :: Bool
+    , rmMakeDirsWritable :: Bool
     , rmRecursive :: Bool
     }
 
 defaultConfig :: RmOptions
 defaultConfig = RmOptions
-    { rmForce = NoForce
+    { rmForce = False
+    , rmMakeDirsWritable = False
     , rmRecursive = False
     }
 
--- | Default is 'NoForce'. See 'RmForce'.
-withForce :: RmForce -> RmOptions -> RmOptions
-withForce val cfg = cfg { rmForce = val }
+-- | Like @rm -f@. This combines two behaviours:
+--
+-- * ignore missing paths, and
+-- * remove write-protected files and directories instead of raising an
+--   exception. On Unix, the mode of the file or directory is not changed:
+--   removing an entry needs write permission on its parent, not on the
+--   entry. On Windows, the read-only attribute is cleared, because it
+--   prevents deletion.
+--
+-- Removal can still fail with the error of the system call, e.g. without
+-- write permission on the parent (Unix) or when blocked by an ACL
+-- (Windows). 'force' does not make the contents of a write-protected
+-- directory removable; that is 'makeDirsWritable'.
+--
+-- Default (without this modifier): 'False', raise an exception for a
+-- missing path or a write-protected file or directory.
+force :: Bool -> RmOptions -> RmOptions
+force opt cfg = cfg { rmForce = opt }
 
-{-# DEPRECATED force "Use withForce instead" #-}
-force :: RmForce -> RmOptions -> RmOptions
-force = withForce
+-- | In recursive mode, give the owner read, write and execute permission on
+-- the directories in the tree being removed, so that their contents can be
+-- removed. Unlike 'force', which applies to each file or directory being
+-- removed, this applies to the contents of a directory. The parent
+-- directory of the path is not changed: if it is not writable, an exception
+-- with errno @EACCES@ is raised before any permission is changed. The check
+-- does not cover the sticky bit or a concurrent change of the parent. If
+-- removal fails later, directories that were changed keep their new
+-- permissions.
+--
+-- Does not imply 'force': without it, a missing path or a write-protected
+-- file still raises an exception. Has no effect without 'recursive' 'True',
+-- or on Windows, where a directory's read-only attribute does not prevent
+-- removing its contents.
+--
+-- Default (without this modifier): 'False', raise an exception for a
+-- write-protected directory.
+makeDirsWritable :: Bool -> RmOptions -> RmOptions
+makeDirsWritable opt cfg = cfg { rmMakeDirsWritable = opt }
 
--- | Default is 'False'. If 'True', 'rm' removes directories and their trees.
--- Symbolic links are never followed during recursive traversal.
+-- | If 'True', 'rm' removes directories and their trees. Symbolic links are
+-- never followed during recursive traversal.
+--
+-- Default (without this modifier): 'False', raise an exception for a
+-- directory.
 recursive :: Bool -> RmOptions -> RmOptions
 recursive opt cfg = cfg { rmRecursive = opt }
 
@@ -172,41 +229,86 @@ withWriteProtectionCheck path f msg = do
             $ ioeSetErrorString (errnoError "rm" eACCES path)
             $ "write-protected " ++ msg
 
-rmdir :: RmOptions -> Path -> IO ()
-rmdir options path =
-    let pathStr = Path.toString path
-     in
-    case rmRecursive options of
-        False -> ioError (errnoError "rm" eISDIR path)
-        True ->
-            case rmForce options of
-                FullForce -> removePathForcibly pathStr
-                Force ->
-#if defined(CABAL_OS_WINDOWS)
-                    -- On Unix removePathForcibly makes directories writable to
-                    -- facilitate removal of files in them, but on Windows
-                    -- directory attributes do not affect file deletion, it
-                    -- changes the FILE_ATTRIBUTE_READONLY on files to make
-                    -- them deletable. This is exactly what we want for the
-                    -- Force option. So FullForce and Force are essentially
-                    -- same on Windows.
-                    removePathForcibly pathStr
-#else
-                    removeDirectoryRecursive pathStr
-#endif
-                NoForce -> do
-                    contents <- listDirectory pathStr
-                    withWriteProtectionCheck path (const (pure ())) "directory"
-                    forM_ contents $ \item -> do
-                        itemPath <- Path.fromString (pathStr </> item)
-                        rm (withForce (rmForce options) . recursive True)
-                           itemPath
-                    withWriteProtectionCheck
-                        path
-                        (removeDirectory . Path.toString)
-                        "directory"
+#if !defined(CABAL_OS_WINDOWS)
+-- | Raise an exception with errno @EACCES@ if the directory is not writable.
+-- Used by 'makeDirsWritable' before changing any permission.
+requireWritableDir :: Path -> IO ()
+requireWritableDir dir = do
+    ok <- test dir isWritable
+    unless ok
+        $ ioError
+        $ ioeSetErrorString (errnoError "rm" eACCES dir)
+            "directory not writable"
 
--- XXX implement and use "chmod"
+-- | Give the owner read, write and execute permission on a directory, like
+-- @chmod u+rwx@. The mode is not changed if the directory is already
+-- accessible, e.g. through its group permissions, so that a directory owned
+-- by another user does not fail with EPERM.
+makeDirAccessible :: Path -> IO ()
+makeDirAccessible dir = do
+    perms <- getPermissions (Path.toString dir)
+    unless (readable perms && writable perms && searchable perms)
+        $ chmod id (addOwner [Read, Write, Exec]) dir
+#endif
+
+-- The directory listing is read completely, and the directory closed, before
+-- any entry is removed. Removing entries while the stream is still reading
+-- the directory has two problems:
+--
+-- * POSIX does not specify whether readdir returns every remaining entry
+--   when entries are unlinked during the scan. Some filesystems (NFS, older
+--   macOS HFS+) skip entries, and removeDirectory then fails with ENOTEMPTY.
+-- * removePath recurses into subdirectories, so a streaming traversal keeps
+--   one directory descriptor open per level of depth, and a deep tree can
+--   exceed the process limit on open file descriptors (EMFILE).
+--
+-- Reading the listing into a list costs the same memory as listDirectory.
+--
+-- The root symlink is followed so that rmContents empties the target of a
+-- symlink to a directory. rmdir passes only a directory that is not a
+-- symlink.
+
+-- | Remove each entry of a directory with the same options.
+removeEntries :: RmOptions -> Path -> IO ()
+removeEntries options dir = do
+    entries <- Stream.toList (relocateErrors "find" "rm" (find opts dir))
+    mapM_ (removePath options) entries
+
+    where
+
+    opts = followRootSymlink True . minDepth 1 . maxDepth 1
+
+rmdir :: RmOptions -> Path -> IO ()
+rmdir options path
+    | not (rmRecursive options) = ioError (errnoError "rm" eISDIR path)
+#if !defined(CABAL_OS_WINDOWS)
+    | rmMakeDirsWritable options = do
+        makeDirAccessible path
+        removeEntries options path
+        removeDirectory pathStr
+#endif
+    | rmForce options =
+#if defined(CABAL_OS_WINDOWS)
+        -- On Unix removePathForcibly makes directories writable to
+        -- facilitate removal of files in them, but on Windows directory
+        -- attributes do not affect file deletion, it changes the
+        -- FILE_ATTRIBUTE_READONLY on files to make them deletable. This is
+        -- exactly what we want for the force option.
+        removePathForcibly pathStr
+#else
+        removeDirectoryRecursive pathStr
+#endif
+    | otherwise = do
+        withWriteProtectionCheck path (const (pure ())) "directory"
+        removeEntries options path
+        withWriteProtectionCheck
+            path
+            (removeDirectory . Path.toString)
+            "directory"
+
+    where
+
+    pathStr = Path.toString path
 
 -- | Make a path writable by the owner. Used on Windows before deletion to
 -- clear FILE_ATTRIBUTE_READONLY. Compiled on all platforms so that it is
@@ -222,21 +324,20 @@ rmfile :: RmOptions -> Path -> IO ()
 rmfile options path =
     let pathStr = Path.toString path
      in
-    case rmForce options of
-        FullForce -> removePathForcibly pathStr
-        NoForce   ->
-            withWriteProtectionCheck
-                path
-                (removeFile . Path.toString)
-                "regular file"
-        Force     -> do
+    if rmForce options
+    then do
 #if defined(CABAL_OS_WINDOWS)
-            -- On Windows, file deletability is tied to the file's own
-            -- read-only attribute (unlike POSIX where only parent-dir write
-            -- matters). Force must clear it before unlinking.
-            _setWritable path
+        -- On Windows, file deletability is tied to the file's own
+        -- read-only attribute (unlike POSIX where only parent-dir write
+        -- matters). Force must clear it before unlinking.
+        _setWritable path
 #endif
-            removeFile pathStr
+        removeFile pathStr
+    else
+        withWriteProtectionCheck
+            path
+            (removeFile . Path.toString)
+            "regular file"
 
 performRm :: RmOptions -> Path -> IO ()
 performRm options path = do
@@ -249,21 +350,31 @@ performRm options path = do
         dirSymLink <- testl path isDirSymLink
         if dirSymLink
         then do
-            case rmForce options of
-                FullForce -> _setWritable path
-                Force     -> _setWritable path
-                NoForce   -> return ()
+            when (rmForce options) $ _setWritable path
             removeDirectory (Path.toString path)
         else rmfile options path
 #else
         rmfile options path
 #endif
 
+-- | 'rm' without the parent check of 'makeDirsWritable', for the entries of
+-- a tree whose parent is already known to be writable.
+removePath :: RmOptions -> Path -> IO ()
+removePath options path = do
+    -- Note this test is required not just for existence check but also so that
+    -- we fail if there is no permission to access the path.
+    --
+    found <- testl path pathExists
+    if found
+    then performRm options path
+    else unless (rmForce options) $ ioError (errnoError "rm" eNOENT path)
+
 -------------------------------------------------------------------------------
 -- API
 -------------------------------------------------------------------------------
 
--- | Removes a file, symlink, or directory.
+-- | Removes a file, symlink, or directory. Pass 'id' for defaults; each
+-- modifier documents its own default.
 --
 -- This function never follows symbolic links. If the path is a symlink,
 -- the link itself is removed regardless of whether it points to a
@@ -271,30 +382,30 @@ performRm options path = do
 --
 -- Raises an 'IOError' for each of the following, like GNU @rm@:
 --
--- * a missing path under 'NoForce', with errno @ENOENT@
+-- * a missing path without 'force', with errno @ENOENT@
 --   ('System.IO.Error.isDoesNotExistError'),
--- * a directory when 'recursive' is 'False' (the default), even under
---   'FullForce', with errno @EISDIR@,
--- * a write-protected file or directory under 'NoForce', with errno
---   @EACCES@ ('System.IO.Error.isPermissionError').
+-- * a directory when 'recursive' is 'False' (the default), even with
+--   'force', with errno @EISDIR@,
+-- * a write-protected file without 'force', or a write-protected directory
+--   without 'makeDirsWritable', with errno @EACCES@
+--   ('System.IO.Error.isPermissionError').
 --
 -- A failure to remove a path raises the 'IOError' of the system call.
 rm :: (RmOptions -> RmOptions) -> Path -> IO ()
 rm f path = do
     let options = f defaultConfig
-    -- Note this test is required not just for existence check but also so that
-    -- we fail if there is no permission to access the path.
-    --
-    found <- testl path pathExists
-    if found
-    then performRm options path
-    else
-        case rmForce options of
-           NoForce -> ioError (errnoError "rm" eNOENT path)
-           _ -> return ()
+#if !defined(CABAL_OS_WINDOWS)
+    when (rmMakeDirsWritable options && rmRecursive options) $ do
+        dir <- testl path isDir
+        when dir $ dirname path >>= requireWritableDir
+#endif
+    removePath options path
 
 -- | Recursively removes everything *inside* the given path, while
--- preserving the path itself.
+-- preserving the path itself. 'recursive' is implied; the other options
+-- are those of 'rm'. With 'makeDirsWritable', the path itself is not
+-- changed: if it is not writable, an exception with errno @EACCES@ is raised
+-- before any permission is changed.
 --
 -- This function treats the source path as a "container." It resolves
 -- the path to its target (following a symlink if necessary) and
@@ -305,28 +416,24 @@ rm f path = do
 -- * If the path is a symlink: The target directory is emptied;
 --   the link and the target directory are preserved.
 --
--- Under 'NoForce', raises an 'IOError' with errno @ENOENT@ if the path does
+-- Without 'force', raises an 'IOError' with errno @ENOENT@ if the path does
 -- not exist or is a broken symlink, and with errno @ENOTDIR@ if it is not a
--- directory, like GNU @rm -r path/@. Under 'Force', these cases are silent
+-- directory, like GNU @rm -r path/@. With 'force', these cases are silent
 -- no-ops.
-rmContents :: RmForce -> Path -> IO ()
-rmContents flevel path = do
+rmContents :: (RmOptions -> RmOptions) -> Path -> IO ()
+rmContents f path = do
+    let options = (f defaultConfig) { rmRecursive = True }
     -- 'test' follows symlinks, unlike 'testl'.
     -- This checks if the *target* exists and is a directory.
     isTargetDir <- test path isDir
     if isTargetDir
-    then
-        do
-            let pathStr = Path.toString path
-            contents <- listDirectory pathStr
-            forM_ contents $ \item -> do
-                itemPath <- Path.fromString (pathStr </> item)
-                rm (withForce flevel . recursive True) itemPath
+    then do
+#if !defined(CABAL_OS_WINDOWS)
+        when (rmMakeDirsWritable options) $ requireWritableDir path
+#endif
+        removeEntries options path
     else
-        case flevel of
-            NoForce -> do
-                found <- test path pathExists
-                ioError
-                    $ errnoError "rm" (if found then eNOTDIR else eNOENT) path
-            _ ->
-                return ()
+        unless (rmForce options) $ do
+            found <- test path pathExists
+            ioError
+                $ errnoError "rm" (if found then eNOTDIR else eNOENT) path

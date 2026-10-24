@@ -8,7 +8,7 @@ shell, or instead of assembling the same behaviour from `directory`,
 `filepath` and `unix`.
 
 * Each function is named after its command and its options after the
-  command's flags: `rm (recursive True . withForce Force)` is `rm -rf`,
+  command's flags: `rm (recursive True . force True)` is `rm -rf`,
   `mkdir (makeParents True)` is `mkdir -p`. Translating a shell script is
   mostly mechanical.
 * Defaults and error behaviour follow GNU coreutils, including symbolic
@@ -28,8 +28,8 @@ shell, or instead of assembling the same behaviour from `directory`,
   even with a serial traversal (see the table below).
 * Where a utility's work can be done concurrently, it is, or will be in a
   later release. `find` already has concurrent traversals, which read
-  several directories at the same time: `find parallelUnordered` instead
-  of `find id`. Other utilities that walk a directory tree, such as
+  several directories at the same time: `find (traversal Parallel)`
+  instead of `find id`. Other utilities that walk a directory tree, such as
   recursive `ls` and `rm`, will get concurrent versions. The results are
   streams, so your own processing of them can be made concurrent too,
   e.g. with `parMapM` from streamly.
@@ -51,9 +51,9 @@ import qualified Streamly.Data.Stream as Stream
 
 import Streamly.Coreutils.Cp (cp)
 import Streamly.Coreutils.FileTest (test, isFile, size, and_)
-import Streamly.Coreutils.Find (find, parallelUnordered)
+import Streamly.Coreutils.Find (Traversal(..), find, traversal)
 import Streamly.Coreutils.Mkdir (mkdir, makeParents)
-import Streamly.Coreutils.Rm (rm, recursive, withForce, RmForce(..))
+import Streamly.Coreutils.Rm (rm, recursive, force)
 
 main :: IO ()
 main = do
@@ -65,13 +65,13 @@ main = do
 
     -- find src -type f -size +10k | wc -l
     -- with directories read concurrently
-    n <- find parallelUnordered [path|src|]
+    n <- find (traversal Parallel) [path|src|]
         & Stream.filterM (\p -> test p (isFile `and_` size (> 10240)))
         & Stream.fold Fold.length
     print n
 
     -- rm -rf backup
-    rm (recursive True . withForce Force) [path|backup|]
+    rm (recursive True . force True) [path|backup|]
 ```
 
 Every function takes its options as a modifier: pass `id` for the GNU
@@ -97,27 +97,28 @@ main =
 
 ## Performance
 
-Time to list a directory tree of 247,029 entries, best of 5 runs, with
+Time to list a directory tree of 258,310 entries, best of 5 runs, with
 output to `/dev/null`. Symbolic links are not followed. The machine has
 2 CPUs, the file system is ext4 and the directory cache is warm.
 
 | Command | Traversal | Time |
 |---------|-----------|------|
-| `find .` (GNU findutils 4.10.0) | serial | 0.59 s |
-| `fd -u -j1 .` (fd 10.4.2) | serial | 0.74 s |
-| `fd -u .` | 2 threads | 0.41 s |
-| `hfd --dfs .` | serial | 0.36 s |
-| `hfd --parallel .` | concurrent | 0.30 s |
+| `find .` (GNU findutils 4.10.0) | serial | 0.68 s |
+| `fd -u -j1 .` (fd 10.5.0) | serial | 0.88 s |
+| `fd -u .` | 2 threads | 0.48 s |
+| `hfd --dfs .` | serial | 0.41 s |
+| `hfd --parallel .` | concurrent | 0.34 s |
 
 `hfd` is a small command line driver for `Streamly.Coreutils.Find`,
 included in this package. Build it with `cabal build -f hfd hfd`.
 
-`find` has eight traversal orders: depth-first, breadth-first, reverse
-breadth-first, append and interleaved, which are serial, and unordered,
-ordered and interleaved, which read directories concurrently. Each is
-selected with one option, e.g. `find serialBfs` or
-`find parallelOrdered`. Streamly's stream combinators make each of them a
-few lines of code, so other orders can be added the same way.
+`find` has eight traversals, selected with the `traversal` modifier, e.g.
+`find (traversal BreadthFirst)`. Five are serial: depth-first (the GNU
+`find` order and the default), depth-first using stream append, wide
+depth-first, breadth-first and interleaved. Three read directories
+concurrently: unordered, interleaved, and ordered, which gives the
+depth-first order. Streamly's stream combinators make each of them a few
+lines of code, so other orders can be added the same way.
 
 ## Commands
 

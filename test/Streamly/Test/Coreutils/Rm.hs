@@ -47,6 +47,10 @@ import System.Directory
     , createFileLink
     , doesPathExist
     , getTemporaryDirectory
+#if !defined(CABAL_OS_WINDOWS)
+    , getPermissions
+    , writable
+#endif
     )
 import System.FilePath ((</>))
 import System.IO.Error (isDoesNotExistError, isPermissionError)
@@ -78,7 +82,7 @@ rm f path = do
     pathP <- Path.fromString path
     Rm.rm f pathP
 
-rmContents :: RmForce -> FilePath -> IO ()
+rmContents :: (RmOptions -> RmOptions) -> FilePath -> IO ()
 rmContents f path = Path.fromString path >>= Rm.rmContents f
 
 -- | Run a test inside a fresh temporary directory, cleaning up afterwards.
@@ -95,7 +99,7 @@ withTempDir action = do
     -- Best-effort cleanup; we do not want cleanup failures to mask test
     -- failures.
     removePathForcibly' p =
-        void (try (rm (withForce FullForce . recursive True) p)
+        void (try (rm (force True . makeDirsWritable True . recursive True) p)
             :: IO (Either SomeException ()))
 
 -- | Create a regular file with the given octal permission mode.
@@ -143,6 +147,22 @@ hasErrno (Errno n) e = ioe_errno e == Just n
 -- | Check whether we are running as root (effective uid 0).
 isRoot :: IO Bool
 isRoot = (== 0) <$> idNum id
+#endif
+
+#if !defined(CABAL_OS_WINDOWS)
+-- | Run a permission test as a normal user. As root, permission bits are not
+-- enforced, so the test is marked pending without running it.
+asNonRoot :: IO () -> IO ()
+asNonRoot action = do
+    root <- isRoot
+    if root
+    then pendingWith "Root bypasses directory permission bits"
+    else action
+
+-- | Assert that a directory is not writable by us.
+shouldNotBeWritable :: FilePath -> IO ()
+shouldNotBeWritable path =
+    (writable <$> getPermissions path) `shouldReturn` False
 #endif
 
 -- TODO
@@ -317,55 +337,55 @@ main = hspec $ do
 #endif
 
     -- -------------------------------------------------------------------------
-    describe "rm (withForce Force)" $ do
+    describe "rm (force True)" $ do
 
         describe "file" $ do
 
             it "rwx: removes file" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeRWX
-                rm (withForce Force) f
+                rm (force True) f
                 shouldNotExist f
 
             it "rw-: removes file" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeRW_
-                rm (withForce Force) f
+                rm (force True) f
                 shouldNotExist f
 
-            it "r-x: errors (Force skips pre-check but file still not writable)" $
+            it "r-x: errors (force skips pre-check but file still not writable)" $
                 withTempDir $ \d -> do
                     let f = d </> "file"
                     createFileWithMode f modeR_X
-                    rm (withForce Force) f
+                    rm (force True) f
                     shouldNotExist f
 
             it "r--: removes (unlink depends on parent, not file mode)" $
                 withTempDir $ \d -> do
                     let f = d </> "file"
                     createFileWithMode f modeR__
-                    rm (withForce Force) f
+                    rm (force True) f
                     shouldNotExist f
 
             it "---: removes (unlink depends on parent, not file mode)" $
                 withTempDir $ \d -> do
                     let f = d </> "file"
                     createFileWithMode f mode___
-                    rm (withForce Force) f
+                    rm (force True) f
                     shouldNotExist f
 
             it "missing: silent no-op" $ withTempDir $ \d ->
                 -- BUG: testl throws on a missing path instead of returning
                 -- False, so rm errors rather than silently ignoring it.
-                -- This should succeed per the Force semantics in the docs.
-                rm (withForce Force) (d </> "missing")
+                -- This should succeed per the force semantics in the docs.
+                rm (force True) (d </> "missing")
 
         describe "empty dir" $ do
 
             it "errors (is a directory, not recursive)" $ withTempDir $ \d -> do
                 let sub = d </> "sub"
                 createDirectory sub
-                shouldThrow' $ rm (withForce Force) sub
+                shouldThrow' $ rm (force True) sub
 
         it "parent dir r-x: errors (cannot unlink)" $
             withTempDir $ \d -> do
@@ -374,35 +394,35 @@ main = hspec $ do
                 createDirectory sub
                 createFileWithMode f modeRWX
                 setFileMode sub modeR_X
-                parentDirPermCheck $ rm (withForce Force) f
+                parentDirPermCheck $ rm (force True) f
                 setFileMode sub modeRWX
 
     -- -------------------------------------------------------------------------
-    describe "rm (withForce FullForce)" $ do
+    describe "rm (force True . makeDirsWritable True)" $ do
 
         describe "file" $ do
 
             it "rwx: removes file" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeRWX
-                rm (withForce FullForce) f
+                rm (force True . makeDirsWritable True) f
                 shouldNotExist f
 
-            it "---: removes file (FullForce overrides)" $ withTempDir $ \d -> do
+            it "---: removes file" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f mode___
-                rm (withForce FullForce) f
+                rm (force True . makeDirsWritable True) f
                 shouldNotExist f
 
             it "missing: silent no-op" $ withTempDir $ \d ->
-                rm (withForce FullForce) (d </> "missing")
+                rm (force True . makeDirsWritable True) (d </> "missing")
 
         describe "empty dir" $ do
 
-            it "errors (not recursive even under FullForce)" $ withTempDir $ \d -> do
+            it "errors (not recursive)" $ withTempDir $ \d -> do
                 let sub = d </> "sub"
                 createDirectory sub
-                shouldThrow' $ rm (withForce FullForce) sub
+                shouldThrow' $ rm (force True . makeDirsWritable True) sub
 
     -- -------------------------------------------------------------------------
     describe "rm (recursive True)" $ do
@@ -415,7 +435,7 @@ main = hspec $ do
                 rm (recursive True) f
                 shouldNotExist f
 
-            it "r--: errors (not writable by us, NoForce)" $ withTempDir $ \d -> do
+            it "r--: errors (not writable, no force)" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeR__
                 shouldThrow' $ rm (recursive True) f
@@ -527,36 +547,36 @@ main = hspec $ do
                 shouldStillExist f
 
     -- -------------------------------------------------------------------------
-    describe "rm (withForce Force . recursive True)" $ do
+    describe "rm (force True . recursive True)" $ do
 
         describe "file" $ do
 
             it "missing: silent no-op" $ withTempDir $ \d ->
-                -- BUG: same as rm (withForce Force) missing case above.
-                rm (withForce Force . recursive True) (d </> "missing")
+                -- BUG: same as rm (force True) missing case above.
+                rm (force True . recursive True) (d </> "missing")
 
-            it "r--: removes (Force skips write pre-check)" $ withTempDir $ \d -> do
+            it "r--: removes (force skips write pre-check)" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f modeR__
-                rm (withForce Force . recursive True) f
+                rm (force True . recursive True) f
                 shouldNotExist f
 
         describe "empty dir rwx: removes" $ do
             it "" $ withTempDir $ \d -> do
                 let sub = d </> "sub"
                 createDirWithMode sub modeRWX
-                rm (withForce Force . recursive True) sub
+                rm (force True . recursive True) sub
                 shouldNotExist sub
 
         describe "dir with file" $ do
 
-            it "dir rwx, file r--: removes all (Force skips write pre-check)" $
+            it "dir rwx, file r--: removes all (force skips write pre-check)" $
                 withTempDir $ \d -> do
                     let sub = d </> "sub"
                         f   = sub </> "file"
                     createDirWithMode sub modeRWX
                     createFileWithMode f modeR__
-                    rm (withForce Force . recursive True) sub
+                    rm (force True . recursive True) sub
                     shouldNotExist sub
 
             it "dir r-x, file rwx: errors (cannot unlink, no write on dir)" $
@@ -566,7 +586,7 @@ main = hspec $ do
                     createDirWithMode sub modeRWX
                     createFileWithMode f modeRWX
                     setFileMode sub modeR_X -- restrict after file is created
-                    parentDirPermCheck $ rm (withForce Force . recursive True) sub
+                    parentDirPermCheck $ rm (force True . recursive True) sub
                     -- Restore permissions for cleanup; path may already be
                     -- gone on platforms that do not enforce execute bits
                     -- (e.g. Windows).
@@ -580,29 +600,30 @@ main = hspec $ do
                     subsub = sub </> "subsub"
                 createDirWithMode sub modeRWX
                 createDirWithMode subsub modeR__
-                rm (withForce Force . recursive True) sub
+                rm (force True . recursive True) sub
                 shouldNotExist sub
 
     -- -------------------------------------------------------------------------
-    describe "rm (withForce FullForce . recursive True)" $ do
+    describe "rm (force True . makeDirsWritable True . recursive True)" $ do
 
         describe "file" $ do
 
             it "---: removes" $ withTempDir $ \d -> do
                 let f = d </> "file"
                 createFileWithMode f mode___
-                rm (withForce FullForce . recursive True) f
+                rm (force True . makeDirsWritable True . recursive True) f
                 shouldNotExist f
 
             it "missing: silent no-op" $ withTempDir $ \d ->
-                rm (withForce FullForce . recursive True) (d </> "missing")
+                rm (force True . makeDirsWritable True . recursive True)
+                    (d </> "missing")
 
         describe "empty dir" $ do
 
-            it "---: removes (FullForce chmods)" $ withTempDir $ \d -> do
+            it "---: removes (chmods the dir)" $ withTempDir $ \d -> do
                 let sub = d </> "sub"
                 createDirWithMode sub mode___
-                rm (withForce FullForce . recursive True) sub
+                rm (force True . makeDirsWritable True . recursive True) sub
                 shouldNotExist sub
 
         describe "dir with file" $ do
@@ -614,7 +635,7 @@ main = hspec $ do
                 createDirWithMode sub modeRWX
                 createFileWithMode f mode___
                 setFileMode sub mode___
-                rm (withForce FullForce . recursive True) sub
+                rm (force True . makeDirsWritable True . recursive True) sub
                 shouldNotExist sub
 
         describe "dir with subdir" $ do
@@ -625,7 +646,7 @@ main = hspec $ do
                 createDirWithMode sub modeRWX
                 createDirWithMode subsub mode___
                 setFileMode sub mode___
-                rm (withForce FullForce . recursive True) sub
+                rm (force True . makeDirsWritable True . recursive True) sub
                 shouldNotExist sub
 
         describe "symlink to dir" $ do
@@ -635,9 +656,84 @@ main = hspec $ do
                     link   = d </> "link"
                 createDirectory target
                 createDirectoryLink target link
-                rm (withForce FullForce . recursive True) link
+                rm (force True . makeDirsWritable True . recursive True) link
                 shouldNotExist link
                 shouldStillExist target
+
+#if !defined(CABAL_OS_WINDOWS)
+    -- ------------------------------------------------------------------------
+    describe "rm (makeDirsWritable True . recursive True)" $ do
+
+        it "dir r-x, file rw-: removes all" $
+            asNonRoot $ withTempDir $ \d -> do
+                let sub = d </> "sub"
+                createDirWithMode sub modeRWX
+                createFileWithMode (sub </> "file") modeRW_
+                setFileMode sub modeR_X
+                rm (makeDirsWritable True . recursive True) sub
+                shouldNotExist sub
+
+        it "dir rwx, file r--: errors (no force)" $
+            asNonRoot $ withTempDir $ \d -> do
+                let sub = d </> "sub"
+                    f   = sub </> "file"
+                createDirWithMode sub modeRWX
+                createFileWithMode f modeR__
+                rm (makeDirsWritable True . recursive True) sub
+                    `shouldFailWith` isPermissionError
+                shouldStillExist f
+
+        it "missing: errors (no force)" $ withTempDir $ \d ->
+            rm (makeDirsWritable True . recursive True) (d </> "missing")
+                `shouldFailWith` isDoesNotExistError
+
+    -- ------------------------------------------------------------------------
+    describe "makeDirsWritable with a write-protected parent" $ do
+
+        -- d/a is r-x, d/a/b is r-x and contains a file.
+        let setup d = do
+                let a = d </> "a"
+                    b = a </> "b"
+                createDirWithMode a modeRWX
+                createDirWithMode b modeRWX
+                createFileWithMode (b </> "file") modeRW_
+                setFileMode b modeR_X
+                setFileMode a modeR_X
+                return (a, b)
+
+        it "rm: errors before changing any permission" $
+            asNonRoot $ withTempDir $ \d -> do
+                (a, b) <- setup d
+                rm (force True . makeDirsWritable True . recursive True) b
+                    `shouldFailWith` isPermissionError
+                shouldStillExist (b </> "file")
+                shouldNotBeWritable b
+                setFileMode a modeRWX
+
+        it "rmContents: errors before changing any permission" $
+            asNonRoot $ withTempDir $ \d -> do
+                (a, b) <- setup d
+                rmContents (force True . makeDirsWritable True) a
+                    `shouldFailWith` isPermissionError
+                shouldStillExist (b </> "file")
+                shouldNotBeWritable b
+                setFileMode a modeRWX
+
+    -- ------------------------------------------------------------------------
+    describe "rmContents (force True . makeDirsWritable True)" $ do
+
+        it "empties write-protected subdirs and keeps the container" $
+            asNonRoot $ withTempDir $ \d -> do
+                let a = d </> "a"
+                    b = a </> "b"
+                createDirWithMode a modeRWX
+                createDirWithMode b modeRWX
+                createFileWithMode (b </> "file") modeRW_
+                setFileMode b modeR_X
+                rmContents (force True . makeDirsWritable True) a
+                shouldNotExist b
+                shouldStillExist a
+#endif
 
     describe "rmContents" $ do
 
@@ -645,19 +741,19 @@ main = hspec $ do
             let sub = d </> "sub"
             createDirectory sub
             writeFile (sub </> "file") ""
-            rmContents NoForce sub
+            rmContents id sub
             shouldNotExist (sub </> "file")
             shouldStillExist sub
 
         it "missing: errors" $ withTempDir $ \d ->
-            rmContents NoForce (d </> "missing")
+            rmContents id (d </> "missing")
                 `shouldFailWith` isDoesNotExistError
 
         it "file: errors (not a directory)" $ withTempDir $ \d -> do
             let f = d </> "file"
             writeFile f ""
-            rmContents NoForce f `shouldFailWith` hasErrno eNOTDIR
+            rmContents id f `shouldFailWith` hasErrno eNOTDIR
             shouldStillExist f
 
-        it "missing under Force: does nothing" $ withTempDir $ \d ->
-            rmContents Force (d </> "missing")
+        it "missing with force: does nothing" $ withTempDir $ \d ->
+            rmContents (force True) (d </> "missing")

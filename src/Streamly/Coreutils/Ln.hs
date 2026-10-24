@@ -46,6 +46,11 @@ data LnOptions = LnOptions
 defaultConfig :: LnOptions
 defaultConfig = LnOptions False False
 
+-- 'force' keeps the GNU flag name and is a Bool, like Rm.force. Rejected:
+-- @overwrite :: Overwrite@ as in Cp and Mv. GNU ln -f only replaces the
+-- destination; the other Overwrite choices would add options ln does not
+-- need and diverge from the GNU flag name.
+
 -- | Remove an existing destination before creating the link, like @ln -f@.
 -- Raises an 'IOError' of type 'InvalidArgument' if the source and the
 -- destination are the same file.
