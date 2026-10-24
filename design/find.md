@@ -13,11 +13,11 @@ Implemented:
   and every entry under it, directories included, like GNU `find`. A root
   that is not a directory is listed by itself; a missing root raises
   ENOENT. `findEither` returns directories as `Left`.
-* One `traversal :: Traversal -> ...` modifier selects one of seven
+* One `traversal :: Traversal -> ...` modifier selects one of six
   traversals: `DepthFirst` (default), `WideDepthFirstReverse`,
-  `BreadthFirst`, `Interleaved`, `DepthFirstParallel`,
-  `DepthFirstParallelInterleaved`, `DepthFirstParallelOrdered`. The
-  Haddock of `Traversal` gives the order each one guarantees.
+  `BreadthFirst`, `DepthFirstParallel`, `BreadthFirstParallel`,
+  `DepthFirstParallelOrdered`. The Haddock of `Traversal` gives the order
+  each one guarantees.
 * `minDepth` and `maxDepth`, like GNU `-mindepth` / `-maxdepth`, with the
   root at depth 0. Each element carries its depth. `findByteChunked`
   cannot apply them to its chunks, which mix depths, and is built from
