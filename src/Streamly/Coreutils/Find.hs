@@ -7,34 +7,30 @@
 -- Stability   : experimental
 -- Portability : GHC
 --
--- Walk a directory tree, like GNU @find@ without an expression. The root of
--- the tree is the path given to a find function, what GNU @find@ calls the
--- starting point. It is not the file system root @/@. The output is the root
--- followed by every entry under it, each prefixed with the root. A root that
--- is not a directory is listed by itself.
+-- Walk a directory tree, like GNU @find@ without an expression. The find
+-- @root@ is the starting point that is the path given to a find function. The
+-- term @root@ in this context does not mean the file system root @/@. The
+-- output is the root followed by every entry under it, each prefixed with the
+-- root. A root that is not a directory is listed by itself.
 --
 -- Usage:
 --
--- >> find id dir                            -- find dir
--- >> find (maxDepth 1) dir                  -- find dir -maxdepth 1
--- >> find (minDepth 1 . maxDepth 1) dir     -- find dir -mindepth 1
---                                           --   -maxdepth 1
--- >> find (followSymlinks True) dir         -- find -L dir
--- >> find (followRootSymlink True) dir      -- find -H dir
+-- >> find id dir                           -- find dir
+-- >> find (maxDepth 1) dir                 -- find dir -maxdepth 1
+-- >> find (minDepth 1 . maxDepth 1) dir    -- find dir -mindepth 1 -maxdepth 1
+-- >> find (followSymlinks True) dir        -- find -L dir
+-- >> find (followRootSymlink True) dir     -- find -H dir
 -- >> find (traversal DepthFirstParallel) dir
---                                           -- unordered, concurrent
--- >> findEither id dir                      -- directories as Left
+--                                          -- unordered, concurrent traversal
+-- >> findEither id dir                     -- directories Left, files Right
 --
--- Symbolic links are listed but not followed: a symlink to a directory is
--- reported as an entry and its target is not traversed, like the GNU find
--- default (@find -P@). Use 'followSymlinks' to follow them.
+-- Symbolic links are listed but not followed by default: a symlink to a
+-- directory is reported as an entry and its target is not traversed, like the
+-- GNU find default (@find -P@). Use 'followSymlinks' to follow them.
 --
--- Caveats, compared to GNU @find@:
---
--- * Entries are not sorted. Within a directory they are in the order the
---   operating system returns them, as with GNU @find@.
--- * A directory that cannot be read, e.g. for lack of permission, ends the
---   stream with an exception. GNU @find@ reports it and continues.
+-- Caveats, compared to GNU @find@: A directory that cannot be read, e.g. for
+-- lack of permission, ends the stream with an exception. GNU @find@ reports it
+-- and continues.
 --
 -- The @hfd@ executable in this package is a command line driver for
 -- 'findByteChunked'. To compare its speed with GNU @find@ and Rust @fd@:
