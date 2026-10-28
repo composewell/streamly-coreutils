@@ -50,4 +50,4 @@ The command runner would be called "cp" so it would be "cp :: CpOptions -> IO
 
 `Touch.touch (Touch.create False . Touch.followSymlinks False) path`
 `Mv.mv (Mv.overwrite Mv.OverwriteNever) old new`
-`Rm.rm (Rm.withForce Rm.Force . Rm.recursive True) path`
+`Rm.rm (Rm.force True . Rm.recursive True) path`

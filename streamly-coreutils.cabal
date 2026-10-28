@@ -11,7 +11,7 @@ description:
   @directory@, @filepath@ and @unix@.
   .
   * Each function is named after its command and its options after the
-    command's flags: @rm (recursive True . withForce Force)@ is @rm -rf@,
+    command's flags: @rm (recursive True . force True)@ is @rm -rf@,
     @mkdir (makeParents True)@ is @mkdir -p@. Translating a shell script
     is mostly mechanical.
   * Defaults and error behaviour follow GNU coreutils, including symbolic
@@ -28,8 +28,8 @@ description:
     even with a serial traversal. The README has the measurements.
   * Where a utility's work can be done concurrently, it is, or will be in
     a later release. @find@ already has concurrent traversals, which read
-    several directories at the same time: @find parallelUnordered@ instead
-    of @find id@. Other utilities that walk a directory tree, such as
+    several directories at the same time: @find (parallel True)@
+    instead of @find id@. Other utilities that walk a directory tree, such as
     recursive @ls@ and @rm@, will get concurrent versions. The results are
     streams, so your own processing of them can be made concurrent too,
     e.g. with @parMapM@ from streamly.
@@ -206,7 +206,7 @@ library
     , filepath >= 1.4 && < 1.6
     -- We use internal modules of streamly.
     , streamly >= 0.11.1 && < 0.12
-    , streamly-core >= 0.3.2 && < 0.4
+    , streamly-core >= 0.3.3 && < 0.4
     , streamly-process >= 0.4 && < 0.5
     , time >= 1.9 && < 1.16
     , unix-compat >= 0.5.4  && < 0.8
@@ -484,6 +484,23 @@ test-suite Streamly.Coreutils.Directory
   ghc-options: -main-is Streamly.Test.Coreutils.Directory.main
                -rtsopts "-with-rtsopts=-M512M"
 
+test-suite Streamly.Coreutils.Find
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Find.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Find.main
+               -rtsopts "-with-rtsopts=-M512M"
+
 test-suite Streamly.Coreutils.Id
   import: compile-options
   type: exitcode-stdio-1.0
@@ -518,6 +535,23 @@ test-suite Streamly.Coreutils.Ln
     , unix-compat
   default-language: Haskell2010
   ghc-options: -main-is Streamly.Test.Coreutils.Ln.main
+               -rtsopts "-with-rtsopts=-M512M"
+
+test-suite Streamly.Coreutils.Ls
+  import: compile-options
+  type: exitcode-stdio-1.0
+  main-is: Streamly/Test/Coreutils/Ls.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , directory
+    , filepath
+    , hspec
+    , streamly-core
+    , streamly-coreutils
+    , temporary
+  default-language: Haskell2010
+  ghc-options: -main-is Streamly.Test.Coreutils.Ls.main
                -rtsopts "-with-rtsopts=-M512M"
 
 test-suite Streamly.Coreutils.Mkdir
