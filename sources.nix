@@ -4,12 +4,12 @@ with nixpack.mkSources;
 {
 layers = [
 {
-  streamly-core = hackage "0.3.2"
-    "1bhxdddmpg6x27kcsg9qrdsz2ggqmirlrgd7l8v6kb5xq60lf2sb";
+  streamly-core = hackage "0.3.3"
+    "0rrgbk1jmhyzgg39wd2wdli6xqdcb36xmqkqmvix7qy6rjfykicz";
   streamly = hackage "0.11.1"
     "1dxyhq8m9fr3ghpmxkh6bc37fd4f1048xckjrlpp6ybvlg0lq7g2"
-    // { rev = "2";
-         cabalSha256 = "022hh6aw4sa6a5z6anmngrb4lgh9xql824jn68m01pppqszd9syz";
+    // { rev = "3";
+         cabalSha256 = "0xvx6vacr9vlss67qs5v25gbj6xvxjzx4f7w5ck9lr845g57k9ay";
        };
   streamly-coreutils = local ./.
     // { c2nix = ["--flag fusion-plugin"];
